@@ -1,0 +1,37 @@
+{
+  "_note": "Bố trí bo mạch cho 6 họ case (design/families/00_families_spec.md mục 7.1). mm, gốc ở tâm bo, mặt lưng z = 0. Dùng chung cho tools/build_families.py và app. SYS_FAN của ITX dời xuống mép dưới vì toạ độ trong đặc tả đè lên khe M.2; SYS_FAN1 của mATX dời +2 mm để không chạm khe DIMM B2.",
+  "mATX": {
+    "w": 244, "h": 244,
+    "cpu": [0, 50],
+    "vrm": [-53, 50, 16, 60, 16],
+    "ram_x": [70, 79, 89, 98], "ram_y": 40, "ram_used": [1, 3],
+    "pcie": [[-34, -61], [-34, -101]],
+    "m2_mouth": [-5, -83], "m2_screw": [75, -83], "m2_center": [35, -83],
+    "chipset": [75, -52, 38, 30, 9],
+    "holes": [[-112, 112], [0, 112], [112, 112], [-112, 0], [0, 0], [112, 0], [-112, -112], [0, -112], [112, -112]],
+    "headers": {
+      "atx24": [117, 30], "eps": [-60, 115], "cpu_fan": [25, 115],
+      "sys": [[108, 79], [81, -99], [-96, -103]],
+      "usb3": [113, -92], "panel": [94, -113], "audio": [-97, -113]
+    },
+    "io": { "x": [-136.2, -135.4], "xb": -118, "y": [-49, 109], "h": 16, "usb": [88, 69], "rj45": 35, "jacks": [5, -12, -29], "cover": [-118, -102] },
+    "battery": [-30, -40], "audio_chip": [-80, -80]
+  },
+  "ITX": {
+    "w": 170, "h": 170,
+    "cpu": [-20, 12],
+    "vrm": [-65, 18, 14, 55, 10],
+    "ram_x": [55, 65], "ram_y": 6, "ram_used": [0, 1],
+    "pcie": [[3, -72]], "pcie_latch": 4,
+    "m2_mouth": [-52, -48], "m2_screw": [28, -48], "m2_center": [-12, -48],
+    "chipset": null,
+    "holes": [[-75, 75], [75, 75], [-75, -75], [75, -75]],
+    "headers": {
+      "atx24": [80, 5], "eps": [-55, 78], "cpu_fan": [17, 73],
+      "sys": [[-38, -80], [-22, -80]],
+      "usb3": [80, -46], "type_e": [80, 58], "panel": [60, -80], "audio": [-62, -80]
+    },
+    "io": { "x": [-99, -98.2], "xb": -78, "y": [-79, 79], "h": 16, "usb": [58, 39], "rj45": 5, "jacks": [-25, -42, -59], "cover": [-84, -74] },
+    "battery": [35, -20], "audio_chip": [-50, -65]
+  }
+}

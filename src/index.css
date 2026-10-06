@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+/* Bảng màu và chữ theo kiểu Apple: nền xám rất nhạt, chữ gần đen, một màu nhấn xanh */
+@theme {
+  --color-ink: #1d1d1f;
+  --color-ink-2: #6e6e73;
+  --color-ink-3: #86868b;
+  --color-canvas: #f5f5f7;
+  --color-fill: #e8e8ed;
+  --color-accent: #0071e3;
+  --color-accent-hover: #0077ed;
+  /* Đường cong chuyển động dùng chung cho cả app */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Helvetica Neue', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 100%;
+  line-height: 1.47;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tiêu đề lớn: khít chữ, dòng chặt. Chữ càng to càng cần thu khoảng cách. */
+.display {
+  font-size: clamp(1.75rem, 1.4rem + 1vw, 2.125rem);
+  line-height: 1.08;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+}
+
+/* Vệt trượt của thanh chọn loại máy */
+.segment-thumb {
+  transition: transform 240ms var(--ease-out);
+}
+
+/* Mô tả linh kiện mở ra bằng cách giãn chiều cao, không giật */
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 240ms var(--ease-out),
+    opacity 200ms ease;
+}
+.reveal[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.reveal > * {
+  overflow: hidden;
+}
+
+/* Lần đầu mở trang: các phần của bảng bên trái hiện lần lượt, cách nhau 50 ms */
+.enter {
+  animation: enter 360ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 50ms);
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Đổi loại máy: chữ mô tả và thông số mờ dần vào thay vì nhảy tức thì */
+.swap {
+  transition: opacity 180ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+/* Nhãn tên linh kiện khi rê chuột lên hình 3D */
+.tip {
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* Mở chế độ xem cận cảnh: lớp phủ hiện dần và nở nhẹ từ 98,5% */
+.inspector {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inspector {
+    transition: opacity 150ms ease;
+    @starting-style {
+      transform: none;
+    }
+  }
+  .segment-thumb,
+  .reveal {
+    transition: opacity 150ms ease;
+  }
+  .enter {
+    animation-name: enter-fade;
+  }
+  .tip {
+    transition: opacity 150ms ease;
+    @starting-style {
+      transform: none;
+    }
+  }
+}
+@keyframes enter-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: #fff !important;
+    backdrop-filter: none !important;
+  }
+}

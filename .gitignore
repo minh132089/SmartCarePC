@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# model gốc tải về, chưa xử lý
+assets-src/
+
+# ảnh chụp màn hình dùng để soát lỗi khi làm việc, sinh lại được bằng tools/shot.mjs và tools/render_views.py
+design/*/review/
+design/*/screens/
+design/steps/
+design/perf/
+design/rear/before/
+design/rear/final/
+design/rear/new_*.png
+design/rear/current_*.png
+design/**/logs/
+
+# cấu hình cục bộ của công cụ
+.claude/

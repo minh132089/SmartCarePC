@@ -1,0 +1,22 @@
+01_standard_tower/00_overview	ATX, tower air, GPU 280 ngang, ATX PSU, 2 quạt trước 140 + 1 sau 120	design/case-families/01_standard_tower.png
+01_standard_tower/01_case	Vỏ trống 230 × 460 × 430, mặt lưới, hông kính, 7 PCIe, G0–G6	design/case-families/01_standard_tower.png
+02_compact_tower/00_overview	mATX, tower air, GPU 240 ngang, ATX PSU, 2 trước + 1 sau; không quạt nóc	design/case-families/02_compact_tower.png
+02_compact_tower/01_case	Vỏ trống 210 × 380 × 370, hai hông kín, khe thấp/khe cạnh trước, 4 PCIe	design/case-families/02_compact_tower.png
+03_showcase_dual_chamber/00_overview	Hai khoang, AIO 240, GPU 280 dọc + riser, PSU đứng sau bo, hub và 8 vòng cyan	design/case-families/03_showcase_dual_chamber.png
+03_showcase_dual_chamber/01_case	Vỏ trống 300 × 450 × 450, hai kính, ống hút bên, ba khe dọc, giá GPU	design/case-families/03_showcase_dual_chamber.png
+04_mini_sff/00_overview	ITX, tản thấp, SFX, GPU 240 sandwich + riser, một quạt nóc 120, dây AC	design/case-families/04_mini_sff.png
+04_mini_sff/01_case	Vỏ trống 180 × 250 × 350, nhôm khe đứng, khay giữa, 3 PCIe dọc, inlet AC	design/case-families/04_mini_sff.png
+05_slim_console/00_overview	ITX dưới/GPU trên, SFX cạnh bo, riser, tản thấp, đế đứng/chân ngang, không fan case	design/case-families/05_slim_console.png
+05_slim_console/01_case	Vỏ trống 100 × 360 × 330, hông lỗ, mặt lưới hẹp, ba khe dọc, lỗ gá đế	design/case-families/05_slim_console.png
+06_full_tower/00_overview	ATX, AIO 360, GPU 280 ngang, ATX PSU, hub, 4 trước 140 + 1 sau 140 + 3 két 120	design/case-families/06_full_tower.png
+06_full_tower/01_case	Vỏ trống 250 × 620 × 550, 8 PCIe, ray két 360, kính lớn, shroud dài	design/case-families/06_full_tower.png
+parts/motherboard_matx	244 × 244, 9 lỗ, bốn DIMM, hai PCIe, tọa độ/header/socket	
+parts/motherboard_itx	170 × 170, 4 lỗ, hai DIMM, x16/riser, M.2, USB19 và Type-E	
+parts/psu_sfx_100	125 × 63,5 × 100, C14, quạt 92, bốn lỗ gá, ba nhánh dây liền	
+parts/gpu_240_dual	240 × 120 × 45, hai quạt, chân x16, lá hai khe, nguồn 8 chân	
+parts/tower_air_155	Bao 90 × 120 × 155, quạt 120 thổi −X, đế/heatpipe/gá/backplate	
+parts/low_profile_47	Bao 92 × 92 × 47, quạt 92 × 14 thổi −Z, bốn lỗ gá	
+parts/aio_360	Két 397 × 120 × 27, ba quạt, bơm giữ lại, ống 450, 12+12 vít	
+parts/pcie_riser_400	Dải 400, hai đầu khác nhau, chốt và tai gá, bán kính uốn	
+parts/console_stand	Đế 280 × 18 × 140, hai điểm gá, khe thoáng, bộ bốn chân nằm ngang	
+parts/fan_hub_8	Hộp/tai 92 × 50 × 18, 8 PWM + 8 ARGB, adapter nguồn ATX24 và dây điều khiển	

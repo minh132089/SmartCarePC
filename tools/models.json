@@ -1,0 +1,426 @@
+{
+  "motherboard": {
+    "src": "../assets-src/motherboard.glb",
+    "out": "../assets-src/processed/motherboard_itx.glb",
+    "name": "part_motherboard",
+    "drop_objects": [
+      "Object_14",
+      "Object_16",
+      "Object_10",
+      "Object_8",
+      "Object_4",
+      "Object_24"
+    ],
+    "paint": [
+      {
+        "images": [
+          "Image_0",
+          "Image_1",
+          "Image_2"
+        ],
+        "box": [
+          0.3,
+          0.778,
+          0.398,
+          0.838
+        ],
+        "colors": {
+          "Image_0": [
+            "sample",
+            0.303,
+            0.79
+          ],
+          "Image_1": [
+            "sample",
+            0.303,
+            0.79
+          ],
+          "Image_2": [
+            0.5,
+            0.5,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      {
+        "images": [
+          "Image_0",
+          "Image_1",
+          "Image_2"
+        ],
+        "box": [
+          0.828,
+          0.681,
+          0.886,
+          0.749
+        ],
+        "colors": {
+          "Image_0": [
+            "sample",
+            0.83,
+            0.76
+          ],
+          "Image_1": [
+            "sample",
+            0.83,
+            0.76
+          ],
+          "Image_2": [
+            0.5,
+            0.5,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    ],
+    "center_on": [
+      "Object_12"
+    ],
+    "origin": "back_face",
+    "max_texture": 2048,
+    "rotate_steps": [
+      [
+        "Z",
+        90
+      ],
+      [
+        "Y",
+        90
+      ]
+    ]
+  },
+  "gpu": {
+    "src": "../assets-src/gpu.glb",
+    "out": "../assets-src/processed/gpu.glb",
+    "name": "part_gpu",
+    "drop_materials": [
+      "DrakeLogo"
+    ],
+    "rotate_steps": [
+      [
+        "X",
+        180
+      ]
+    ],
+    "origin": "back_face",
+    "fit": [
+      "x",
+      2.8
+    ],
+    "max_texture": 1024,
+    "mirror_x": true
+  },
+  "cooler": {
+    "src": "../assets-src/cpu_cooler.glb",
+    "out": "../assets-src/processed/cooler_tower.glb",
+    "name": "part_cooler",
+    "rotate_steps": [
+      [
+        "X",
+        90
+      ],
+      [
+        "Y",
+        180
+      ]
+    ],
+    "origin": "back_face",
+    "fit": [
+      "y",
+      1.55
+    ],
+    "max_texture": 1024
+  },
+  "psu": {
+    "src": "../assets-src/power_supply_-_basic.glb",
+    "out": "../assets-src/processed/psu_atx.glb",
+    "name": "part_psu",
+    "rotate_steps": [
+      [
+        "Z",
+        -90
+      ]
+    ],
+    "fit": [
+      "x",
+      1.4
+    ],
+    "max_texture": 1024
+  },
+  "motherboard_atx": {
+    "src": "../assets-src/board_atx.glb",
+    "out": "../assets-src/processed/motherboard_atx.glb",
+    "name": "part_motherboard_atx",
+    "center_on": [
+      "pCylinder41_M_Mobo_0"
+    ],
+    "origin": "back_face",
+    "fit": [
+      "x",
+      2.44
+    ],
+    "max_texture": 2048,
+    "paint": [
+      {
+        "images": [
+          "Image_7"
+        ],
+        "box": [
+          0.56,
+          0.28,
+          0.985,
+          0.385
+        ],
+        "colors": {
+          "Image_7": [
+            "sample",
+            0.55,
+            0.33
+          ]
+        }
+      },
+      {
+        "images": [
+          "Image_7"
+        ],
+        "box": [
+          0.17,
+          0.64,
+          0.35,
+          0.765
+        ],
+        "colors": {
+          "Image_7": [
+            "sample",
+            0.16,
+            0.7
+          ]
+        }
+      }
+    ]
+  },
+  "motherboard_matx": {
+    "src": "../assets-src/board_atx.glb",
+    "out": "../assets-src/processed/motherboard_matx.glb",
+    "name": "part_motherboard_matx",
+    "center_on": [
+      "pCylinder41_M_Mobo_0"
+    ],
+    "origin": "back_face",
+    "fit": [
+      "x",
+      2.44
+    ],
+    "max_texture": 2048,
+    "paint": [
+      {
+        "images": [
+          "Image_7"
+        ],
+        "box": [
+          0.56,
+          0.28,
+          0.985,
+          0.385
+        ],
+        "colors": {
+          "Image_7": [
+            "sample",
+            0.55,
+            0.33
+          ]
+        }
+      },
+      {
+        "images": [
+          "Image_7"
+        ],
+        "box": [
+          0.17,
+          0.64,
+          0.35,
+          0.765
+        ],
+        "colors": {
+          "Image_7": [
+            "sample",
+            0.16,
+            0.7
+          ]
+        }
+      }
+    ],
+    "cut_below_z": -0.86,
+    "recenter_after_cut": true
+  },
+  "fan": {
+    "src": "../assets-src/fan.glb",
+    "out": "../assets-src/processed/fan.glb",
+    "name": "part_fan",
+    "paint_objects": {
+      "Object_7": {
+        "color": "#1b1d22",
+        "rough": 0.6
+      },
+      "Object_5": {
+        "color": "#23262c",
+        "rough": 0.6
+      },
+      "Object_4": {
+        "color": "#2c3038",
+        "rough": 0.45
+      }
+    },
+    "separate": {
+      "Object_4": "blades"
+    },
+    "rotate_steps": [
+      [
+        "Z",
+        90
+      ]
+    ],
+    "fit": [
+      "z",
+      1.0
+    ],
+    "max_texture": 512,
+    "decimate": 0.35
+  },
+  "ram_red": {
+    "src": "../assets-src/ram_red.glb",
+    "out": "../assets-src/processed/ram_red.glb",
+    "name": "part_ram_red",
+    "drop_materials": [
+      "CorsairLogo"
+    ],
+    "rotate_steps": [
+      [
+        "Y",
+        90
+      ],
+      [
+        "Z",
+        180
+      ]
+    ],
+    "origin": "back_face",
+    "fit": [
+      "z",
+      1.33
+    ],
+    "max_texture": 1024
+  },
+  "ram_green": {
+    "src": "../assets-src/ram_green.glb",
+    "out": "../assets-src/processed/ram_green.glb",
+    "name": "part_ram_green",
+    "keep_objects": [
+      "Cube_Ram Side_0"
+    ],
+    "rotate_steps": [
+      [
+        "X",
+        90
+      ]
+    ],
+    "origin": "back_face",
+    "fit": [
+      "z",
+      1.33
+    ],
+    "max_texture": 1024
+  },
+  "ssd": {
+    "src": "../assets-src/ssd.glb",
+    "out": "../assets-src/processed/ssd.glb",
+    "name": "part_ssd",
+    "origin": "back_face",
+    "fit": [
+      "x",
+      0.8
+    ],
+    "max_texture": 1024
+  },
+  "aio_radiator": {
+    "src": "../assets-src/aio.glb",
+    "out": "../assets-src/processed/aio_radiator.glb",
+    "name": "part_aio_radiator",
+    "keep_objects": [
+      "Object_11",
+      "Object_20",
+      "Object_8",
+      "Object_17",
+      "Object_25"
+    ],
+    "paint_objects": {
+      "Object_25": {
+        "color": "#1a1b1f",
+        "metal": 0.6,
+        "rough": 0.4
+      },
+      "Object_11": {
+        "color": "#1b1d22",
+        "rough": 0.6
+      },
+      "Object_20": {
+        "color": "#1b1d22",
+        "rough": 0.6
+      },
+      "Object_8": {
+        "color": "#2c3038",
+        "rough": 0.45
+      },
+      "Object_17": {
+        "color": "#2c3038",
+        "rough": 0.45
+      }
+    },
+    "separate": {
+      "Object_8": "blades_1",
+      "Object_17": "blades_2"
+    },
+    "rotate_steps": [
+      [
+        "Z",
+        90
+      ]
+    ],
+    "origin": "top_face",
+    "scale": 0.921,
+    "decimate": 0.35,
+    "max_texture": 512
+  },
+  "aio_pump": {
+    "src": "../assets-src/aio.glb",
+    "out": "../assets-src/processed/aio_pump.glb",
+    "name": "part_aio_pump",
+    "keep_objects": [
+      "Object_22",
+      "Object_23"
+    ],
+    "paint_objects": {
+      "Object_22": {
+        "color": "#1c1d22",
+        "metal": 0.55,
+        "rough": 0.35
+      },
+      "Object_23": {
+        "color": "#0e0f12",
+        "metal": 0.2,
+        "rough": 0.15
+      }
+    },
+    "rotate_steps": [
+      [
+        "Z",
+        90
+      ]
+    ],
+    "origin": "back_face",
+    "scale": 0.921,
+    "max_texture": 512
+  }
+}
