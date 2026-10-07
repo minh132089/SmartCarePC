@@ -4,6 +4,10 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    // Frontend gọi /api/... sẽ được chuyển sang backend Spring Boot (backend/, cổng 8083)
+    proxy: { '/api': 'http://localhost:8083' },
+  },
   build: {
     // three và bộ R3F tự thân đã ~750–850 kB, không chia nhỏ hơn được; code app chỉ ~100 kB
     chunkSizeWarningLimit: 900,
