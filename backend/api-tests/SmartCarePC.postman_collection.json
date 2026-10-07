@@ -1,0 +1,877 @@
+{
+  "info": {
+    "name": "SmartCarePC API",
+    "description": "Test API backend SmartCarePC. Đổi biến baseUrl nếu backend chạy cổng khác.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8083"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. API test",
+      "item": [
+        {
+          "name": "Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/test/ping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "test",
+                "ping"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"ok = true\", () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Echo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/test/echo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "test",
+                "echo"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hello\": \"SmartCarePC\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Trả lại đúng body\", () => pm.expect(pm.response.json().received.hello).to.eql(\"SmartCarePC\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Danh mục",
+      "item": [
+        {
+          "name": "Loại linh kiện",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categories"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 11 loại\", () => pm.expect(pm.response.json()).to.have.lengthOf(11));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Các bước lắp",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/assembly-steps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "assembly-steps"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 8 bước\", () => pm.expect(pm.response.json()).to.have.lengthOf(8));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nguồn model 3D",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/credits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "credits"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 10 nguồn\", () => pm.expect(pm.response.json()).to.have.lengthOf(10));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Linh kiện",
+      "item": [
+        {
+          "name": "Tất cả linh kiện",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/components",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "components"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 25 linh kiện\", () => pm.expect(pm.response.json()).to.have.lengthOf(25));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lọc theo loại GPU",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/components?category=gpu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "components"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "gpu"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 2 card\", () => pm.expect(pm.response.json()).to.have.lengthOf(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chi tiết gpu_280",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/components/gpu_280",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "components",
+                "gpu_280"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Dài 280 mm\", () => pm.expect(pm.response.json().specs.lengthMm).to.eql(280));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mã không tồn tại",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/components/khong_co",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "components",
+                "khong_co"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Bộ máy có sẵn",
+      "item": [
+        {
+          "name": "Danh sách máy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 6 máy\", () => pm.expect(pm.response.json()).to.have.lengthOf(6));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chi tiết mini_sff",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/mini_sff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "mini_sff"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Có 9 dòng linh kiện\", () => pm.expect(pm.response.json().items).to.have.lengthOf(9));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra standard_tower",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/standard_tower/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "standard_tower",
+                "check"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Lắp được\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra compact_tower",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/compact_tower/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "compact_tower",
+                "check"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Lắp được\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra showcase_dual_chamber",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/showcase_dual_chamber/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "showcase_dual_chamber",
+                "check"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Lắp được\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra mini_sff",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/mini_sff/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "mini_sff",
+                "check"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Lắp được\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra full_tower",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/full_tower/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "full_tower",
+                "check"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Lắp được\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kiểm tra gaming",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/gaming/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "gaming",
+                "check"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Lắp được\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Kiểm tra tương thích",
+      "item": [
+        {
+          "name": "Cấu hình Mini đúng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"case_mini_sff\"\n    },\n    {\n      \"code\": \"mb_itx\"\n    },\n    {\n      \"code\": \"cpu_std\"\n    },\n    {\n      \"code\": \"low_profile_47\"\n    },\n    {\n      \"code\": \"ram_ddr4\",\n      \"quantity\": 2\n    },\n    {\n      \"code\": \"gpu_240\"\n    },\n    {\n      \"code\": \"ssd_m2_2280\"\n    },\n    {\n      \"code\": \"psu_sfx\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"compatible = true\", () => pm.expect(pm.response.json().compatible).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vỏ Mini lắp đồ to: 4 lỗi",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"case_mini_sff\"\n    },\n    {\n      \"code\": \"mb_atx\"\n    },\n    {\n      \"code\": \"cpu_std\"\n    },\n    {\n      \"code\": \"tower_air_155\"\n    },\n    {\n      \"code\": \"ram_ddr4\",\n      \"quantity\": 2\n    },\n    {\n      \"code\": \"gpu_280\"\n    },\n    {\n      \"code\": \"ssd_m2_2280\"\n    },\n    {\n      \"code\": \"psu_atx\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const rules = pm.response.json().errors.map(e => e.rule);",
+                  "pm.test(\"Báo đủ 4 lỗi\", () => pm.expect(rules).to.include.members([\"case.form_factor\", \"case.psu\", \"gpu.length\", \"cooler.height\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tản nước 360 trong vỏ nhỏ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"case_compact_tower\"\n    },\n    {\n      \"code\": \"mb_matx\"\n    },\n    {\n      \"code\": \"cpu_std\"\n    },\n    {\n      \"code\": \"aio_360\"\n    },\n    {\n      \"code\": \"ram_ddr4\",\n      \"quantity\": 2\n    },\n    {\n      \"code\": \"gpu_240\"\n    },\n    {\n      \"code\": \"ssd_m2_2280\"\n    },\n    {\n      \"code\": \"psu_atx\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const rules = pm.response.json().errors.map(e => e.rule);",
+                  "pm.test(\"Báo cooler.radiator\", () => pm.expect(rules).to.include(\"cooler.radiator\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thừa RAM và quạt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"case_mini_sff\"\n    },\n    {\n      \"code\": \"mb_itx\"\n    },\n    {\n      \"code\": \"cpu_std\"\n    },\n    {\n      \"code\": \"low_profile_47\"\n    },\n    {\n      \"code\": \"ram_ddr4\",\n      \"quantity\": 3\n    },\n    {\n      \"code\": \"gpu_240\"\n    },\n    {\n      \"code\": \"ssd_m2_2280\"\n    },\n    {\n      \"code\": \"psu_sfx\"\n    },\n    {\n      \"code\": \"fan120\",\n      \"quantity\": 2\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const rules = pm.response.json().errors.map(e => e.rule);",
+                  "pm.test(\"Báo ram.slots và fans.slots\", () => pm.expect(rules).to.include.members([\"ram.slots\", \"fans.slots\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Thiếu linh kiện",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"case_mini_sff\"\n    },\n    {\n      \"code\": \"cpu_std\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const rules = pm.response.json().errors.map(e => e.rule);",
+                  "pm.test(\"Báo thiếu bo, nguồn, RAM, SSD\", () => pm.expect(rules).to.include.members([\"required.motherboard\", \"required.psu\", \"required.ram\", \"required.ssd\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Danh sách rỗng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Số lượng 0",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"cpu_std\",\n      \"quantity\": 0\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mã không tồn tại",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"code\": \"khong_co\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
