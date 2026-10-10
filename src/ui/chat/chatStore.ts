@@ -125,11 +125,11 @@ export function vnd(n: number): string {
   return `${Math.round(n / 1e3).toLocaleString('vi-VN')} nghìn`
 }
 
-/** Khoảng giá: "11,2 – 13 triệu"; hai đầu bằng nhau thì chỉ ghi một số */
+/** Khoảng giá: "11,2 - 13 triệu"; hai đầu bằng nhau thì chỉ ghi một số */
 export function vndRange(min: number, max: number): string {
   if (Math.abs(max - min) < 50_000) return vnd(max)
-  if (min >= 1e6 && max >= 1e6) return `${(min / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} – ${vnd(max)}`
-  return `${vnd(min)} – ${vnd(max)}`
+  if (min >= 1e6 && max >= 1e6) return `${(min / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} - ${vnd(max)}`
+  return `${vnd(min)} - ${vnd(max)}`
 }
 
 /** Kiểu máy 3D tương ứng với vỏ trong cấu hình (vd case_mini_sff → mini_sff), null nếu app chưa có mô hình */

@@ -5,40 +5,56 @@ import { totalOf, vnd, vndRange, type BuildCard, type BuildLine } from './chatSt
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
 /**
+ * Gom linh kiện theo việc chúng làm, để người mới đọc 3 hoặc 4 nhóm ngắn thay vì một danh sách 8 dòng.
+ * Loại nào không thuộc nhóm nào thì rơi vào nhóm cuối.
+ */
+const GROUPS: { title: string; cats: string[] }[] = [
+  { title: 'Xử lý và bộ nhớ', cats: ['cpu', 'motherboard', 'ram', 'ssd'] },
+  { title: 'Hình ảnh', cats: ['gpu'] },
+  { title: 'Làm mát và nguồn điện', cats: ['cooler', 'psu', 'fans'] },
+  { title: 'Vỏ máy và phụ kiện', cats: ['case', 'cables', 'tools'] },
+]
+
+function groupLines(items: BuildLine[]) {
+  const known = new Set(GROUPS.flatMap((g) => g.cats))
+  return GROUPS.map((g, i) => ({
+    title: g.title,
+    lines: items.filter((it) => g.cats.includes(it.category) || (i === GROUPS.length - 1 && !known.has(it.category))),
+  })).filter((g) => g.lines.length > 0)
+}
+
+/**
  * Bảng thông tin cấu hình sau khi trợ lý chốt: nhu cầu đã hiểu, tổng giá so với ngân sách,
- * rồi từng linh kiện với thông số nên mua, lý do chọn, giá tham khảo và "linh kiện này làm gì".
+ * rồi linh kiện theo nhóm với ảnh, thông số nên mua, lý do chọn, giá tham khảo và "linh kiện này làm gì".
  */
 export function ProposalView({ card, action }: { card: BuildCard; action?: ReactNode }) {
   const total = totalOf(card)
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-[13px] font-semibold text-accent">Cấu hình đề xuất cho bạn</p>
-        <h2 className="mt-1 text-[22px] leading-tight font-semibold tracking-[-0.02em] text-ink">
-          {card.summary || 'Các linh kiện trợ lý đã chọn'}
-        </h2>
-        <p className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold ${card.compatible ? 'bg-[#eaf7ee] text-[#1d7a3a]' : 'bg-[#fdecec] text-[#b42318]'}`}>
-          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden>
-            {card.compatible ? (
-              <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
-              <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            )}
-          </svg>
-          {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
-        </p>
+    <div>
+      <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-ink">
+        {card.summary || 'Cấu hình trợ lý đã chọn'}
+      </h2>
+      <p className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-[#1d7a3a]' : 'text-[#b42318]'}`}>
+        {card.compatible ? 'Các linh kiện lắp chung được.' : 'Cấu hình này chưa lắp được, xem lỗi bên dưới.'}
+      </p>
+
+      {total && <Total min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
+
+      <div className="mt-6 space-y-6">
+        {groupLines(card.items).map((g) => (
+          <section key={g.title}>
+            <h3 className="px-1 text-[15px] font-semibold text-ink">{g.title}</h3>
+            <ul className="mt-2 space-y-5 rounded-2xl bg-white p-4">
+              {g.lines.map((it) => (
+                <PartRow key={it.code} line={it} total={total} />
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
 
-      {total && <Budget min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
-
-      <ul className="space-y-2">
-        {card.items.map((it) => (
-          <PartRow key={it.code} line={it} total={total} />
-        ))}
-      </ul>
-
       {(card.errors.length > 0 || card.warnings.length > 0) && (
-        <ul className="space-y-1.5 rounded-2xl bg-white p-4 text-[13px] leading-snug">
+        <ul className="mt-6 space-y-2 text-[14px] leading-[1.45]">
           {card.errors.map((e) => (
             <li key={e.rule + e.message} className="text-[#b42318]">
               {e.message}
@@ -52,92 +68,70 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
         </ul>
       )}
 
-      {action}
+      {action && <div className="mt-6">{action}</div>}
       {total && (
-        <p className="text-[12px] leading-snug text-ink-3">
-          Giá do AI ước tính theo thông số phổ thông, chưa gồm màn hình, bàn phím và chuột. Giá thật thay đổi theo cửa hàng và thời điểm, hãy hỏi lại trước khi mua.
+        <p className="mt-3 text-[12px] leading-snug text-ink-3">
+          Giá do AI ước tính theo thông số phổ thông, chưa gồm màn hình, bàn phím và chuột. Giá thật đổi theo cửa hàng, hãy hỏi lại trước khi mua.
         </p>
       )}
     </div>
   )
 }
 
-/** Tổng giá so với ngân sách: thanh ngang có khoảng giá ước tính và vạch ngân sách */
-function Budget({ min, max, budget }: { min: number; max: number; budget: number | null }) {
-  const scale = Math.max(max, budget ?? 0) * 1.08
-  const pct = (n: number) => `${Math.min(100, (n / scale) * 100)}%`
-  const status =
-    budget == null
-      ? null
-      : max <= budget
-        ? { text: `Nằm trong ngân sách ${vnd(budget)}`, tone: 'text-[#1d7a3a]' }
-        : min <= budget
-          ? { text: `Có thể vượt ngân sách ${vnd(budget)} một chút`, tone: 'text-[#7a4b00]' }
-          : { text: `Vượt ngân sách khoảng ${vnd(min - budget)}`, tone: 'text-[#b42318]' }
+/** Tổng giá và một câu so với ngân sách. Không vẽ thanh tiến độ: con số và câu chữ đủ rõ cho người mới. */
+function Total({ min, max, budget }: { min: number; max: number; budget: number | null }) {
+  let verdict: { text: string; tone: string } | null = null
+  if (budget != null) {
+    if (max <= budget) verdict = { text: `Nằm trong ngân sách ${vnd(budget)}, còn dư ít nhất ${vnd(budget - max)}.`, tone: 'text-[#1d7a3a]' }
+    else if (min <= budget) verdict = { text: `Ngân sách ${vnd(budget)}: có thể vượt tới ${vnd(max - budget)} nếu mua ở mức giá cao.`, tone: 'text-[#7a4b00]' }
+    else verdict = { text: `Vượt ngân sách ${vnd(budget)} khoảng ${vnd(min - budget)}.`, tone: 'text-[#b42318]' }
+  }
   return (
-    <div className="rounded-2xl bg-white p-4">
-      <p className="text-[12px] font-semibold text-ink-2">Tổng ước tính</p>
-      <p className="mt-0.5 text-[24px] leading-tight font-semibold tracking-[-0.02em] text-ink">{vndRange(min, max)}</p>
-      {budget != null && (
-        <>
-          <div className="relative mt-3 h-2.5 rounded-full bg-fill" aria-hidden>
-            <div className="absolute inset-y-0 left-0 rounded-full bg-accent/25" style={{ width: pct(max) }} />
-            <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: pct(min) }} />
-            <div className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-ink" style={{ left: pct(budget) }} />
-          </div>
-          <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[12px]">
-            <span className={`font-semibold ${status!.tone}`}>{status!.text}</span>
-            <span className="text-ink-3">Vạch đen: ngân sách</span>
-          </div>
-        </>
-      )}
+    <div className="mt-5">
+      <p className="text-[13px] text-ink-2">Tổng ước tính</p>
+      <p className="text-[30px] leading-tight font-semibold tracking-[-0.025em] text-ink tabular-nums">{vndRange(min, max)}</p>
+      {verdict && <p className={`mt-1 text-[14px] leading-snug ${verdict.tone}`}>{verdict.text}</p>}
     </div>
   )
 }
 
-/** Một linh kiện: loại, thông số nên mua, giá, lý do chọn, và giải thích linh kiện đó làm gì */
+/** Một linh kiện: ảnh, loại, thông số nên mua, giá, lý do chọn, và giải thích linh kiện đó làm gì */
 function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: number } | null }) {
   const [open, setOpen] = useState(false)
   const part = PARTS[line.category as PartId]
-  const price = line.priceMinVnd != null || line.priceMaxVnd != null ? vndRange(line.priceMinVnd ?? line.priceMaxVnd!, line.priceMaxVnd ?? line.priceMinVnd!) : null
-  const mid = ((line.priceMinVnd ?? 0) + (line.priceMaxVnd ?? line.priceMinVnd ?? 0)) / 2
-  const share = total && mid > 0 ? Math.round((mid / ((total.min + total.max) / 2)) * 100) : null
+  const label = `${part?.name ?? line.category}${line.quantity > 1 ? ` × ${line.quantity}` : ''}`
+  const lo = line.priceMinVnd ?? line.priceMaxVnd
+  const hi = line.priceMaxVnd ?? line.priceMinVnd
+  const share = total && lo != null && hi != null ? Math.round(((lo + hi) / (total.min + total.max)) * 100) : null
   return (
-    <li className="flex gap-3.5 rounded-2xl bg-white p-4">
-      <PartImage line={line} label={part?.name ?? line.category} />
+    <li className="flex gap-3.5">
+      <PartImage line={line} label={label} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-[12px] font-semibold text-ink-2">
-            {part?.name ?? line.category}
-            {line.quantity > 1 && ` × ${line.quantity}`}
-          </span>
-          {price && (
-            <span className="shrink-0 text-right text-[13px] font-semibold text-ink">
-              {price}
-              {share != null && <span className="ml-1 font-normal text-ink-3">· {share}%</span>}
-            </span>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[12px] text-ink-2">{label}</p>
+            <p className="text-[15px] leading-snug font-semibold text-ink">{line.spec || line.name}</p>
+          </div>
+          {lo != null && hi != null && (
+            <div className="shrink-0 text-right">
+              <p className="text-[13px] font-semibold text-ink tabular-nums">{vndRange(lo, hi)}</p>
+              {share != null && <p className="text-[12px] text-ink-3 tabular-nums">{share}% tổng tiền</p>}
+            </div>
           )}
         </div>
-        <p className="mt-1 text-[15px] leading-snug font-semibold text-ink">{line.spec || line.name}</p>
-        {line.spec && <p className="text-[12.5px] text-ink-3">Loại trong mô hình 3D: {line.name}</p>}
-        {line.reason && (
-          <p className="mt-2 text-[14px] leading-[1.45] text-ink">
-            <span className="text-ink-2">Vì sao chọn: </span>
-            {line.reason}
-          </p>
-        )}
+        {line.reason && <p className="mt-1.5 text-[14px] leading-[1.45] text-ink-2">{line.reason}</p>}
         {part && (
           <>
             <button
               onClick={() => setOpen(!open)}
               aria-expanded={open}
-              className={`mt-2 text-[13px] font-medium text-accent hover:underline ${focus}`}
+              className={`mt-1.5 text-[13px] font-medium text-accent hover:underline ${focus}`}
             >
               {open ? 'Ẩn giải thích' : 'Linh kiện này làm gì?'}
             </button>
             <div className="reveal" data-open={open}>
               <div>
-                <p className="pt-1.5 text-[13px] leading-[1.45] text-ink-2">{part.about}</p>
+                <p className="pt-1 text-[13px] leading-[1.45] text-ink-2">{part.about}</p>
               </div>
             </div>
           </>
@@ -155,7 +149,7 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
   const [failed, setFailed] = useState(false)
   const src = line.imageUrl && !failed ? line.imageUrl : null
   return (
-    <div className="w-[88px] shrink-0">
+    <div className="w-[72px] shrink-0">
       {src ? (
         <img
           src={src}
@@ -171,8 +165,8 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
           aria-label={`Ảnh mẫu: ${label}`}
           className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-black/15 bg-[#f5f5f7] text-ink-3"
         >
-          <div className="flex flex-col items-center gap-1">
-            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden>
+          <div className="flex flex-col items-center gap-0.5">
+            <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
               <rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
               <circle cx="9" cy="10" r="1.8" fill="none" stroke="currentColor" strokeWidth="1.5" />
               <path d="m4 17.5 5-4.5 3.5 3 3-2.5L20 17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />

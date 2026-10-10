@@ -11,10 +11,9 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
 /** Lời kể mẫu: bấm vào thì chép vào ô nhập để người dùng sửa theo ý mình rồi mới gửi */
 const EXAMPLES = [
-  'Mình là sinh viên, học online và làm Word, Excel. Có khoảng 12 triệu, muốn máy nhỏ gọn để trên bàn.',
-  'Mình hay chơi game online với bạn bè, thỉnh thoảng livestream. Ngân sách khoảng 25 triệu, thích máy có kính và đèn.',
-  'Mình dựng video cho công việc, cần máy chạy ổn định nhiều giờ liền. Ngân sách trên 40 triệu.',
-  'Mình không rành máy tính, chỉ cần máy bền, êm, cả nhà dùng để xem phim và làm giấy tờ.',
+  'Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.',
+  'Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.',
+  'Mình dựng video cho công việc, máy phải chạy ổn định nhiều giờ, ngân sách trên 40 triệu.',
 ]
 
 /**
@@ -69,19 +68,20 @@ export function AdvicePage() {
     )
   }
 
-  const cardAction = (c: BuildCard, index: number) => (
-    <div className="space-y-2">
-      <button
-        onClick={() => {
-          setPicked({ index, latest })
-          setSheet(true)
-        }}
-        className={`w-full rounded-full bg-fill px-4 py-2.5 text-[14px] font-medium text-ink hover:bg-[#dcdce1] ${press} ${focus} ${index === shown ? 'lg:ring-2 lg:ring-accent/40' : ''}`}
-      >
-        Xem chi tiết linh kiện
-      </button>
-      {buildButton(c)}
-    </div>
+  // Thẻ trong hội thoại chỉ mở bảng chi tiết; nút "Xem và lắp máy này" chỉ nằm trong bảng để không lặp hai nơi
+  const cardAction = (_c: BuildCard, index: number) => (
+    <button
+      onClick={() => {
+        setPicked({ index, latest })
+        setSheet(true)
+      }}
+      aria-pressed={index === shown}
+      className={`rounded-full px-4 py-2 text-[14px] font-medium ${press} ${focus} ${
+        index === shown ? 'bg-fill text-ink lg:bg-ink lg:text-white' : 'bg-fill text-ink hover:bg-[#dcdce1]'
+      }`}
+    >
+      Xem chi tiết linh kiện
+    </button>
   )
 
   return (
@@ -102,44 +102,57 @@ export function AdvicePage() {
 
       {empty ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[720px] px-5 pt-[6vh] pb-12">
-            <p className="text-[13px] font-semibold text-ink-2">PC SmartCare · Tư vấn bằng AI</p>
-            <h1 className="display mt-1 text-balance">Bạn cần máy tính để làm gì?</h1>
-            <p className="mt-3 text-[15px] leading-[1.5] text-ink-2">
-              Kể bằng lời của bạn, như đang nói với người bán hàng. Trợ lý AI sẽ phân tích nhu cầu, chọn từng linh kiện và kiểm tra xem chúng lắp chung được không.
-            </p>
-            <div className="mt-6">
-              <Composer
-                big
-                value={draft}
-                onChange={setDraft}
-                onSend={ask}
-                busy={busy}
-                inputRef={inputRef}
-                placeholder="Ví dụ: Mình học thiết kế đồ họa, ngân sách khoảng 20 triệu, muốn máy êm và không quá to…"
-              />
-              <p className="mt-2 px-1 text-[12px] text-ink-3">Nên kể: dùng máy làm gì, ngân sách khoảng bao nhiêu, muốn máy to hay nhỏ.</p>
+          <div className="mx-auto grid max-w-[1120px] gap-10 px-5 pt-8 pb-12 md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)] md:items-center md:px-10 md:pt-14">
+            <div>
+              <h1 className="display text-balance">Bạn cần máy tính để làm gì?</h1>
+              <p className="mt-3 max-w-[46ch] text-[16px] leading-[1.5] text-ink-2">
+                Kể nhu cầu bằng lời của bạn. Trợ lý sẽ chọn linh kiện, ước tính giá và kiểm tra chúng có lắp chung được không.
+              </p>
+              <div className="mt-6">
+                <Composer
+                  big
+                  value={draft}
+                  onChange={setDraft}
+                  onSend={ask}
+                  busy={busy}
+                  inputRef={inputRef}
+                  placeholder="Ví dụ: mình học thiết kế, có khoảng 20 triệu, muốn máy êm và không quá to"
+                />
+              </div>
+
+              <p className="mt-7 px-1 text-[13px] text-ink-2">Chưa biết kể thế nào? Bấm một ví dụ rồi sửa lại cho đúng ý bạn.</p>
+              <ul className="mt-2 space-y-1">
+                {EXAMPLES.map((ex) => (
+                  <li key={ex}>
+                    <button
+                      onClick={() => {
+                        setDraft(ex)
+                        inputRef.current?.focus()
+                      }}
+                      className={`group flex w-full items-start gap-2.5 rounded-xl px-1 py-2 text-left text-[15px] leading-[1.45] text-ink hover:text-accent ${focus}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="mt-[5px] shrink-0 text-ink-3 group-hover:text-accent">
+                        <path d="M2 7h9M7.5 3.5 11 7l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {ex}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <button onClick={() => setPage('build')} className={`mt-8 px-1 text-[14px] font-medium text-accent hover:underline sm:hidden ${focus}`}>
+                Bỏ qua, xem mô hình 3D ›
+              </button>
             </div>
 
-            <p className="mt-8 px-1 text-[13px] font-semibold text-ink-2">Hoặc bắt đầu từ một ví dụ</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => {
-                    setDraft(ex)
-                    inputRef.current?.focus()
-                  }}
-                  className={`rounded-2xl bg-white px-4 py-3 text-left text-[14px] leading-[1.45] text-ink ring-1 ring-black/[0.06] hover:ring-black/15 ${press} ${focus}`}
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-
-            <button onClick={() => setPage('build')} className={`mt-10 px-1 text-[14px] font-medium text-accent hover:underline sm:hidden ${focus}`}>
-              Bỏ qua, xem mô hình 3D ›
-            </button>
+            {/* Ảnh chụp chính mô hình 3D của app (máy Showcase), để người dùng thấy trước thứ mình sẽ lắp. Từ màn hình vừa trở lên. */}
+            <img
+              src="/hero/advice-showcase.jpg"
+              alt="Mô hình 3D một chiếc máy tính mặt kính trong app, nhìn thấy card đồ họa, tản nước và quạt bên trong"
+              width={1200}
+              height={919}
+              className="hidden aspect-[1200/919] w-full rounded-[28px] bg-[#fafafb] object-cover md:block"
+            />
           </div>
         </div>
       ) : (
@@ -147,7 +160,7 @@ export function AdvicePage() {
           <div className="flex min-w-0 flex-1 flex-col">
             <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
               <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
-                <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} />
+                <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} compactCards />
               </div>
             </div>
             <div className="shrink-0 border-t border-black/5 bg-canvas px-5 pt-3 pb-3">

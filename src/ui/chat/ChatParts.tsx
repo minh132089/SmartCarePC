@@ -18,6 +18,7 @@ export function Thread({
   error,
   onRetry,
   cardAction,
+  compactCards,
 }: {
   messages: Msg[]
   busy: boolean
@@ -25,13 +26,20 @@ export function Thread({
   onRetry: () => void
   /** Nút gắn dưới thẻ cấu hình, vd "Xem và lắp máy này" ở trang tư vấn (index là vị trí tin trong hội thoại) */
   cardAction?: (card: BuildCard, index: number) => ReactNode
+  /** Thẻ gọn (chỉ kết quả và tổng giá) khi danh sách linh kiện đã có ở bảng chi tiết bên cạnh */
+  compactCards?: boolean
 }) {
   return (
     <>
       {messages.map((m, i) => (
         <div key={i} className="space-y-2">
           <Bubble role={m.role}>{m.role === 'assistant' ? <Rich text={m.content} /> : m.content}</Bubble>
-          {m.build && <BuildCardView card={m.build} action={cardAction?.(m.build, i)} />}
+          {m.build &&
+            (compactCards ? (
+              <CompactCard card={m.build} action={cardAction?.(m.build, i)} />
+            ) : (
+              <BuildCardView card={m.build} action={cardAction?.(m.build, i)} />
+            ))}
         </div>
       ))}
       {busy && (
@@ -50,6 +58,22 @@ export function Thread({
         </div>
       )}
     </>
+  )
+}
+
+/** Thẻ gọn trong hội thoại: lắp chung được không, số linh kiện, tổng giá. Chi tiết nằm ở bảng bên cạnh. */
+function CompactCard({ card, action }: { card: BuildCard; action?: ReactNode }) {
+  const total = totalOf(card)
+  return (
+    <div className="max-w-[92%] rounded-2xl bg-white p-3.5 ring-1 ring-black/5 sm:max-w-[420px]">
+      <p className={`text-[13px] font-semibold ${card.compatible ? 'text-[#1d7a3a]' : 'text-[#b42318]'}`}>
+        {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
+      </p>
+      <p className="mt-0.5 text-[14px] text-ink">
+        {card.items.length} linh kiện{total && `, ước tính ${vndRange(total.min, total.max)}`}
+      </p>
+      {action && <div className="mt-3">{action}</div>}
+    </div>
   )
 }
 
