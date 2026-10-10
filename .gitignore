@@ -39,3 +39,6 @@ design/**/logs/
 
 # cấu hình cục bộ của công cụ
 .claude/
+
+# khoá API và mật khẩu cục bộ, không đưa lên GitHub
+.env
