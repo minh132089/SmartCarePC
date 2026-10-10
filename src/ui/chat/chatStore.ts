@@ -12,6 +12,9 @@ export type BuildLine = {
   reason?: string | null
   priceMinVnd?: number | null
   priceMaxVnd?: number | null
+  /** Ảnh sản phẩm trợ lý tìm được trên web và trang chứa ảnh đó (https); chưa có thì hiện khung ảnh mẫu */
+  imageUrl?: string | null
+  sourceUrl?: string | null
 }
 /** Cấu hình trợ lý vừa kiểm tra bằng bộ kiểm tra tương thích của backend */
 export type BuildCard = {

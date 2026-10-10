@@ -103,43 +103,103 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
   const mid = ((line.priceMinVnd ?? 0) + (line.priceMaxVnd ?? line.priceMinVnd ?? 0)) / 2
   const share = total && mid > 0 ? Math.round((mid / ((total.min + total.max) / 2)) * 100) : null
   return (
-    <li className="rounded-2xl bg-white p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[12px] font-semibold text-ink-2">
-          {part?.name ?? line.category}
-          {line.quantity > 1 && ` × ${line.quantity}`}
-        </span>
-        {price && (
-          <span className="shrink-0 text-right text-[13px] font-semibold text-ink">
-            {price}
-            {share != null && <span className="ml-1 font-normal text-ink-3">· {share}%</span>}
+    <li className="flex gap-3.5 rounded-2xl bg-white p-4">
+      <PartImage line={line} label={part?.name ?? line.category} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-[12px] font-semibold text-ink-2">
+            {part?.name ?? line.category}
+            {line.quantity > 1 && ` × ${line.quantity}`}
           </span>
+          {price && (
+            <span className="shrink-0 text-right text-[13px] font-semibold text-ink">
+              {price}
+              {share != null && <span className="ml-1 font-normal text-ink-3">· {share}%</span>}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-[15px] leading-snug font-semibold text-ink">{line.spec || line.name}</p>
+        {line.spec && <p className="text-[12.5px] text-ink-3">Loại trong mô hình 3D: {line.name}</p>}
+        {line.reason && (
+          <p className="mt-2 text-[14px] leading-[1.45] text-ink">
+            <span className="text-ink-2">Vì sao chọn: </span>
+            {line.reason}
+          </p>
+        )}
+        {part && (
+          <>
+            <button
+              onClick={() => setOpen(!open)}
+              aria-expanded={open}
+              className={`mt-2 text-[13px] font-medium text-accent hover:underline ${focus}`}
+            >
+              {open ? 'Ẩn giải thích' : 'Linh kiện này làm gì?'}
+            </button>
+            <div className="reveal" data-open={open}>
+              <div>
+                <p className="pt-1.5 text-[13px] leading-[1.45] text-ink-2">{part.about}</p>
+              </div>
+            </div>
+          </>
         )}
       </div>
-      <p className="mt-1 text-[15px] leading-snug font-semibold text-ink">{line.spec || line.name}</p>
-      {line.spec && <p className="text-[12.5px] text-ink-3">Loại trong mô hình 3D: {line.name}</p>}
-      {line.reason && (
-        <p className="mt-2 text-[14px] leading-[1.45] text-ink">
-          <span className="text-ink-2">Vì sao chọn: </span>
-          {line.reason}
-        </p>
-      )}
-      {part && (
-        <>
-          <button
-            onClick={() => setOpen(!open)}
-            aria-expanded={open}
-            className={`mt-2 text-[13px] font-medium text-accent hover:underline ${focus}`}
-          >
-            {open ? 'Ẩn giải thích' : 'Linh kiện này làm gì?'}
-          </button>
-          <div className="reveal" data-open={open}>
-            <div>
-              <p className="pt-1.5 text-[13px] leading-[1.45] text-ink-2">{part.about}</p>
-            </div>
-          </div>
-        </>
-      )}
     </li>
   )
+}
+
+/**
+ * Ảnh linh kiện. Trợ lý tìm ảnh sản phẩm trên web rồi gửi link ảnh và link trang nguồn; chưa có link,
+ * hoặc ảnh không tải được, thì hiện khung "Ảnh mẫu" giữ chỗ.
+ */
+function PartImage({ line, label }: { line: BuildLine; label: string }) {
+  const [failed, setFailed] = useState(false)
+  const src = line.imageUrl && !failed ? line.imageUrl : null
+  return (
+    <div className="w-[88px] shrink-0">
+      {src ? (
+        <img
+          src={src}
+          alt={line.spec || line.name}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+          className="aspect-square w-full rounded-xl bg-[#f5f5f7] object-contain"
+        />
+      ) : (
+        <div
+          role="img"
+          aria-label={`Ảnh mẫu: ${label}`}
+          className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-black/15 bg-[#f5f5f7] text-ink-3"
+        >
+          <div className="flex flex-col items-center gap-1">
+            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden>
+              <rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="9" cy="10" r="1.8" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <path d="m4 17.5 5-4.5 3.5 3 3-2.5L20 17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+            <span className="text-[11px] font-medium">Ảnh mẫu</span>
+          </div>
+        </div>
+      )}
+      {src && line.sourceUrl && (
+        <a
+          href={line.sourceUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          title={`Mở trang nguồn của ảnh: ${hostOf(line.sourceUrl)}`}
+          className={`mt-1 block truncate text-center text-[11px] text-ink-3 hover:text-accent hover:underline ${focus}`}
+        >
+          {hostOf(line.sourceUrl)}
+        </a>
+      )}
+    </div>
+  )
+}
+
+function hostOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return 'trang web'
+  }
 }

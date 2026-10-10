@@ -102,7 +102,8 @@ class ChatServiceTests {
         reply(toolCall("p1", "propose_build", """
                 {"summary":"Học online, máy nhỏ gọn","budget_vnd":12000000,"items":[
                   {"code":"case_compact_tower","spec":"Vỏ mATX nhỏ","reason":"Vừa bàn học","price_min_vnd":700000,"price_max_vnd":1000000},
-                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","price_min_vnd":900000,"price_max_vnd":1200000}]}
+                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","price_min_vnd":900000,"price_max_vnd":1200000,
+                   "image_url":"https://example.com/ram.jpg","source_url":"http://example.com/ram"}]}
                 """), answer("Tổng khoảng 11 triệu."));
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học online 12 triệu")), null, null, "advice"));
@@ -117,6 +118,9 @@ class ChatServiceTests {
         assertThat(ram.reason()).isEqualTo("Mở nhiều tab vẫn mượt");
         assertThat(ram.priceMinVnd()).isEqualTo(900_000L);
         assertThat(ram.priceMaxVnd()).isEqualTo(1_200_000L);
+        assertThat(ram.imageUrl()).isEqualTo("https://example.com/ram.jpg");
+        assertThat(ram.sourceUrl()).as("link không phải https bị bỏ").isNull();
+        assertThat(card.items().getFirst().imageUrl()).isNull();
     }
 
     @Test

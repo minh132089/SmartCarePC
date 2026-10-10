@@ -56,6 +56,8 @@ public class ChatService {
                - spec: thông số cụ thể nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200", "CPU 6 nhân 12 luồng có sẵn đồ họa");
                - reason: một câu vì sao hợp với nhu cầu người dùng;
                - price_min_vnd, price_max_vnd: khoảng giá tham khảo ở Việt Nam cho cả số lượng của dòng đó.
+               - image_url, source_url: nếu đã tìm được ảnh sản phẩm đúng thông số trên web thì ghi link ảnh (https) \
+            và link trang chứa ảnh. Chưa có thì bỏ trống, app sẽ hiện khung ảnh mẫu. Không tự bịa link.
             5. Giá là ước tính theo thông số phổ thông, không gắn hãng. Tổng giá phải nằm trong ngân sách. Ngân sách quá thấp \
             so với nhu cầu thì vẫn đề xuất phương án gần nhất, nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
             6. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
@@ -146,7 +148,11 @@ public class ChatService {
                                                             "spec", Map.of("type", "string", "description", "Thông số cụ thể nên mua"),
                                                             "reason", Map.of("type", "string", "description", "Vì sao chọn, một câu"),
                                                             "price_min_vnd", Map.of("type", "integer"),
-                                                            "price_max_vnd", Map.of("type", "integer")),
+                                                            "price_max_vnd", Map.of("type", "integer"),
+                                                            "image_url", Map.of("type", "string",
+                                                                    "description", "Link https tới ảnh sản phẩm tìm được trên web; bỏ trống nếu chưa có"),
+                                                            "source_url", Map.of("type", "string",
+                                                                    "description", "Link https tới trang web chứa ảnh đó")),
                                                     "required", List.of("code", "spec", "reason")))),
                             "required", List.of("summary", "items"))));
 
@@ -310,7 +316,7 @@ public class ChatService {
             ComponentResponse p = componentService.findByCode(code);
             Map<String, Object> d = c.details().getOrDefault(code, Map.of());
             lines.add(new Line(code, p.category(), p.name(), n, text(d.get("spec")), text(d.get("reason")),
-                    vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd"))));
+                    vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd")), https(d.get("image_url")), https(d.get("source_url"))));
         });
         var r = c.result();
         return new BuildCard(lines, r.compatible(), r.errors(), r.warnings(), c.summary(), c.budgetVnd());
@@ -318,6 +324,12 @@ public class ChatService {
 
     private static String text(Object o) {
         return o == null || o.toString().isBlank() ? null : o.toString().strip();
+    }
+
+    /** Chỉ nhận link https (ảnh và trang nguồn do AI đưa), còn lại bỏ để giao diện hiện khung ảnh mẫu */
+    private static String https(Object o) {
+        String s = text(o);
+        return s != null && s.startsWith("https://") && s.length() <= 2000 && !s.contains(" ") ? s : null;
     }
 
     /** Giá âm hay không phải số thì bỏ, để giao diện không cộng nhầm */
