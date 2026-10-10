@@ -1,5 +1,6 @@
 import { Scene } from './scene/Scene'
 import { AssemblySteps } from './ui/AssemblySteps'
+import { ChatPanel } from './ui/ChatPanel'
 import { InspectButton } from './ui/InspectButton'
 import { Inspector } from './ui/Inspector'
 import { Sidebar } from './ui/Sidebar'
@@ -14,6 +15,7 @@ export default function App() {
         <AssemblySteps />
         <InspectButton />
         <Inspector />
+        <ChatPanel />
       </main>
     </div>
   )

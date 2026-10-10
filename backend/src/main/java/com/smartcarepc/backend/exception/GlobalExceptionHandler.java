@@ -18,6 +18,11 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
+    @ExceptionHandler(AiUnavailableException.class)
+    public ProblemDetail handleAi(AiUnavailableException ex) {
+        return ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
+    }
+
     /** Dữ liệu gửi lên sai quy định (@Valid): trả 400 kèm danh sách lỗi từng trường */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleInvalid(MethodArgumentNotValidException ex) {

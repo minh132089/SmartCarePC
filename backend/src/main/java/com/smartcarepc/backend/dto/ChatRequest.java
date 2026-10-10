@@ -1,0 +1,25 @@
+package com.smartcarepc.backend.dto;
+
+import java.util.List;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+/**
+ * Cả đoạn hội thoại trong khung chat, tin cũ trước, tin cuối là câu người dùng vừa gửi.
+ * buildCode là máy đang xem trên màn hình 3D (vd "mini_sff"), để trợ lý biết người dùng đang nói về máy nào.
+ * { "buildCode": "gaming", "messages": [ { "role": "user", "content": "Máy này chơi game được không?" } ] }
+ */
+public record ChatRequest(
+        @NotEmpty(message = "Chưa có tin nhắn nào") @Size(max = 30, message = "Hội thoại quá dài, hãy bắt đầu cuộc trò chuyện mới")
+        List<@Valid Message> messages,
+        String buildCode) {
+
+    public record Message(
+            @NotBlank @Pattern(regexp = "user|assistant", message = "role chỉ nhận user hoặc assistant") String role,
+            @NotBlank(message = "Tin nhắn trống") @Size(max = 2000, message = "Tin nhắn dài quá 2000 ký tự") String content) {
+    }
+}
