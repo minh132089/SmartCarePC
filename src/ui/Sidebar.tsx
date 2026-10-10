@@ -6,6 +6,7 @@ import { PARTS, type PartId } from '../data/parts'
 import { useViewer } from '../store'
 import { INSPECTABLE } from '../data/hotspots'
 import { QUALITY_LABEL, type QualityPref } from '../perf/quality'
+import { firstUndone, guideSteps, loadDone } from '../data/guide'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -132,6 +133,7 @@ export function Sidebar() {
         <PowerButton />
       </div>
       <QualityPicker />
+      <GuideCard />
 
       <div ref={listRef} className="enter" style={{ '--i': 3 } as React.CSSProperties}>
       <SectionTitle>Linh kiện trong máy</SectionTitle>
@@ -248,6 +250,44 @@ function PowerButton() {
       <span className={`size-2 rounded-full ${powered ? 'bg-[#34c759]' : 'bg-ink-3'}`} aria-hidden />
       {powered ? 'Tắt máy' : 'Bật máy'}
     </button>
+  )
+}
+
+/** Lối vào hướng dẫn lắp từng bước, kèm tiến độ đã đánh dấu của máy đang xem */
+function GuideCard() {
+  const familyId = useViewer((s) => s.familyId)
+  const buildId = useViewer((s) => s.buildId)
+  const setGuide = useViewer((s) => s.setGuide)
+  const setGuideIndex = useViewer((s) => s.setGuideIndex)
+  const steps = guideSteps(familyId, buildId)
+  const done = loadDone(familyId ?? buildId)
+  const count = steps.filter((s) => done.has(s.id)).length
+  return (
+    <div className="enter mt-6 rounded-2xl bg-white p-4" style={{ '--i': 3 } as React.CSSProperties}>
+      <p className="text-[15px] font-semibold text-ink">Tự lắp máy này?</p>
+      <p className="mt-1 text-[14px] leading-[1.45] text-ink-2">
+        Làm theo hướng dẫn từng bước, có hình minh hoạ. Lắp xong bước nào thì đánh dấu bước đó.
+      </p>
+      {count > 0 && (
+        <div className="mt-3">
+          <div className="h-1.5 overflow-hidden rounded-full bg-fill">
+            <div className="h-full rounded-full bg-[#34c759]" style={{ width: `${(count / steps.length) * 100}%` }} />
+          </div>
+          <p className="mt-1 text-[12px] text-ink-3">
+            Đã xong {count}/{steps.length} bước
+          </p>
+        </div>
+      )}
+      <button
+        onClick={() => {
+          setGuideIndex(firstUndone(steps, done))
+          setGuide(true)
+        }}
+        className={`mt-3 rounded-full bg-accent px-5 py-2.5 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
+      >
+        {count === 0 ? 'Bắt đầu hướng dẫn' : count === steps.length ? 'Xem lại hướng dẫn' : 'Tiếp tục hướng dẫn'}
+      </button>
+    </div>
   )
 }
 

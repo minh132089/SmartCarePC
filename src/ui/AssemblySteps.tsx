@@ -10,16 +10,18 @@ export function AssemblySteps() {
   const exploded = useViewer((s) => s.exploded)
   const step = useViewer((s) => s.step)
   const setStep = useViewer((s) => s.setStep)
+  // Trong hướng dẫn từng bước, GuidePanel tự đặt bước cho hình 3D
+  const guide = useViewer((s) => s.guide)
   const target = exploded ? STEPS : 0
 
   useEffect(() => {
-    if (step === target) return
+    if (guide || step === target) return
     const dir = target > step ? 1 : -1
     // Bước đầu tiên chạy ngay khi bấm, các bước sau chờ bước trước xong
     const first = (dir > 0 && step === 0) || (dir < 0 && step === STEPS)
     const t = setTimeout(() => setStep(step + dir), first ? 0 : STEP_MS)
     return () => clearTimeout(t)
-  }, [step, target, setStep])
+  }, [guide, step, target, setStep])
 
   let text: string | null = null
   if (exploded && step > 0) {
@@ -39,7 +41,7 @@ export function AssemblySteps() {
     const t = setTimeout(() => setHold(false), 1600)
     return () => clearTimeout(t)
   }, [exploded, step])
-  if (!exploded && step === 0 && !hold) text = null
+  if ((!exploded && step === 0 && !hold) || guide) text = null
   if (!text) return null
   return (
     <div className="pointer-events-none absolute top-4 left-0 z-10 flex w-full justify-center" aria-live="polite">
