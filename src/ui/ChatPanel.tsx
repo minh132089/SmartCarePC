@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
+import { PARTS, type PartId } from '../data/parts'
 import { useViewer } from '../store'
 
-type Msg = { role: 'user' | 'assistant'; content: string }
+type Issue = { rule: string; message: string }
+/** Cấu hình trợ lý vừa kiểm tra bằng bộ kiểm tra tương thích của backend */
+type BuildCard = {
+  items: { code: string; category: string; name: string; quantity: number }[]
+  compatible: boolean
+  errors: Issue[]
+  warnings: Issue[]
+}
+type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null }
 
 const GREETING =
-  'Chào bạn, mình là trợ lý của PC SmartCare. Bạn cứ hỏi về chọn máy, lắp ráp, nâng cấp hay máy bị nóng, chậm, ồn. Không cần biết thuật ngữ đâu.'
+  'Chào bạn, mình là trợ lý tư vấn build PC. Bạn cho mình biết ngân sách và máy dùng để làm gì, mình sẽ chọn linh kiện và kiểm tra xem chúng lắp chung được không. Không cần biết thuật ngữ đâu.'
 
 const SUGGESTIONS = [
+  'Mình có khoảng 15 triệu, cần máy chơi game',
+  'Build máy nhỏ gọn để học và làm văn phòng',
   'Máy đang xem hợp để làm gì?',
-  'Mình có khoảng 15 triệu, nên chọn máy nào?',
-  'Máy mình dạo này nóng và ồn, phải làm sao?',
   'Lắp nguồn ATX vào vỏ Mini được không?',
 ]
 
@@ -63,12 +72,12 @@ export function ChatPanel() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ buildCode: familyId ?? buildId, messages: next.slice(-HISTORY) }),
+        body: JSON.stringify({ buildCode: familyId ?? buildId, messages: next.slice(-HISTORY).map(toWire) }),
         signal: ctrl.signal,
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.detail ?? (res.status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.'))
-      setMessages([...next, { role: 'assistant', content: data.reply }])
+      setMessages([...next, { role: 'assistant', content: data.reply, build: data.build }])
     } catch (e) {
       if (ctrl.signal.aborted) return
       setError(e instanceof TypeError ? OFFLINE : (e as Error).message)
@@ -99,11 +108,11 @@ export function ChatPanel() {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Hỏi trợ lý tư vấn"
+        aria-label="Mở khung tư vấn build PC"
         className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-white shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:bottom-5 md:py-3 md:pr-5 md:pl-4"
       >
         <ChatIcon />
-        <span className="hidden md:inline">Hỏi trợ lý</span>
+        <span className="hidden md:inline">Tư vấn build PC</span>
       </button>
     )
   }
@@ -111,7 +120,7 @@ export function ChatPanel() {
   return (
     <section
       role="dialog"
-      aria-label="Trợ lý tư vấn"
+      aria-label="Tư vấn build PC"
       className="chat-pop fixed inset-x-2 top-12 bottom-2 z-50 flex flex-col overflow-hidden rounded-[24px] bg-[#f7f7f9] shadow-[0_18px_60px_rgba(0,0,0,0.22)] ring-1 ring-black/5 md:absolute md:inset-auto md:right-4 md:bottom-4 md:h-[min(620px,calc(100%-32px))] md:w-[390px]"
     >
       <header className="flex items-center gap-3 border-b border-black/5 bg-white/80 px-4 py-3 backdrop-blur-xl">
@@ -119,7 +128,7 @@ export function ChatPanel() {
           <ChatIcon />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] leading-tight font-semibold">Trợ lý tư vấn</p>
+          <p className="text-[15px] leading-tight font-semibold">Tư vấn build PC</p>
           <p className="truncate text-[12px] text-ink-2">Đang xem: {machine}</p>
         </div>
         <IconButton label="Cuộc trò chuyện mới" onClick={reset} disabled={messages.length === 0 && !busy}>
@@ -146,9 +155,10 @@ export function ChatPanel() {
           </div>
         )}
         {messages.map((m, i) => (
-          <Bubble key={i} role={m.role}>
-            {m.role === 'assistant' ? <Rich text={m.content} /> : m.content}
-          </Bubble>
+          <div key={i} className="space-y-2">
+            <Bubble role={m.role}>{m.role === 'assistant' ? <Rich text={m.content} /> : m.content}</Bubble>
+            {m.build && <BuildCardView card={m.build} />}
+          </div>
         ))}
         {busy && (
           <div className="flex w-fit gap-1 rounded-2xl rounded-bl-md bg-white px-3.5 py-3 ring-1 ring-black/5" aria-label="Trợ lý đang trả lời">
@@ -210,6 +220,59 @@ export function ChatPanel() {
 }
 
 const OFFLINE = 'Chưa kết nối được máy chủ. Hãy bật backend (cổng 8083) rồi thử lại.'
+
+/**
+ * Tin gửi lên backend chỉ gồm role và content. Thẻ cấu hình được ghi kèm dưới dạng mã linh kiện,
+ * để khi người dùng nói "đổi card khác" trợ lý vẫn biết cấu hình trước đó gồm những gì.
+ */
+function toWire(m: Msg) {
+  if (!m.build) return { role: m.role, content: m.content }
+  const parts = m.build.items.map((i) => `${i.code}×${i.quantity}`).join(', ')
+  return { role: m.role, content: `${m.content}\n\n[Cấu hình đã kiểm tra: ${parts}]` }
+}
+
+/** Thẻ cấu hình: từng linh kiện theo loại, kết quả "lắp chung được không", lỗi và lưu ý */
+function BuildCardView({ card }: { card: BuildCard }) {
+  return (
+    <div className="max-w-[92%] overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
+      <div className={`flex items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold ${card.compatible ? 'bg-[#eaf7ee] text-[#1d7a3a]' : 'bg-[#fdecec] text-[#b42318]'}`}>
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+          {card.compatible ? (
+            <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          ) : (
+            <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          )}
+        </svg>
+        {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
+      </div>
+      <ul className="divide-y divide-black/5 px-3.5">
+        {card.items.map((it) => (
+          <li key={it.code} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
+            <span className="shrink-0 text-ink-2">{PARTS[it.category as PartId]?.name ?? it.category}</span>
+            <span className="text-right font-medium text-ink">
+              {it.name}
+              {it.quantity > 1 && <span className="text-ink-2"> × {it.quantity}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {(card.errors.length > 0 || card.warnings.length > 0) && (
+        <ul className="space-y-1.5 border-t border-black/5 px-3.5 py-2.5 text-[12.5px] leading-snug">
+          {card.errors.map((e) => (
+            <li key={e.rule + e.message} className="text-[#b42318]">
+              {e.message}
+            </li>
+          ))}
+          {card.warnings.map((w) => (
+            <li key={w.rule + w.message} className="text-[#7a4b00]">
+              Lưu ý: {w.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
   return role === 'user' ? (

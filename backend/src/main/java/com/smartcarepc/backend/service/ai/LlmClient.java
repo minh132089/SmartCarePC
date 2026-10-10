@@ -18,52 +18,58 @@ import com.smartcarepc.backend.exception.AiUnavailableException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Gọi Claude Messages API (POST /v1/messages). Khoá API chỉ nằm ở backend, trình duyệt không bao giờ thấy.
+ * Gọi API chat theo chuẩn OpenAI (POST {base-url}/chat/completions).
+ * Mặc định là DeepSeek V4 qua AgentRouter; đổi AI_BASE_URL / AI_MODEL là dùng được nhà cung cấp khác cùng chuẩn
+ * (DeepSeek trực tiếp, OpenRouter...). Khoá API chỉ nằm ở backend, trình duyệt không bao giờ thấy.
  * Lỗi từ phía AI được đổi thành câu tiếng Việt để hiện thẳng trong khung chat.
  */
 @Slf4j
 @Component
-public class AnthropicClient {
+public class LlmClient {
 
     private final RestClient http;
     private final String apiKey;
 
-    public AnthropicClient(@Value("${app.ai.api-key:}") String apiKey,
-            @Value("${app.ai.base-url:https://api.anthropic.com}") String baseUrl) {
+    public LlmClient(@Value("${app.ai.api-key:}") String apiKey,
+            @Value("${app.ai.base-url:https://agentrouter.org/v1}") String baseUrl) {
         var factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
-        factory.setReadTimeout(Duration.ofSeconds(90));
+        // Model suy luận có thể nghĩ khá lâu trước khi trả lời
+        factory.setReadTimeout(Duration.ofSeconds(120));
         this.http = RestClient.builder()
-                .baseUrl(baseUrl)
+                .baseUrl(baseUrl.replaceAll("/+$", ""))
                 .requestFactory(factory)
-                .defaultHeader("anthropic-version", "2023-06-01")
                 .build();
         this.apiKey = apiKey == null ? "" : apiKey.trim();
     }
 
+    /** Gửi body chat/completions, trả về cả JSON phản hồi */
     @SuppressWarnings("unchecked")
-    public Map<String, Object> createMessage(Map<String, Object> body) {
+    public Map<String, Object> complete(Map<String, Object> body) {
         if (apiKey.isEmpty()) {
             throw new AiUnavailableException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Trợ lý AI chưa được bật vì máy chủ chưa có khoá API (biến môi trường ANTHROPIC_API_KEY).");
+                    "Trợ lý AI chưa được bật vì máy chủ chưa có khoá API (biến môi trường AI_API_KEY).");
         }
         try {
             return http.post()
-                    .uri("/v1/messages")
-                    .header("x-api-key", apiKey)
+                    .uri("/chat/completions")
+                    .header("Authorization", "Bearer " + apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .body(Map.class);
         } catch (HttpStatusCodeException e) {
-            log.warn("Claude API trả lỗi {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
+            log.warn("API AI trả lỗi {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
             throw new AiUnavailableException(HttpStatus.BAD_GATEWAY, switch (e.getStatusCode().value()) {
-                case 401, 403 -> "Khoá API của trợ lý AI không hợp lệ. Hãy kiểm tra lại ANTHROPIC_API_KEY.";
-                case 429, 529 -> "Trợ lý đang quá tải, bạn thử lại sau ít phút nhé.";
+                case 401, 403 -> "Nhà cung cấp AI từ chối khoá API (khoá sai, hết hạn, hoặc không cho ứng dụng này dùng). "
+                        + "Hãy kiểm tra AI_API_KEY.";
+                case 400, 404 -> "Nhà cung cấp AI không nhận yêu cầu. Hãy kiểm tra tên model (AI_MODEL) và địa chỉ (AI_BASE_URL).";
+                case 402 -> "Tài khoản AI đã hết lượt dùng hoặc hết tiền.";
+                case 429, 503, 529 -> "Trợ lý đang quá tải, bạn thử lại sau ít phút nhé.";
                 default -> "Trợ lý AI đang gặp lỗi, bạn thử lại sau nhé.";
             });
         } catch (ResourceAccessException e) {
-            log.warn("Không kết nối được Claude API: {}", e.getMessage());
+            log.warn("Không kết nối được API AI: {}", e.getMessage());
             throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
                     "Không kết nối được tới trợ lý AI. Bạn kiểm tra mạng rồi thử lại nhé.");
         }
