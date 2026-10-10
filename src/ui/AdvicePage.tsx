@@ -1,121 +1,137 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  isComplete,
-  MACHINE_INFO,
-  machineImage,
-  machineLabel,
-  machineTagline,
-  QUESTIONS,
-  rank,
-  type Answers,
-  type MachineId,
-} from '../data/advice'
+import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
+import { machineOfCard, useAdviceChat, type BuildCard } from './chat/chatStore'
+import { Composer, IconButton, ResetPath, Thread } from './chat/ChatParts'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
-const STORE_KEY = 'pcsc-advice'
 
-function loadAnswers(): Answers {
-  try {
-    return JSON.parse(localStorage.getItem(STORE_KEY) ?? '{}') as Answers
-  } catch {
-    return {}
-  }
-}
+/** Lời kể mẫu: bấm vào thì chép vào ô nhập để người dùng sửa theo ý mình rồi mới gửi */
+const EXAMPLES = [
+  'Mình là sinh viên, học online và làm Word, Excel. Có khoảng 12 triệu, muốn máy nhỏ gọn để trên bàn.',
+  'Mình hay chơi game online với bạn bè, thỉnh thoảng livestream. Ngân sách khoảng 25 triệu, thích máy có kính và đèn.',
+  'Mình dựng video cho công việc, cần máy chạy ổn định nhiều giờ liền. Ngân sách trên 40 triệu.',
+  'Mình không rành máy tính, chỉ cần máy bền, êm, cả nhà dùng để xem phim và làm giấy tờ.',
+]
 
 /**
- * Trang 1: tư vấn chọn máy. Người dùng bấm chọn 4 câu, app gợi ý một kiểu máy kèm lý do,
- * rồi "Xem và lắp máy này" mở trang 2 (mô hình 3D) với hướng dẫn lắp từng bước.
+ * Trang 1: tư vấn chọn máy bằng AI. Người dùng tự kể nhu cầu, trợ lý phân tích, chọn linh kiện từ danh mục
+ * và chạy kiểm tra tương thích. Dưới thẻ cấu hình có nút "Xem và lắp máy này" để sang trang 2 (mô hình 3D).
  * Trang này không vẽ cảnh 3D nên không làm nóng máy người dùng.
  */
 export function AdvicePage() {
-  const [answers, setAnswers] = useState<Answers>(loadAnswers)
-  const resultRef = useRef<HTMLDivElement>(null)
-  const done = isComplete(answers)
-  const ranked = rank(answers)
-  const count = QUESTIONS.filter((q) => answers[q.id]).length
+  const { messages, busy, error, send, retry, reset } = useAdviceChat()
+  const setPage = useViewer((s) => s.setPage)
+  const open = useOpenMachine()
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const empty = messages.length === 0 && !busy && !error
 
+  // Có tin mới thì cuộn xuống cuối
   useEffect(() => {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(answers))
-    } catch {
-      // không lưu được thì thôi, lần sau trả lời lại
-    }
-  }, [answers])
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages, busy, error])
 
-  const choose = (q: string, a: string) => {
-    const next = { ...answers, [q]: a }
-    setAnswers(next)
-    // Vừa trả lời câu cuối: trên điện thoại khung gợi ý nằm dưới, cuộn xuống cho người dùng thấy
-    if (isComplete(next) && !isComplete(answers) && window.matchMedia('(max-width: 767px)').matches) {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }), 50)
-    }
+  const ask = () => {
+    const text = draft
+    setDraft('')
+    void send(text, {})
+  }
+
+  const cardAction = (card: BuildCard) => {
+    const machine = machineOfCard(card)
+    if (!card.compatible) return null
+    if (!machine) return <p className="text-[12.5px] text-ink-2">App chưa có mô hình 3D cho kiểu vỏ này.</p>
+    return (
+      <button
+        onClick={() => open(machine)}
+        className={`flex w-full items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
+      >
+        Xem và lắp máy này
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+          <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+    )
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-canvas">
-      <div className="mx-auto max-w-[1080px] px-5 pt-8 pb-12 md:px-10 md:pt-12">
+    <div className="flex h-full flex-col bg-canvas">
+      <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-2 md:px-10">
         <FlowSteps current={1} />
-        <p className="mt-6 text-[13px] font-semibold text-ink-2">PC SmartCare</p>
-        <h1 className="display mt-1 text-balance">Chọn chiếc máy hợp với bạn.</h1>
-        <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.47] text-ink-2">
-          Trả lời 4 câu ngắn. Mình gợi ý kiểu máy phù hợp, rồi hướng dẫn bạn tự lắp từng bước trên mô hình 3D.
-        </p>
+        <div className="flex items-center gap-2">
+          {!empty && (
+            <IconButton label="Cuộc trò chuyện mới" onClick={reset}>
+              <ResetPath />
+            </IconButton>
+          )}
+          <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-accent hover:underline sm:block ${focus}`}>
+            Bỏ qua, xem mô hình 3D ›
+          </button>
+        </div>
+      </header>
 
-        <div className="mt-8 grid gap-8 md:grid-cols-[minmax(0,1fr)_380px] md:items-start">
-          <div className="space-y-7">
-            {QUESTIONS.map((q, qi) => (
-              <section key={q.id}>
-                <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
-                  <span className="text-ink-3">{qi + 1}. </span>
-                  {q.title}
-                </h2>
-                <div role="radiogroup" aria-label={q.title} className="mt-3 grid gap-2 sm:grid-cols-3">
-                  {q.options.map((o) => {
-                    const on = answers[q.id] === o.id
-                    return (
-                      <button
-                        key={o.id}
-                        role="radio"
-                        aria-checked={on}
-                        onClick={() => choose(q.id, o.id)}
-                        className={`rounded-2xl bg-white px-4 py-3 text-left ring-1 transition-[box-shadow,color] duration-150 ${press} ${focus} ${
-                          on ? 'ring-2 ring-accent' : 'ring-black/[0.06] hover:ring-black/15'
-                        }`}
-                      >
-                        <span className={`block text-[15px] ${on ? 'font-semibold text-accent' : 'font-medium text-ink'}`}>{o.label}</span>
-                        <span className="mt-0.5 block text-[13px] leading-snug text-ink-2">{o.hint}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
+      {empty ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[720px] px-5 pt-[6vh] pb-12">
+            <p className="text-[13px] font-semibold text-ink-2">PC SmartCare · Tư vấn bằng AI</p>
+            <h1 className="display mt-1 text-balance">Bạn cần máy tính để làm gì?</h1>
+            <p className="mt-3 text-[15px] leading-[1.5] text-ink-2">
+              Kể bằng lời của bạn, như đang nói với người bán hàng. Trợ lý AI sẽ phân tích nhu cầu, chọn từng linh kiện và kiểm tra xem chúng lắp chung được không.
+            </p>
+            <div className="mt-6">
+              <Composer
+                big
+                value={draft}
+                onChange={setDraft}
+                onSend={ask}
+                busy={busy}
+                inputRef={inputRef}
+                placeholder="Ví dụ: Mình học thiết kế đồ họa, ngân sách khoảng 20 triệu, muốn máy êm và không quá to…"
+              />
+              <p className="mt-2 px-1 text-[12px] text-ink-3">Nên kể: dùng máy làm gì, ngân sách khoảng bao nhiêu, muốn máy to hay nhỏ.</p>
+            </div>
 
-          <div ref={resultRef} className="scroll-mt-4 md:sticky md:top-6">
-            {done ? (
-              <Result key={ranked[0]} best={ranked[0]} others={ranked.slice(1, 3)} answers={answers} />
-            ) : (
-              <div className="rounded-[24px] bg-white p-6">
-                <p className="text-[15px] font-semibold text-ink">Gợi ý cho bạn</p>
-                <p className="mt-1 text-[14px] leading-[1.45] text-ink-2">Trả lời đủ 4 câu bên cạnh, gợi ý sẽ hiện ở đây.</p>
-                <div className="mt-4 flex gap-1.5" aria-label={`Đã trả lời ${count}/4 câu`}>
-                  {QUESTIONS.map((q) => (
-                    <span key={q.id} className={`h-1.5 flex-1 rounded-full ${answers[q.id] ? 'bg-accent' : 'bg-fill'}`} />
-                  ))}
-                </div>
-                <p className="mt-1.5 text-[12px] text-ink-3">Đã trả lời {count}/4 câu</p>
-              </div>
-            )}
+            <p className="mt-8 px-1 text-[13px] font-semibold text-ink-2">Hoặc bắt đầu từ một ví dụ</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  onClick={() => {
+                    setDraft(ex)
+                    inputRef.current?.focus()
+                  }}
+                  className={`rounded-2xl bg-white px-4 py-3 text-left text-[14px] leading-[1.45] text-ink ring-1 ring-black/[0.06] hover:ring-black/15 ${press} ${focus}`}
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => setPage('build')} className={`mt-10 px-1 text-[14px] font-medium text-accent hover:underline sm:hidden ${focus}`}>
+              Bỏ qua, xem mô hình 3D ›
+            </button>
           </div>
         </div>
-
-        <SkipLink />
-      </div>
+      ) : (
+        <>
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+            <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
+              <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} />
+            </div>
+          </div>
+          <div className="shrink-0 border-t border-black/5 bg-canvas px-5 pt-3 pb-3">
+            <div className="mx-auto max-w-[760px]">
+              <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={inputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
+              <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -123,7 +139,7 @@ export function AdvicePage() {
 /** Mở trang hướng dẫn với máy đã chọn và bật luôn hướng dẫn lắp, tới bước còn dở */
 function useOpenMachine() {
   const s = useViewer()
-  return (id: MachineId) => {
+  return (id: FamilyId | 'gaming') => {
     if (id === 'gaming') s.setBuild('gaming')
     else s.setFamily(id)
     const steps = guideSteps(id === 'gaming' ? null : id, 'gaming')
@@ -131,83 +147,6 @@ function useOpenMachine() {
     s.setGuide(true)
     s.setPage('build')
   }
-}
-
-function Result({ best, others, answers }: { best: MachineId; others: MachineId[]; answers: Answers }) {
-  const open = useOpenMachine()
-  const info = MACHINE_INFO[best]
-  const img = machineImage(best)
-  const picked = QUESTIONS.map((q) => q.options.find((o) => o.id === answers[q.id])?.label).filter(Boolean)
-  return (
-    <div className="swap overflow-hidden rounded-[24px] bg-white">
-      <div className="bg-white px-4 pt-5">
-        {img ? (
-          <img src={img} alt={machineLabel(best)} className="mx-auto aspect-[4/3] w-full max-w-[300px] object-contain" />
-        ) : (
-          <div className="mx-auto grid aspect-[4/3] w-full max-w-[300px] place-items-center rounded-xl bg-[#16181d] text-[15px] font-semibold text-[#22d3ee]">
-            GAMING
-          </div>
-        )}
-      </div>
-      <div className="p-5">
-        <p className="text-[13px] font-semibold text-accent">Gợi ý cho bạn</p>
-        <h2 className="mt-0.5 text-[24px] leading-tight font-semibold tracking-[-0.02em] text-ink">{machineLabel(best)}</h2>
-        <p className="mt-1.5 text-[14px] leading-[1.45] text-ink-2">{machineTagline(best)}</p>
-        <p className="mt-3 text-[12px] leading-snug text-ink-3">Vì bạn chọn: {picked.join(' · ')}</p>
-
-        <ul className="mt-4 space-y-2 text-[14px] leading-[1.45] text-ink">
-          {info.why.map((w) => (
-            <li key={w} className="flex gap-2">
-              <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden className="mt-[3px] shrink-0 text-[#34c759]">
-                <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {w}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 rounded-xl bg-[#fff4e5] px-3 py-2 text-[13px] leading-snug text-[#7a4b00]">
-          <span className="font-semibold">Cần biết: </span>
-          {info.note}
-        </p>
-        <p className="mt-3 text-[13px] text-ink-2">
-          Độ khó khi tự lắp: <span className="font-semibold text-ink">{info.level}</span>
-        </p>
-
-        <button
-          onClick={() => open(best)}
-          className={`mt-5 w-full rounded-full bg-accent px-5 py-3 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
-        >
-          Xem và lắp máy này
-        </button>
-
-        <p className="mt-5 text-[12px] font-semibold text-ink-2">Lựa chọn khác</p>
-        <ul className="mt-1.5 divide-y divide-black/[0.06]">
-          {others.map((m) => (
-            <li key={m}>
-              <button onClick={() => open(m)} className={`flex w-full items-center justify-between gap-3 py-2.5 text-left ${focus}`}>
-                <span>
-                  <span className="block text-[14px] font-medium text-ink">{machineLabel(m)}</span>
-                  <span className="block text-[12px] leading-snug text-ink-2">{MACHINE_INFO[m].note}</span>
-                </span>
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden className="shrink-0 text-ink-3">
-                  <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  )
-}
-
-function SkipLink() {
-  const setPage = useViewer((s) => s.setPage)
-  return (
-    <button onClick={() => setPage('build')} className={`mt-10 text-[14px] font-medium text-accent hover:underline ${focus}`}>
-      Bỏ qua, xem mô hình 3D luôn ›
-    </button>
-  )
 }
 
 /** Thanh hai bước ở đầu trang: 1 Tư vấn, 2 Lắp máy. Dùng chung cho cả hai trang. */

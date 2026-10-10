@@ -123,6 +123,16 @@ class ChatServiceTests {
     }
 
     @Test
+    void trangTuVanDungLuatTuVan() {
+        reply(answer("Ok."));
+
+        service.reply(new ChatRequest(List.of(new Message("user", "mình học online, có 12 triệu")), null, null, "advice"));
+
+        String system = (String) messages(0).getFirst().get("content");
+        assertThat(system).contains("trợ lý tư vấn build PC").doesNotContain("Gỡ rối khi lắp");
+    }
+
+    @Test
     void boLoiChaoMoDauCuaTroLy() {
         reply(answer("Ok."));
 

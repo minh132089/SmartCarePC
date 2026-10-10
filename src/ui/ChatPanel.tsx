@@ -1,19 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
 import { guideSteps } from '../data/guide'
-import { PARTS, type PartId } from '../data/parts'
 import { useViewer } from '../store'
-
-type Issue = { rule: string; message: string }
-/** Cấu hình trợ lý vừa kiểm tra bằng bộ kiểm tra tương thích của backend */
-type BuildCard = {
-  items: { code: string; category: string; name: string; quantity: number }[]
-  compatible: boolean
-  errors: Issue[]
-  warnings: Issue[]
-}
-type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null }
+import { useAssemblyChat } from './chat/chatStore'
+import { Bubble, ChatIcon, Composer, IconButton, ResetPath, Thread } from './chat/ChatParts'
 
 const GREETING =
   'Chào bạn, đang lắp máy mà gặp chỗ nào khó, lạ hay lo làm hỏng thì cứ hỏi mình. Mình biết bạn đang ở bước nào nên chỉ cần kể chuyện gì đang xảy ra.'
@@ -26,30 +17,25 @@ const SUGGESTIONS = [
   'Bật máy quạt quay nhưng không lên hình',
 ]
 
-/** Gửi tối đa từng này tin gần nhất, đủ để trợ lý nhớ mạch chuyện mà không quá dài */
-const HISTORY = 20
-
 /**
- * Khung chat hỏi đáp khi lắp máy (trang hướng dẫn). Gọi /api/chat của backend (Vite chuyển tiếp sang cổng 8083), backend mới giữ khoá AI.
- * Hội thoại nằm ở đây nên đóng khung chat rồi mở lại vẫn còn.
+ * Khung chat "Hỏi khi lắp máy" nổi trên trang hướng dẫn (mô hình 3D).
+ * Gửi kèm máy đang xem và bước hướng dẫn đang mở để trợ lý trả lời đúng chỗ người dùng đang vướng.
  */
 export function ChatPanel() {
   const familyId = useViewer((s) => s.familyId)
   const buildId = useViewer((s) => s.buildId)
   const machine = familyId ? FAMILIES[familyId].label : getBuild(buildId).label
-  // Bước hướng dẫn đang mở (nếu có), gửi kèm để trợ lý biết người dùng đang lắp tới đâu
   const guide = useViewer((s) => s.guide)
   const guideIndex = useViewer((s) => s.guideIndex)
   const steps = useMemo(() => guideSteps(familyId, buildId), [familyId, buildId])
   const step = guide ? steps[Math.min(guideIndex, steps.length - 1)] : null
   const stepText = step ? `Bước ${steps.indexOf(step) + 1}/${steps.length}: ${step.title}` : null
   const suggestions = step ? [`Bước "${step.title}" mình cần chú ý gì?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
+  const ctx = { buildCode: familyId ?? buildId, guideStep: stepText }
+
+  const { messages, busy, error, send, retry, reset } = useAssemblyChat()
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const abort = useRef<AbortController | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -67,50 +53,9 @@ export function ChatPanel() {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, busy, error, open])
 
-  async function send(text: string, history = messages) {
-    const content = text.trim()
-    if (!content || busy) return
-    const next: Msg[] = [...history, { role: 'user', content }]
-    setMessages(next)
+  const ask = (text: string) => {
     setDraft('')
-    setError(null)
-    setBusy(true)
-    const ctrl = new AbortController()
-    abort.current = ctrl
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ buildCode: familyId ?? buildId, guideStep: stepText, messages: next.slice(-HISTORY).map(toWire) }),
-        signal: ctrl.signal,
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.detail ?? (res.status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.'))
-      setMessages([...next, { role: 'assistant', content: data.reply, build: data.build }])
-    } catch (e) {
-      if (ctrl.signal.aborted) return
-      setError(e instanceof TypeError ? OFFLINE : (e as Error).message)
-    } finally {
-      if (abort.current === ctrl) {
-        abort.current = null
-        setBusy(false)
-      }
-    }
-  }
-
-  function reset() {
-    abort.current?.abort()
-    abort.current = null
-    setBusy(false)
-    setMessages([])
-    setError(null)
-    inputRef.current?.focus()
-  }
-
-  /** Lỗi thì bỏ câu hỏi vừa gửi ra khỏi hội thoại rồi gửi lại đúng câu đó */
-  function retry() {
-    const last = messages.at(-1)
-    if (last?.role === 'user') send(last.content, messages.slice(0, -1))
+    void send(text, ctx)
   }
 
   if (!open) {
@@ -141,7 +86,7 @@ export function ChatPanel() {
           <p className="truncate text-[12px] text-ink-2">{stepText ? `${machine} · ${stepText}` : `Đang xem: ${machine}`}</p>
         </div>
         <IconButton label="Cuộc trò chuyện mới" onClick={reset} disabled={messages.length === 0 && !busy}>
-          <path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <ResetPath />
         </IconButton>
         <IconButton label="Đóng" onClick={() => setOpen(false)}>
           <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -155,7 +100,7 @@ export function ChatPanel() {
             {suggestions.map((s) => (
               <button
                 key={s}
-                onClick={() => send(s)}
+                onClick={() => ask(s)}
                 className="rounded-full bg-white px-3 py-1.5 text-left text-[13px] text-accent ring-1 ring-black/8 transition-colors duration-150 hover:bg-[#eef5fe] active:scale-[0.98]"
               >
                 {s}
@@ -163,210 +108,13 @@ export function ChatPanel() {
             ))}
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className="space-y-2">
-            <Bubble role={m.role}>{m.role === 'assistant' ? <Rich text={m.content} /> : m.content}</Bubble>
-            {m.build && <BuildCardView card={m.build} />}
-          </div>
-        ))}
-        {busy && (
-          <div className="flex w-fit gap-1 rounded-2xl rounded-bl-md bg-white px-3.5 py-3 ring-1 ring-black/5" aria-label="Trợ lý đang trả lời">
-            {[0, 1, 2].map((d) => (
-              <span key={d} className="typing size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${d * 160}ms` }} />
-            ))}
-          </div>
-        )}
-        {error && (
-          <div className="rounded-2xl bg-[#fff4e5] px-3.5 py-3 text-[13px] leading-snug text-[#7a4b00] ring-1 ring-[#f5d9a8]">
-            {error}
-            <button onClick={retry} className="mt-1.5 block font-semibold text-accent">
-              Thử lại
-            </button>
-          </div>
-        )}
+        <Thread messages={messages} busy={busy} error={error} onRetry={() => retry(ctx)} />
       </div>
 
-      <form
-        className="border-t border-black/5 bg-white px-3 pt-3 pb-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          send(draft)
-        }}
-      >
-        <div className="flex items-end gap-2 rounded-[20px] bg-canvas px-3 py-1.5 ring-1 ring-black/5 focus-within:ring-accent/50">
-          <textarea
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter gửi, Shift+Enter xuống dòng. Bỏ qua lúc đang gõ dấu tiếng Việt (bộ gõ chưa chốt chữ)
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                send(draft)
-              }
-            }}
-            rows={1}
-            maxLength={2000}
-            placeholder="Nhập câu hỏi của bạn…"
-            aria-label="Câu hỏi"
-            className="field-sizing-content max-h-28 min-h-[30px] flex-1 resize-none bg-transparent py-1 text-[15px] leading-snug outline-none placeholder:text-ink-3"
-          />
-          <button
-            type="submit"
-            disabled={!draft.trim() || busy}
-            aria-label="Gửi"
-            className="mb-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white transition-[opacity,transform] duration-100 active:scale-[0.94] disabled:opacity-30"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-              <path d="M7 12V2M2.5 6.5 7 2l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+      <div className="border-t border-black/5 bg-white px-3 pt-3 pb-2">
+        <Composer value={draft} onChange={setDraft} onSend={() => ask(draft)} busy={busy} placeholder="Nhập câu hỏi của bạn…" inputRef={inputRef} />
         <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua hoặc mở máy.</p>
-      </form>
-    </section>
-  )
-}
-
-const OFFLINE = 'Chưa kết nối được máy chủ. Hãy bật backend (cổng 8083) rồi thử lại.'
-
-/**
- * Tin gửi lên backend chỉ gồm role và content. Thẻ cấu hình được ghi kèm dưới dạng mã linh kiện,
- * để khi người dùng nói "đổi card khác" trợ lý vẫn biết cấu hình trước đó gồm những gì.
- */
-function toWire(m: Msg) {
-  if (!m.build) return { role: m.role, content: m.content }
-  const parts = m.build.items.map((i) => `${i.code}×${i.quantity}`).join(', ')
-  return { role: m.role, content: `${m.content}\n\n[Cấu hình đã kiểm tra: ${parts}]` }
-}
-
-/** Thẻ cấu hình: từng linh kiện theo loại, kết quả "lắp chung được không", lỗi và lưu ý */
-function BuildCardView({ card }: { card: BuildCard }) {
-  return (
-    <div className="max-w-[92%] overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
-      <div className={`flex items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold ${card.compatible ? 'bg-[#eaf7ee] text-[#1d7a3a]' : 'bg-[#fdecec] text-[#b42318]'}`}>
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-          {card.compatible ? (
-            <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-          ) : (
-            <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-          )}
-        </svg>
-        {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
       </div>
-      <ul className="divide-y divide-black/5 px-3.5">
-        {card.items.map((it) => (
-          <li key={it.code} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
-            <span className="shrink-0 text-ink-2">{PARTS[it.category as PartId]?.name ?? it.category}</span>
-            <span className="text-right font-medium text-ink">
-              {it.name}
-              {it.quantity > 1 && <span className="text-ink-2"> × {it.quantity}</span>}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {(card.errors.length > 0 || card.warnings.length > 0) && (
-        <ul className="space-y-1.5 border-t border-black/5 px-3.5 py-2.5 text-[12.5px] leading-snug">
-          {card.errors.map((e) => (
-            <li key={e.rule + e.message} className="text-[#b42318]">
-              {e.message}
-            </li>
-          ))}
-          {card.warnings.map((w) => (
-            <li key={w.rule + w.message} className="text-[#7a4b00]">
-              Lưu ý: {w.message}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
-  return role === 'user' ? (
-    <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2 text-[15px] leading-snug whitespace-pre-wrap text-white">{children}</div>
-  ) : (
-    <div className="w-fit max-w-[92%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[15px] leading-[1.45] text-ink ring-1 ring-black/5">{children}</div>
-  )
-}
-
-/** Hiện gạch đầu dòng, danh sách đánh số và **chữ đậm** trong câu trả lời. Không dùng innerHTML. */
-function Rich({ text }: { text: string }) {
-  const blocks: ReactNode[] = []
-  let list: { ordered: boolean; items: string[] } | null = null
-  const flush = () => {
-    if (!list) return
-    const Tag = list.ordered ? 'ol' : 'ul'
-    blocks.push(
-      <Tag key={blocks.length} className={`my-1 space-y-1 pl-5 ${list.ordered ? 'list-decimal' : 'list-disc'}`}>
-        {list.items.map((it, i) => (
-          <li key={i}>{inline(it)}</li>
-        ))}
-      </Tag>,
-    )
-    list = null
-  }
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    const bullet = /^[-*•]\s+(.*)$/.exec(line)
-    const num = /^\d+[.)]\s+(.*)$/.exec(line)
-    const item = bullet ?? num
-    if (item) {
-      const ordered = !bullet
-      if (list && list.ordered !== ordered) flush()
-      list ??= { ordered, items: [] }
-      list.items.push(item[1])
-      continue
-    }
-    flush()
-    if (line) blocks.push(<p key={blocks.length} className="my-1 first:mt-0 last:mb-0">{inline(line.replace(/^#+\s*/, ''))}</p>)
-  }
-  flush()
-  return <>{blocks}</>
-}
-
-function inline(s: string): ReactNode[] {
-  return s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**') && part.length > 4 ? (
-      <strong key={i} className="font-semibold">
-        {part.slice(2, -2)}
-      </strong>
-    ) : (
-      part
-    ),
-  )
-}
-
-function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className="grid size-8 shrink-0 place-items-center rounded-full bg-fill text-ink-2 transition-transform duration-100 hover:text-ink active:scale-[0.94] disabled:opacity-40"
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-        {children}
-      </svg>
-    </button>
-  )
-}
-
-function ChatIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-      <path
-        d="M3 4.5A2.5 2.5 0 0 1 5.5 2h7A2.5 2.5 0 0 1 15 4.5v5a2.5 2.5 0 0 1-2.5 2.5H8l-3.2 2.6c-.33.27-.8.03-.8-.4V12h.5A1.5 1.5 0 0 1 3 10.5z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <circle cx="6.5" cy="7" r=".9" fill="currentColor" />
-      <circle cx="9" cy="7" r=".9" fill="currentColor" />
-      <circle cx="11.5" cy="7" r=".9" fill="currentColor" />
-    </svg>
+    </section>
   )
 }
