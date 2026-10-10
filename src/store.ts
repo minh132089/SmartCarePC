@@ -5,6 +5,9 @@ import type { PartId } from './data/parts'
 import { detectQuality, LOWER, loadPref, savePref, type QualityLevel, type QualityPref } from './perf/quality'
 
 interface ViewerState {
+  /** Trang đang mở: tư vấn chọn máy trước, rồi tới trang hướng dẫn (mô hình 3D) */
+  page: 'advice' | 'build'
+  setPage: (page: 'advice' | 'build') => void
   buildId: BuildId
   /** Họ case đang xem; null = máy Gaming đầy đủ (buildId) */
   familyId: FamilyId | null
@@ -43,6 +46,8 @@ interface ViewerState {
 }
 
 export const useViewer = create<ViewerState>((set) => ({
+  page: 'advice',
+  setPage: (page) => set({ page }),
   buildId: 'gaming',
   familyId: null,
   exploded: false,

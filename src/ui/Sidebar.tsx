@@ -7,6 +7,7 @@ import { useViewer } from '../store'
 import { INSPECTABLE } from '../data/hotspots'
 import { QUALITY_LABEL, type QualityPref } from '../perf/quality'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
+import { FlowSteps } from './AdvicePage'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -76,7 +77,8 @@ export function Sidebar() {
   return (
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
       <div className="enter" style={{ '--i': 0 } as React.CSSProperties}>
-        <p className="text-[13px] font-semibold tracking-[0.01em] text-ink-2">PC SmartCare</p>
+        <FlowSteps current={2} />
+        <p className="mt-6 text-[13px] font-semibold tracking-[0.01em] text-ink-2">PC SmartCare</p>
         <h1 className="display mt-1">Nhìn vào bên trong chiếc máy tính.</h1>
         <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">Chọn kiểu máy bạn thích, rồi bấm vào từng linh kiện để biết nó làm gì.</p>
       </div>

@@ -40,8 +40,15 @@ public class ChatService {
     private static final int MAX_ROUNDS = 8;
 
     private static final String RULES = """
-            Bạn là trợ lý tư vấn build PC của PC SmartCare, một app 3D giúp người không rành kỹ thuật hiểu, chọn, lắp \
-            và bảo dưỡng máy tính để bàn. Người hỏi thường chưa biết thuật ngữ và hay ngại hỏi lại.
+            Bạn là trợ lý của PC SmartCare, một app 3D giúp người không rành kỹ thuật tự lắp máy tính để bàn theo \
+            từng bước. Người hỏi thường đang lắp dở, tay đang cầm linh kiện, chưa biết thuật ngữ và sợ làm hỏng.
+            Việc chính của bạn là gỡ rối trong lúc lắp: hiểu chuyện gì đang xảy ra và chỉ cách làm tiếp cho an toàn.
+
+            Gỡ rối khi lắp:
+            1. Nếu biết người dùng đang ở bước nào thì trả lời đúng theo bước đó.
+            2. Đưa ra cách kiểm tra từ dễ tới khó, mỗi cách một dòng, nói rõ nhìn vào đâu, bấm hay ấn chỗ nào.
+            3. Mô tả chưa rõ thì hỏi lại đúng một câu (ví dụ: đèn nào sáng, quạt có quay không, nghe tiếng gì).
+            4. Việc có thể làm hỏng linh kiện (ấn mạnh CPU, cắm ngược đầu dây, cắm khi máy đang có điện) thì cảnh báo trước.
 
             Cách trả lời:
             - Trả lời bằng ngôn ngữ người dùng đang viết (thường là tiếng Việt). Giọng thân thiện, xưng "mình", gọi "bạn".
@@ -51,7 +58,7 @@ public class ChatService {
             được càng nhiều chương trình cùng lúc".
             - Giải thích vì sao bạn chọn như vậy, để người dùng tự kiểm tra được lời khuyên chứ không chỉ làm theo.
 
-            Tư vấn build PC:
+            Khi người dùng hỏi chọn hay đổi linh kiện:
             1. Cần biết ngân sách và máy dùng để làm gì (học, văn phòng, chơi game, dựng phim...). Thiếu thì hỏi lại, \
             gộp thành một câu hỏi ngắn. Có rồi thì làm luôn, đừng hỏi thêm.
             2. Chọn linh kiện từ danh mục của app (list_components). Một máy cần đủ: vỏ, bo mạch chủ, CPU, tản nhiệt, \
@@ -125,7 +132,9 @@ public class ChatService {
     @SuppressWarnings("unchecked")
     public ChatResponse reply(ChatRequest request) {
         List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", RULES + "\n" + context(request.buildCode())));
+        String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
+                : "\nNgười dùng đang làm theo hướng dẫn lắp, hiện ở: " + request.guideStep().strip() + ".\n";
+        messages.add(Map.of("role", "system", "content", RULES + "\n" + context(request.buildCode()) + step));
         for (var m : request.messages()) {
             // Lời chào mở đầu của khung chat là tin "assistant" đứng đầu: bỏ để hội thoại bắt đầu bằng người dùng
             if (messages.size() == 1 && m.role().equals("assistant")) continue;

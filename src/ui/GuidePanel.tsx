@@ -4,6 +4,7 @@ import { FAMILIES } from '../data/families'
 import { firstUndone, guideSteps, loadDone, saveDone, sceneFor, type GuideStep } from '../data/guide'
 import type { PartId } from '../data/parts'
 import { useViewer } from '../store'
+import { FlowSteps } from './AdvicePage'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -77,15 +78,16 @@ export function GuidePanel() {
   const pending = firstUndone(steps, done)
 
   return (
-    <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-8">
+    <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
+      <FlowSteps current={2} />
       <button
         onClick={() => setGuide(false)}
-        className={`-ml-1 flex items-center gap-1 rounded-full px-1 py-0.5 text-[15px] font-medium text-accent hover:underline ${focus}`}
+        className={`-ml-1 mt-5 flex items-center gap-1 rounded-full px-1 py-0.5 text-[15px] font-medium text-accent hover:underline ${focus}`}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
           <path d="M7.5 2.5 4 6l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Quay lại
+        Xem mô hình và linh kiện
       </button>
 
       <p className="mt-4 text-[13px] font-semibold text-ink-2">{machineLabel}</p>

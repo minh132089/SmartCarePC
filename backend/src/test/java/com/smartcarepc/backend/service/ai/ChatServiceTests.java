@@ -114,6 +114,15 @@ class ChatServiceTests {
     }
 
     @Test
+    void ghiBuocDangLapVaoSystemPrompt() {
+        reply(answer("Ok."));
+
+        service.reply(new ChatRequest(List.of(new Message("user", "CPU không nằm phẳng")), null, "Bước 3/10: Đặt CPU vào socket"));
+
+        assertThat((String) messages(0).getFirst().get("content")).contains("hiện ở: Bước 3/10: Đặt CPU vào socket");
+    }
+
+    @Test
     void boLoiChaoMoDauCuaTroLy() {
         reply(answer("Ok."));
 

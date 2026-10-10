@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
+import { guideSteps } from '../data/guide'
 import { PARTS, type PartId } from '../data/parts'
 import { useViewer } from '../store'
 
@@ -15,26 +16,34 @@ type BuildCard = {
 type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null }
 
 const GREETING =
-  'Chào bạn, mình là trợ lý tư vấn build PC. Bạn cho mình biết ngân sách và máy dùng để làm gì, mình sẽ chọn linh kiện và kiểm tra xem chúng lắp chung được không. Không cần biết thuật ngữ đâu.'
+  'Chào bạn, đang lắp máy mà gặp chỗ nào khó, lạ hay lo làm hỏng thì cứ hỏi mình. Mình biết bạn đang ở bước nào nên chỉ cần kể chuyện gì đang xảy ra.'
 
+/** Những chỗ người mới hay vướng khi tự lắp */
 const SUGGESTIONS = [
-  'Mình có khoảng 15 triệu, cần máy chơi game',
-  'Build máy nhỏ gọn để học và làm văn phòng',
-  'Máy đang xem hợp để làm gì?',
-  'Lắp nguồn ATX vào vỏ Mini được không?',
+  'CPU không nằm phẳng trong socket',
+  'RAM ấn mãi không vào khe',
+  'Không biết cắm dây nút nguồn vào đâu',
+  'Bật máy quạt quay nhưng không lên hình',
 ]
 
 /** Gửi tối đa từng này tin gần nhất, đủ để trợ lý nhớ mạch chuyện mà không quá dài */
 const HISTORY = 20
 
 /**
- * Khung chat tư vấn. Gọi /api/chat của backend (Vite chuyển tiếp sang cổng 8083), backend mới giữ khoá AI.
+ * Khung chat hỏi đáp khi lắp máy (trang hướng dẫn). Gọi /api/chat của backend (Vite chuyển tiếp sang cổng 8083), backend mới giữ khoá AI.
  * Hội thoại nằm ở đây nên đóng khung chat rồi mở lại vẫn còn.
  */
 export function ChatPanel() {
   const familyId = useViewer((s) => s.familyId)
   const buildId = useViewer((s) => s.buildId)
   const machine = familyId ? FAMILIES[familyId].label : getBuild(buildId).label
+  // Bước hướng dẫn đang mở (nếu có), gửi kèm để trợ lý biết người dùng đang lắp tới đâu
+  const guide = useViewer((s) => s.guide)
+  const guideIndex = useViewer((s) => s.guideIndex)
+  const steps = useMemo(() => guideSteps(familyId, buildId), [familyId, buildId])
+  const step = guide ? steps[Math.min(guideIndex, steps.length - 1)] : null
+  const stepText = step ? `Bước ${steps.indexOf(step) + 1}/${steps.length}: ${step.title}` : null
+  const suggestions = step ? [`Bước "${step.title}" mình cần chú ý gì?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
@@ -72,7 +81,7 @@ export function ChatPanel() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ buildCode: familyId ?? buildId, messages: next.slice(-HISTORY).map(toWire) }),
+        body: JSON.stringify({ buildCode: familyId ?? buildId, guideStep: stepText, messages: next.slice(-HISTORY).map(toWire) }),
         signal: ctrl.signal,
       })
       const data = await res.json().catch(() => null)
@@ -108,11 +117,11 @@ export function ChatPanel() {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Mở khung tư vấn build PC"
+        aria-label="Mở khung hỏi đáp khi lắp máy"
         className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-white shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:bottom-5 md:py-3 md:pr-5 md:pl-4"
       >
         <ChatIcon />
-        <span className="hidden md:inline">Tư vấn build PC</span>
+        <span className="hidden md:inline">Hỏi khi lắp máy</span>
       </button>
     )
   }
@@ -120,7 +129,7 @@ export function ChatPanel() {
   return (
     <section
       role="dialog"
-      aria-label="Tư vấn build PC"
+      aria-label="Hỏi khi lắp máy"
       className="chat-pop fixed inset-x-2 top-12 bottom-2 z-50 flex flex-col overflow-hidden rounded-[24px] bg-[#f7f7f9] shadow-[0_18px_60px_rgba(0,0,0,0.22)] ring-1 ring-black/5 md:absolute md:inset-auto md:right-4 md:bottom-4 md:h-[min(620px,calc(100%-32px))] md:w-[390px]"
     >
       <header className="flex items-center gap-3 border-b border-black/5 bg-white/80 px-4 py-3 backdrop-blur-xl">
@@ -128,8 +137,8 @@ export function ChatPanel() {
           <ChatIcon />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] leading-tight font-semibold">Tư vấn build PC</p>
-          <p className="truncate text-[12px] text-ink-2">Đang xem: {machine}</p>
+          <p className="text-[15px] leading-tight font-semibold">Hỏi khi lắp máy</p>
+          <p className="truncate text-[12px] text-ink-2">{stepText ? `${machine} · ${stepText}` : `Đang xem: ${machine}`}</p>
         </div>
         <IconButton label="Cuộc trò chuyện mới" onClick={reset} disabled={messages.length === 0 && !busy}>
           <path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -143,7 +152,7 @@ export function ChatPanel() {
         <Bubble role="assistant">{GREETING}</Bubble>
         {messages.length === 0 && (
           <div className="flex flex-wrap gap-2 pt-1">
-            {SUGGESTIONS.map((s) => (
+            {suggestions.map((s) => (
               <button
                 key={s}
                 onClick={() => send(s)}
