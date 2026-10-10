@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowCounterClockwise, ChatCircleDots, X } from '@phosphor-icons/react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
 import { guideSteps } from '../data/guide'
 import { useViewer } from '../store'
 import { useAssemblyChat } from './chat/chatStore'
-import { Bubble, ChatIcon, Composer, IconButton, ResetPath, Thread } from './chat/ChatParts'
+import { Bubble, Composer, IconButton, Thread } from './chat/ChatParts'
 
 const GREETING =
   'Chào bạn, đang lắp máy mà gặp chỗ nào khó, lạ hay lo làm hỏng thì cứ hỏi mình. Mình biết bạn đang ở bước nào nên chỉ cần kể chuyện gì đang xảy ra.'
@@ -63,9 +64,9 @@ export function ChatPanel() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Mở khung hỏi đáp khi lắp máy"
-        className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-white shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:bottom-5 md:py-3 md:pr-5 md:pl-4"
+        className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-on-ink shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:bottom-5 md:py-3 md:pr-5 md:pl-4"
       >
-        <ChatIcon />
+        <ChatCircleDots size={19} aria-hidden />
         <span className="hidden md:inline">Hỏi khi lắp máy</span>
       </button>
     )
@@ -75,22 +76,18 @@ export function ChatPanel() {
     <section
       role="dialog"
       aria-label="Hỏi khi lắp máy"
-      className="chat-pop fixed inset-x-2 top-12 bottom-2 z-50 flex flex-col overflow-hidden rounded-[24px] bg-[#f7f7f9] shadow-[0_18px_60px_rgba(0,0,0,0.22)] ring-1 ring-black/5 md:absolute md:inset-auto md:right-4 md:bottom-4 md:h-[min(620px,calc(100%-32px))] md:w-[390px]"
+      className="chat-pop fixed inset-x-2 top-12 bottom-2 z-50 flex flex-col overflow-hidden rounded-[24px] bg-panel shadow-[0_18px_60px_rgba(0,0,0,0.22)] ring-1 ring-line md:absolute md:inset-auto md:right-4 md:bottom-4 md:h-[min(620px,calc(100%-32px))] md:w-[390px]"
     >
-      <header className="flex items-center gap-3 border-b border-black/5 bg-white/80 px-4 py-3 backdrop-blur-xl">
-        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-white">
-          <ChatIcon />
+      <header className="flex items-center gap-3 border-b border-line bg-glass px-4 py-3 backdrop-blur-xl">
+        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-on-ink">
+          <ChatCircleDots size={19} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[15px] leading-tight font-semibold">Hỏi khi lắp máy</p>
           <p className="truncate text-[12px] text-ink-2">{stepText ? `${machine} · ${stepText}` : `Đang xem: ${machine}`}</p>
         </div>
-        <IconButton label="Cuộc trò chuyện mới" onClick={reset} disabled={messages.length === 0 && !busy}>
-          <ResetPath />
-        </IconButton>
-        <IconButton label="Đóng" onClick={() => setOpen(false)}>
-          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        </IconButton>
+        <IconButton label="Cuộc trò chuyện mới" onClick={reset} disabled={messages.length === 0 && !busy} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
+        <IconButton label="Đóng" onClick={() => setOpen(false)} icon={<X size={16} aria-hidden />} />
       </header>
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
@@ -101,7 +98,7 @@ export function ChatPanel() {
               <button
                 key={s}
                 onClick={() => ask(s)}
-                className="rounded-full bg-white px-3 py-1.5 text-left text-[13px] text-accent ring-1 ring-black/8 transition-colors duration-150 hover:bg-[#eef5fe] active:scale-[0.98]"
+                className="rounded-full bg-surface px-3 py-1.5 text-left text-[13px] text-link ring-1 ring-line transition-colors duration-150 hover:bg-info-bg active:scale-[0.98]"
               >
                 {s}
               </button>
@@ -111,7 +108,7 @@ export function ChatPanel() {
         <Thread messages={messages} busy={busy} error={error} onRetry={() => retry(ctx)} />
       </div>
 
-      <div className="border-t border-black/5 bg-white px-3 pt-3 pb-2">
+      <div className="border-t border-line bg-surface px-3 pt-3 pb-2">
         <Composer value={draft} onChange={setDraft} onSend={() => ask(draft)} busy={busy} placeholder="Nhập câu hỏi của bạn…" inputRef={inputRef} />
         <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua hoặc mở máy.</p>
       </div>

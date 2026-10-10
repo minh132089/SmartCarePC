@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { ArrowCounterClockwise, ArrowRight, CaretRight, X } from '@phosphor-icons/react'
 import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
 import { machineOfCard, useAdviceChat, type BuildCard } from './chat/chatStore'
-import { Composer, IconButton, ResetPath, Thread } from './chat/ChatParts'
+import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
@@ -61,9 +62,7 @@ export function AdvicePage() {
         className={`flex w-full items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
       >
         Xem và lắp máy này
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-          <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <CaretRight size={13} aria-hidden />
       </button>
     )
   }
@@ -77,7 +76,7 @@ export function AdvicePage() {
       }}
       aria-pressed={index === shown}
       className={`rounded-full px-4 py-2 text-[14px] font-medium ${press} ${focus} ${
-        index === shown ? 'bg-fill text-ink lg:bg-ink lg:text-white' : 'bg-fill text-ink hover:bg-[#dcdce1]'
+        index === shown ? 'bg-fill text-ink lg:bg-ink lg:text-on-ink' : 'bg-fill text-ink hover:bg-fill-hover'
       }`}
     >
       Xem chi tiết linh kiện
@@ -90,11 +89,9 @@ export function AdvicePage() {
         <FlowSteps current={1} />
         <div className="flex items-center gap-2">
           {!empty && (
-            <IconButton label="Cuộc trò chuyện mới" onClick={reset}>
-              <ResetPath />
-            </IconButton>
+            <IconButton label="Cuộc trò chuyện mới" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           )}
-          <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-accent hover:underline sm:block ${focus}`}>
+          <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
             Bỏ qua, xem mô hình 3D ›
           </button>
         </div>
@@ -129,30 +126,32 @@ export function AdvicePage() {
                         setDraft(ex)
                         inputRef.current?.focus()
                       }}
-                      className={`group flex w-full items-start gap-2.5 rounded-xl px-1 py-2 text-left text-[15px] leading-[1.45] text-ink hover:text-accent ${focus}`}
+                      className={`group flex w-full items-start gap-2.5 rounded-xl px-1 py-2 text-left text-[15px] leading-[1.45] text-ink hover:text-link ${focus}`}
                     >
-                      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="mt-[5px] shrink-0 text-ink-3 group-hover:text-accent">
-                        <path d="M2 7h9M7.5 3.5 11 7l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                      <ArrowRight size={14} aria-hidden className="mt-[5px] shrink-0 text-ink-3 group-hover:text-link" />
                       {ex}
                     </button>
                   </li>
                 ))}
               </ul>
 
-              <button onClick={() => setPage('build')} className={`mt-8 px-1 text-[14px] font-medium text-accent hover:underline sm:hidden ${focus}`}>
+              <button onClick={() => setPage('build')} className={`mt-8 px-1 text-[14px] font-medium text-link hover:underline sm:hidden ${focus}`}>
                 Bỏ qua, xem mô hình 3D ›
               </button>
             </div>
 
             {/* Ảnh chụp chính mô hình 3D của app (máy Showcase), để người dùng thấy trước thứ mình sẽ lắp. Từ màn hình vừa trở lên. */}
-            <img
-              src="/hero/advice-showcase.jpg"
-              alt="Mô hình 3D một chiếc máy tính mặt kính trong app, nhìn thấy card đồ họa, tản nước và quạt bên trong"
-              width={1200}
-              height={919}
-              className="hidden aspect-[1200/919] w-full rounded-[28px] bg-[#fafafb] object-cover md:block"
-            />
+            <picture className="hidden md:block">
+              {/* Chế độ tối dùng ảnh chụp cảnh 3D nền tối để không loá giữa trang tối */}
+              <source srcSet="/hero/advice-showcase-dark.jpg" media="(prefers-color-scheme: dark)" />
+              <img
+                src="/hero/advice-showcase.jpg"
+                alt="Mô hình 3D một chiếc máy tính mặt kính trong app, nhìn thấy card đồ họa, tản nước và quạt bên trong"
+                width={1200}
+                height={919}
+                className="aspect-[1200/919] w-full rounded-[28px] bg-stage object-cover"
+              />
+            </picture>
           </div>
         </div>
       ) : (
@@ -163,7 +162,7 @@ export function AdvicePage() {
                 <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} compactCards />
               </div>
             </div>
-            <div className="shrink-0 border-t border-black/5 bg-canvas px-5 pt-3 pb-3">
+            <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">
               <div className="mx-auto max-w-[760px]">
                 <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={inputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
                 <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
@@ -172,7 +171,7 @@ export function AdvicePage() {
           </div>
           {/* Màn hình rộng: bảng chi tiết luôn nằm bên phải khi đã có cấu hình */}
           {card && (
-            <aside key={shown} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-black/5 bg-[#f0f0f3] px-5 py-6 lg:block">
+            <aside key={shown} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-line bg-panel px-5 py-6 lg:block">
               <ProposalView card={card} action={buildButton(card)} />
             </aside>
           )}
@@ -181,12 +180,10 @@ export function AdvicePage() {
 
       {/* Màn hình hẹp: bảng chi tiết phủ kín màn hình */}
       {sheet && card && (
-        <div role="dialog" aria-label="Chi tiết cấu hình" className="chat-pop fixed inset-0 z-50 overflow-y-auto bg-[#f0f0f3] lg:hidden">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black/5 bg-[#f0f0f3]/90 px-5 py-3 backdrop-blur-xl">
+        <div role="dialog" aria-label="Chi tiết cấu hình" className="chat-pop fixed inset-0 z-50 overflow-y-auto bg-panel lg:hidden">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel/90 px-5 py-3 backdrop-blur-xl">
             <span className="text-[15px] font-semibold">Chi tiết linh kiện</span>
-            <IconButton label="Đóng" onClick={() => setSheet(false)}>
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-            </IconButton>
+            <IconButton label="Đóng" onClick={() => setSheet(false)} icon={<X size={16} aria-hidden />} />
           </div>
           <div className="mx-auto max-w-[560px] px-5 py-5">
             <ProposalView card={card} action={buildButton(card)} />
@@ -223,11 +220,11 @@ export function FlowSteps({ current }: { current: 1 | 2 }) {
         const on = it.n === current
         return (
           <div key={it.n} className="flex items-center gap-2">
-            {i > 0 && <span className="h-px w-5 bg-black/15" aria-hidden />}
+            {i > 0 && <span className="h-px w-5 bg-line-strong" aria-hidden />}
             <button
               onClick={() => setPage(it.page)}
               aria-current={on ? 'step' : undefined}
-              className={`flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 ${focus} ${on ? 'bg-white font-semibold text-ink' : 'text-ink-2 hover:text-ink'}`}
+              className={`flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 ${focus} ${on ? 'bg-surface font-semibold text-ink' : 'text-ink-2 hover:text-ink'}`}
             >
               <span className={`grid size-5 place-items-center rounded-full text-[11px] font-semibold ${on ? 'bg-accent text-white' : 'bg-fill text-ink-2'}`}>
                 {it.n}

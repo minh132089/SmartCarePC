@@ -7,12 +7,70 @@
   --color-ink-3: #86868b;
   --color-canvas: #f5f5f7;
   --color-fill: #e8e8ed;
+  --color-fill-hover: #dcdce1;
+  /* Mặt thẻ, nền khung 3D, nền bảng bên cạnh */
+  --color-surface: #ffffff;
+  --color-stage: #fafafb;
+  --color-panel: #f0f0f3;
+  /* Lớp kính mờ nổi trên hình 3D */
+  --color-glass: rgb(255 255 255 / 0.8);
+  /* Đường kẻ mảnh và viền */
+  --color-line: rgb(0 0 0 / 0.06);
+  --color-line-strong: rgb(0 0 0 / 0.15);
+  /* Màu nhấn: accent cho nền nút (chữ trắng), link cho chữ màu xanh trên nền thường */
   --color-accent: #0071e3;
   --color-accent-hover: #0077ed;
+  --color-link: #0066cc;
+  /* Chữ trên nền màu ink (nút đen) */
+  --color-on-ink: #ffffff;
+  /* Trạng thái: được, lỗi, cần chú ý, thông tin */
+  --color-ok: #1d7a3a;
+  --color-ok-bg: #eaf7ee;
+  --color-ok-strong: #34c759;
+  --color-bad: #b42318;
+  --color-bad-bg: #fdecec;
+  --color-warn: #7a4b00;
+  --color-warn-bg: #fff4e5;
+  --color-warn-line: #f5d9a8;
+  --color-info: #0b4f9c;
+  --color-info-bg: #eef5fe;
   /* Đường cong chuyển động dùng chung cho cả app */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Helvetica Neue', sans-serif;
+}
+
+/* Chế độ tối theo cài đặt của máy người dùng. Chỉ đổi giá trị token, mọi class dùng token tự đổi theo. */
+:root {
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-ink: #f5f5f7;
+    --color-ink-2: #a1a1a6;
+    --color-ink-3: #8a8a8f;
+    --color-canvas: #111113;
+    --color-fill: #2a2a2e;
+    --color-fill-hover: #36363b;
+    --color-surface: #1c1c1f;
+    --color-stage: #16171a;
+    --color-panel: #18181b;
+    --color-glass: rgb(28 28 31 / 0.8);
+    --color-line: rgb(255 255 255 / 0.08);
+    --color-line-strong: rgb(255 255 255 / 0.2);
+    --color-link: #2997ff;
+    --color-on-ink: #111113;
+    --color-ok: #4cd17a;
+    --color-ok-bg: rgb(52 199 89 / 0.14);
+    --color-ok-strong: #30d158;
+    --color-bad: #ff7a6e;
+    --color-bad-bg: rgb(255 69 58 / 0.14);
+    --color-warn: #f5b74a;
+    --color-warn-bg: rgb(255 159 10 / 0.13);
+    --color-warn-line: rgb(255 159 10 / 0.3);
+    --color-info: #7cb8ff;
+    --color-info-bg: rgb(10 132 255 / 0.15);
+  }
 }
 
 html,

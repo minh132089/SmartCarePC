@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { CaretLeft, Check } from '@phosphor-icons/react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
 import { firstUndone, guideSteps, loadDone, saveDone, sceneFor, type GuideStep } from '../data/guide'
@@ -82,11 +83,9 @@ export function GuidePanel() {
       <FlowSteps current={2} />
       <button
         onClick={() => setGuide(false)}
-        className={`-ml-1 mt-5 flex items-center gap-1 rounded-full px-1 py-0.5 text-[15px] font-medium text-accent hover:underline ${focus}`}
+        className={`-ml-1 mt-5 flex items-center gap-1 rounded-full px-1 py-0.5 text-[15px] font-medium text-link hover:underline ${focus}`}
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
-          <path d="M7.5 2.5 4 6l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <CaretLeft size={14} aria-hidden />
         Xem mô hình và linh kiện
       </button>
 
@@ -111,23 +110,23 @@ export function GuidePanel() {
           aria-valuenow={count}
           aria-label="Tiến độ lắp máy"
         >
-          <div className="h-full rounded-full bg-[#34c759] transition-[width] duration-300 ease-out" style={{ width: `${(count / steps.length) * 100}%` }} />
+          <div className="h-full rounded-full bg-ok-strong transition-[width] duration-300 ease-out" style={{ width: `${(count / steps.length) * 100}%` }} />
         </div>
       </div>
 
       {allDone && (
-        <div className="swap mt-5 rounded-2xl bg-[#eaf7ee] p-4 text-[14px] leading-[1.45] text-[#1d5c30]">
+        <div className="swap mt-5 rounded-2xl bg-ok-bg p-4 text-[14px] leading-[1.45] text-ok">
           <p className="text-[15px] font-semibold">Bạn đã lắp xong cả máy!</p>
           <p className="mt-1">Nếu máy chưa lên hình, mở lại bước cuối để xem các lỗi hay gặp.</p>
         </div>
       )}
 
-      <ol ref={listRef} className="mt-5 overflow-hidden rounded-2xl bg-white">
+      <ol ref={listRef} className="mt-5 overflow-hidden rounded-2xl bg-surface">
         {steps.map((s, i) => {
           const open = s === current
           const isDone = done.has(s.id)
           return (
-            <li key={s.id} data-step={s.id} className={i < steps.length - 1 ? 'border-b border-black/[0.06]' : ''}>
+            <li key={s.id} data-step={s.id} className={i < steps.length - 1 ? 'border-b border-line' : ''}>
               <div className="flex items-center gap-3 px-4 py-3">
                 <CheckBox checked={isDone} onChange={() => toggle(s.id)} label={`Đánh dấu đã xong bước ${i + 1}: ${s.title}`} />
                 <button
@@ -135,7 +134,7 @@ export function GuidePanel() {
                   aria-expanded={open}
                   className={`min-w-0 flex-1 rounded text-left ${focus}`}
                 >
-                  <span className={`block text-[12px] ${open ? 'text-accent' : 'text-ink-3'}`}>Bước {i + 1}</span>
+                  <span className={`block text-[12px] ${open ? 'text-link' : 'text-ink-3'}`}>Bước {i + 1}</span>
                   <span className={`block text-[15px] leading-snug ${open ? 'font-semibold text-ink' : isDone ? 'text-ink-2' : 'text-ink'}`}>
                     {s.title}
                   </span>
@@ -169,7 +168,7 @@ export function GuidePanel() {
             setConfirmReset(false)
           }}
           onBlur={() => setConfirmReset(false)}
-          className={`mt-4 px-1 text-[13px] font-medium ${confirmReset ? 'text-[#b42318]' : 'text-ink-2 hover:text-ink'} ${focus}`}
+          className={`mt-4 px-1 text-[13px] font-medium ${confirmReset ? 'text-bad' : 'text-ink-2 hover:text-ink'} ${focus}`}
         >
           {confirmReset ? 'Bấm lần nữa để xoá hết dấu tích' : 'Làm lại từ đầu'}
         </button>
@@ -204,7 +203,7 @@ function StepBody({
       <p className="text-ink-2">{step.why}</p>
 
       {behind && (
-        <p className="mt-3 rounded-xl bg-[#eef5fe] px-3 py-2 text-[13px] text-[#0b4f9c]">
+        <p className="mt-3 rounded-xl bg-info-bg px-3 py-2 text-[13px] text-info">
           Bạn chưa đánh dấu xong bước {behind.n} ({behind.title}). Nên lắp theo đúng thứ tự.{' '}
           <button onClick={behind.go} tabIndex={tab} className="font-semibold underline">
             Về bước {behind.n}
@@ -235,12 +234,12 @@ function StepBody({
       </ol>
 
       {step.warning && (
-        <p className="mt-3 rounded-xl bg-[#fff4e5] px-3 py-2 text-[13px] text-[#7a4b00]">
+        <p className="mt-3 rounded-xl bg-warn-bg px-3 py-2 text-[13px] text-warn">
           <span className="font-semibold">Cẩn thận: </span>
           {step.warning}
         </p>
       )}
-      <p className="mt-2 rounded-xl bg-[#eaf7ee] px-3 py-2 text-[13px] text-[#1d5c30]">
+      <p className="mt-2 rounded-xl bg-ok-bg px-3 py-2 text-[13px] text-ok">
         <span className="font-semibold">Lắp đúng khi: </span>
         {step.check}
       </p>
@@ -258,14 +257,12 @@ function StepBody({
             tabIndex={tab}
             className={`flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
           >
-            <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden>
-              <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Check size={14} aria-hidden />
             {last ? 'Xong, máy đã lên hình' : 'Xong bước này'}
           </button>
         )}
         {onReplay && (
-          <button onClick={onReplay} tabIndex={tab} className={`rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-[#dcdce1] ${press} ${focus}`}>
+          <button onClick={onReplay} tabIndex={tab} className={`rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}>
             Xem lại cách lắp
           </button>
         )}
@@ -282,12 +279,10 @@ function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: ()
       <span
         aria-hidden
         className={`grid size-[22px] place-items-center rounded-full ring-[1.5px] transition-colors duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${
-          checked ? 'bg-[#34c759] text-white ring-[#34c759]' : 'bg-white text-transparent ring-ink-3/60 peer-hover:ring-ink-2'
+          checked ? 'bg-ok-strong text-white ring-ok-strong' : 'bg-surface text-transparent ring-ink-3/60 peer-hover:ring-ink-2'
         }`}
       >
-        <svg width="12" height="12" viewBox="0 0 14 14">
-          <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <Check size={13} weight="bold" />
       </span>
     </label>
   )
@@ -305,7 +300,7 @@ export function GuideCaption() {
   const text = `Bước ${index + 1}/${steps.length}: ${s.title}`
   return (
     <div className="pointer-events-none absolute top-4 left-0 z-10 flex w-full justify-center px-4" aria-live="polite">
-      <div key={text} className="swap glass rounded-full bg-white/80 px-4 py-2 text-center text-[14px] font-medium text-ink shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-black/5 backdrop-blur-xl">
+      <div key={text} className="swap glass rounded-full bg-glass px-4 py-2 text-center text-[14px] font-medium text-ink shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-line backdrop-blur-xl">
         {text}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { ImageSquare } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
 import { totalOf, vnd, vndRange, type BuildCard, type BuildLine } from './chatStore'
@@ -34,7 +35,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-ink">
         {card.summary || 'Cấu hình trợ lý đã chọn'}
       </h2>
-      <p className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-[#1d7a3a]' : 'text-[#b42318]'}`}>
+      <p className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>
         {card.compatible ? 'Các linh kiện lắp chung được.' : 'Cấu hình này chưa lắp được, xem lỗi bên dưới.'}
       </p>
 
@@ -44,7 +45,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
         {groupLines(card.items).map((g) => (
           <section key={g.title}>
             <h3 className="px-1 text-[15px] font-semibold text-ink">{g.title}</h3>
-            <ul className="mt-2 space-y-5 rounded-2xl bg-white p-4">
+            <ul className="mt-2 space-y-5 rounded-2xl bg-surface p-4">
               {g.lines.map((it) => (
                 <PartRow key={it.code} line={it} total={total} />
               ))}
@@ -56,12 +57,12 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       {(card.errors.length > 0 || card.warnings.length > 0) && (
         <ul className="mt-6 space-y-2 text-[14px] leading-[1.45]">
           {card.errors.map((e) => (
-            <li key={e.rule + e.message} className="text-[#b42318]">
+            <li key={e.rule + e.message} className="text-bad">
               {e.message}
             </li>
           ))}
           {card.warnings.map((w) => (
-            <li key={w.rule + w.message} className="text-[#7a4b00]">
+            <li key={w.rule + w.message} className="text-warn">
               Lưu ý: {w.message}
             </li>
           ))}
@@ -82,9 +83,9 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
 function Total({ min, max, budget }: { min: number; max: number; budget: number | null }) {
   let verdict: { text: string; tone: string } | null = null
   if (budget != null) {
-    if (max <= budget) verdict = { text: `Nằm trong ngân sách ${vnd(budget)}, còn dư ít nhất ${vnd(budget - max)}.`, tone: 'text-[#1d7a3a]' }
-    else if (min <= budget) verdict = { text: `Ngân sách ${vnd(budget)}: có thể vượt tới ${vnd(max - budget)} nếu mua ở mức giá cao.`, tone: 'text-[#7a4b00]' }
-    else verdict = { text: `Vượt ngân sách ${vnd(budget)} khoảng ${vnd(min - budget)}.`, tone: 'text-[#b42318]' }
+    if (max <= budget) verdict = { text: `Nằm trong ngân sách ${vnd(budget)}, còn dư ít nhất ${vnd(budget - max)}.`, tone: 'text-ok' }
+    else if (min <= budget) verdict = { text: `Ngân sách ${vnd(budget)}: có thể vượt tới ${vnd(max - budget)} nếu mua ở mức giá cao.`, tone: 'text-warn' }
+    else verdict = { text: `Vượt ngân sách ${vnd(budget)} khoảng ${vnd(min - budget)}.`, tone: 'text-bad' }
   }
   return (
     <div className="mt-5">
@@ -125,7 +126,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             <button
               onClick={() => setOpen(!open)}
               aria-expanded={open}
-              className={`mt-1.5 text-[13px] font-medium text-accent hover:underline ${focus}`}
+              className={`mt-1.5 text-[13px] font-medium text-link hover:underline ${focus}`}
             >
               {open ? 'Ẩn giải thích' : 'Linh kiện này làm gì?'}
             </button>
@@ -157,20 +158,16 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
-          className="aspect-square w-full rounded-xl bg-[#f5f5f7] object-contain"
+          className="aspect-square w-full rounded-xl bg-canvas object-contain"
         />
       ) : (
         <div
           role="img"
           aria-label={`Ảnh mẫu: ${label}`}
-          className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-black/15 bg-[#f5f5f7] text-ink-3"
+          className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-line-strong bg-canvas text-ink-3"
         >
           <div className="flex flex-col items-center gap-0.5">
-            <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
-              <rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <circle cx="9" cy="10" r="1.8" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <path d="m4 17.5 5-4.5 3.5 3 3-2.5L20 17" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            </svg>
+            <ImageSquare size={22} aria-hidden />
             <span className="text-[11px] font-medium">Ảnh mẫu</span>
           </div>
         </div>
@@ -181,7 +178,7 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
           target="_blank"
           rel="noreferrer noopener"
           title={`Mở trang nguồn của ảnh: ${hostOf(line.sourceUrl)}`}
-          className={`mt-1 block truncate text-center text-[11px] text-ink-3 hover:text-accent hover:underline ${focus}`}
+          className={`mt-1 block truncate text-center text-[11px] text-ink-3 hover:text-link hover:underline ${focus}`}
         >
           {hostOf(line.sourceUrl)}
         </a>

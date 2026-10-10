@@ -1,4 +1,6 @@
 import { Bounds, Center, Environment, Lightformer, OrbitControls } from '@react-three/drei'
+import { useStage } from '../theme'
+import { X } from '@phosphor-icons/react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Matrix4, Quaternion, Vector3, type Group } from 'three'
@@ -178,11 +180,12 @@ function InspectScene({ id, build, family, spots, dots }: {
   dots: RefObject<(HTMLElement | null)[]>
 }) {
   const [spin, setSpin] = useState(true)
+  const stageColors = useStage()
   const orientation = useOrientation(id)
   const anchor = useRef<Group>(null)
   return (
     <>
-      <color attach="background" args={['#f2f2f5']} />
+      <color attach="background" args={[stageColors.inspector]} />
       <ambientLight intensity={0.9} />
       <directionalLight position={[5, 8, 6]} intensity={2.2} />
       <directionalLight position={[-6, 3, -4]} intensity={0.9} />
@@ -243,7 +246,7 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
   const cam: [number, number, number] = [(dir[0] / len) * 8, (dir[1] / len) * 8, (dir[2] / len) * 8]
 
   return (
-    <div className="inspector absolute inset-0 z-20 flex flex-col bg-[#f2f2f5]" role="dialog" aria-label={`Xem cận cảnh ${PARTS[inspecting].name}`}>
+    <div className="inspector absolute inset-0 z-20 flex flex-col bg-panel" role="dialog" aria-label={`Xem cận cảnh ${PARTS[inspecting].name}`}>
       <div className="flex items-start justify-between gap-4 px-6 pt-5">
         <div>
           <p className="text-[13px] font-semibold text-ink-2">Xem cận cảnh</p>
@@ -254,9 +257,7 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
           aria-label="Đóng"
           className="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2 transition-transform duration-100 hover:text-ink active:scale-[0.94]"
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
+          <X size={16} aria-hidden />
         </button>
       </div>
 
@@ -280,13 +281,13 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
           >
             <span
               className={`grid size-6 place-items-center rounded-full text-[12px] font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.18)] ring-1 transition-colors duration-150 ${
-                active === i ? 'bg-accent text-white ring-accent' : 'bg-white text-accent ring-black/10'
+                active === i ? 'bg-accent text-white ring-accent' : 'bg-surface text-link ring-line-strong'
               }`}
             >
               {i + 1}
             </span>
             <span
-              className={`glass rounded-full bg-white/85 px-2.5 py-0.5 text-[12px] font-medium text-ink shadow-[0_2px_8px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur-md transition-opacity duration-150 ${
+              className={`glass rounded-full bg-glass px-2.5 py-0.5 text-[12px] font-medium text-ink shadow-[0_2px_8px_rgba(0,0,0,0.12)] ring-1 ring-line backdrop-blur-md transition-opacity duration-150 ${
                 active === i ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
             >
@@ -316,11 +317,11 @@ function SpotCard({ n, title, active, onPick, children }: { n: number; title: st
   return (
     <button
       onClick={onPick}
-      className={`flex w-full gap-3 rounded-2xl bg-white p-3.5 text-left ring-1 transition-colors duration-150 ${
-        active ? 'ring-accent' : 'ring-transparent hover:ring-black/10'
+      className={`flex w-full gap-3 rounded-2xl bg-surface p-3.5 text-left ring-1 transition-colors duration-150 ${
+        active ? 'ring-accent' : 'ring-transparent hover:ring-line-strong'
       }`}
     >
-      <span className={`grid size-6 shrink-0 place-items-center rounded-full text-[12px] font-semibold ${active ? 'bg-accent text-white' : 'bg-fill text-accent'}`}>
+      <span className={`grid size-6 shrink-0 place-items-center rounded-full text-[12px] font-semibold ${active ? 'bg-accent text-white' : 'bg-fill text-link'}`}>
         {n}
       </span>
       <span>

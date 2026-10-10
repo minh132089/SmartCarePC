@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from 'react'
+import { ArrowUp, Check, X } from '@phosphor-icons/react'
 import { PARTS, type PartId } from '../../data/parts'
 import { totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
 
@@ -7,7 +8,7 @@ export function Bubble({ role, children }: { role: Msg['role']; children: ReactN
   return role === 'user' ? (
     <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2 text-[15px] leading-snug whitespace-pre-wrap text-white">{children}</div>
   ) : (
-    <div className="w-fit max-w-[92%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[15px] leading-[1.45] text-ink ring-1 ring-black/5">{children}</div>
+    <div className="w-fit max-w-[92%] rounded-2xl rounded-bl-md bg-surface px-3.5 py-2.5 text-[15px] leading-[1.45] text-ink ring-1 ring-line">{children}</div>
   )
 }
 
@@ -43,16 +44,16 @@ export function Thread({
         </div>
       ))}
       {busy && (
-        <div className="flex w-fit gap-1 rounded-2xl rounded-bl-md bg-white px-3.5 py-3 ring-1 ring-black/5" aria-label="Trợ lý đang trả lời">
+        <div className="flex w-fit gap-1 rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 ring-1 ring-line" aria-label="Trợ lý đang trả lời">
           {[0, 1, 2].map((d) => (
             <span key={d} className="typing size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${d * 160}ms` }} />
           ))}
         </div>
       )}
       {error && (
-        <div className="rounded-2xl bg-[#fff4e5] px-3.5 py-3 text-[13px] leading-snug text-[#7a4b00] ring-1 ring-[#f5d9a8]">
+        <div className="rounded-2xl bg-warn-bg px-3.5 py-3 text-[13px] leading-snug text-warn ring-1 ring-warn-line">
           {error}
-          <button onClick={onRetry} className="mt-1.5 block font-semibold text-accent">
+          <button onClick={onRetry} className="mt-1.5 block font-semibold text-link">
             Thử lại
           </button>
         </div>
@@ -65,8 +66,8 @@ export function Thread({
 function CompactCard({ card, action }: { card: BuildCard; action?: ReactNode }) {
   const total = totalOf(card)
   return (
-    <div className="max-w-[92%] rounded-2xl bg-white p-3.5 ring-1 ring-black/5 sm:max-w-[420px]">
-      <p className={`text-[13px] font-semibold ${card.compatible ? 'text-[#1d7a3a]' : 'text-[#b42318]'}`}>
+    <div className="max-w-[92%] rounded-2xl bg-surface p-3.5 ring-1 ring-line sm:max-w-[420px]">
+      <p className={`text-[13px] font-semibold ${card.compatible ? 'text-ok' : 'text-bad'}`}>
         {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
       </p>
       <p className="mt-0.5 text-[14px] text-ink">
@@ -80,18 +81,12 @@ function CompactCard({ card, action }: { card: BuildCard; action?: ReactNode }) 
 /** Thẻ cấu hình: từng linh kiện theo loại, kết quả "lắp chung được không", lỗi và lưu ý */
 export function BuildCardView({ card, action }: { card: BuildCard; action?: ReactNode }) {
   return (
-    <div className="max-w-[92%] overflow-hidden rounded-2xl bg-white ring-1 ring-black/5 sm:max-w-[420px]">
-      <div className={`flex items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold ${card.compatible ? 'bg-[#eaf7ee] text-[#1d7a3a]' : 'bg-[#fdecec] text-[#b42318]'}`}>
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-          {card.compatible ? (
-            <path d="M3 7.3 5.8 10 11 4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-          ) : (
-            <path d="M4 4l6 6M10 4l-6 6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-          )}
-        </svg>
+    <div className="max-w-[92%] overflow-hidden rounded-2xl bg-surface ring-1 ring-line sm:max-w-[420px]">
+      <div className={`flex items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold ${card.compatible ? 'bg-ok-bg text-ok' : 'bg-bad-bg text-bad'}`}>
+        {card.compatible ? <Check size={14} aria-hidden /> : <X size={14} aria-hidden />}
         {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
       </div>
-      <ul className="divide-y divide-black/5 px-3.5">
+      <ul className="divide-y divide-line px-3.5">
         {card.items.map((it) => (
           <li key={it.code} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
             <span className="shrink-0 text-ink-2">{PARTS[it.category as PartId]?.name ?? it.category}</span>
@@ -103,26 +98,26 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
         ))}
       </ul>
       {totalOf(card) && (
-        <div className="flex items-baseline justify-between gap-3 border-t border-black/5 px-3.5 py-2.5 text-[13px]">
+        <div className="flex items-baseline justify-between gap-3 border-t border-line px-3.5 py-2.5 text-[13px]">
           <span className="text-ink-2">Tổng ước tính</span>
           <span className="font-semibold text-ink">{vndRange(totalOf(card)!.min, totalOf(card)!.max)}</span>
         </div>
       )}
       {(card.errors.length > 0 || card.warnings.length > 0) && (
-        <ul className="space-y-1.5 border-t border-black/5 px-3.5 py-2.5 text-[12.5px] leading-snug">
+        <ul className="space-y-1.5 border-t border-line px-3.5 py-2.5 text-[12.5px] leading-snug">
           {card.errors.map((e) => (
-            <li key={e.rule + e.message} className="text-[#b42318]">
+            <li key={e.rule + e.message} className="text-bad">
               {e.message}
             </li>
           ))}
           {card.warnings.map((w) => (
-            <li key={w.rule + w.message} className="text-[#7a4b00]">
+            <li key={w.rule + w.message} className="text-warn">
               Lưu ý: {w.message}
             </li>
           ))}
         </ul>
       )}
-      {action && <div className="border-t border-black/5 p-3">{action}</div>}
+      {action && <div className="border-t border-line p-3">{action}</div>}
     </div>
   )
 }
@@ -152,7 +147,7 @@ export function Composer({
         e.preventDefault()
         onSend()
       }}
-      className={`flex items-end gap-2 ring-1 ring-black/[0.08] focus-within:ring-accent/50 ${big ? 'rounded-[24px] bg-white p-3 pl-4' : 'rounded-[20px] bg-canvas px-3 py-1.5'}`}
+      className={`flex items-end gap-2 ring-1 ring-line focus-within:ring-accent/50 ${big ? 'rounded-[24px] bg-surface p-3 pl-4' : 'rounded-[20px] bg-canvas px-3 py-1.5'}`}
     >
       <textarea
         ref={inputRef}
@@ -179,9 +174,7 @@ export function Composer({
         aria-label="Gửi"
         className={`grid shrink-0 place-items-center rounded-full bg-accent text-white transition-[opacity,transform] duration-100 active:scale-[0.94] disabled:opacity-30 ${big ? 'size-10' : 'mb-0.5 size-8'}`}
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-          <path d="M7 12V2M2.5 6.5 7 2l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <ArrowUp size={15} aria-hidden />
       </button>
     </form>
   )
@@ -234,7 +227,8 @@ function inline(s: string): ReactNode[] {
   )
 }
 
-export function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+/** Nút tròn chỉ có icon (đóng, cuộc trò chuyện mới...); `icon` là một icon Phosphor */
+export function IconButton({ label, onClick, disabled, icon }: { label: string; onClick: () => void; disabled?: boolean; icon: ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -243,31 +237,7 @@ export function IconButton({ label, onClick, disabled, children }: { label: stri
       title={label}
       className="grid size-8 shrink-0 place-items-center rounded-full bg-fill text-ink-2 transition-transform duration-100 hover:text-ink active:scale-[0.94] disabled:opacity-40"
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-        {children}
-      </svg>
+      {icon}
     </button>
-  )
-}
-
-/** Mũi tên vòng của nút "Cuộc trò chuyện mới", đặt trong IconButton */
-export function ResetPath() {
-  return <path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-}
-
-export function ChatIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-      <path
-        d="M3 4.5A2.5 2.5 0 0 1 5.5 2h7A2.5 2.5 0 0 1 15 4.5v5a2.5 2.5 0 0 1-2.5 2.5H8l-3.2 2.6c-.33.27-.8.03-.8-.4V12h.5A1.5 1.5 0 0 1 3 10.5z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <circle cx="6.5" cy="7" r=".9" fill="currentColor" />
-      <circle cx="9" cy="7" r=".9" fill="currentColor" />
-      <circle cx="11.5" cy="7" r=".9" fill="currentColor" />
-    </svg>
   )
 }

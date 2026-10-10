@@ -11,7 +11,8 @@ import { BoardAssembly } from './Board'
 import { AioLoop } from './Aio'
 import { Cables } from './Cables'
 import { Case } from './Case'
-import { Effects, STAGE_COLOR, StudioFloor } from './Stage'
+import { Effects, StudioFloor } from './Stage'
+import { useStage } from '../theme'
 import { GamingRig } from './GamingRig'
 import { FamilyRig } from './FamilyRig'
 import { FAMILIES, familyFloorY } from '../data/families'
@@ -26,6 +27,7 @@ export function Scene() {
   const boardPos = boardOrigin(build)
   const floorY = familyId ? familyFloorY(familyId) : -h / 2 - 0.07
   const quality = useViewer((s) => s.quality)
+  const stage = useStage()
   // Đang xem cận cảnh (khung này bị che kín) hoặc khung đã cuộn ra khỏi màn hình: dừng vẽ hẳn
   const covered = useViewer((s) => s.inspecting !== null)
   const wrap = useRef<HTMLDivElement>(null)
@@ -47,9 +49,10 @@ export function Scene() {
       onPointerMissed={() => select(null)}
     >
       <RenderControl />
-      <color attach="background" args={[STAGE_COLOR]} />
+      {/* Màu nền trùng token --color-stage của khung 3D để sàn tan vào nền, không thấy đường chân trời */}
+      <color attach="background" args={[stage.bg]} />
       {/* Sương mù chỉ để sàn ở xa tan vào nền; bắt đầu đủ xa để không phủ lên thùng máy kể cả khi camera lùi ra */}
-      <fog attach="fog" args={[STAGE_COLOR, 22, 46]} />
+      <fog attach="fog" args={[stage.bg, 22, 46]} />
       <ambientLight intensity={0.9} />
       <directionalLight position={[6, 9, 8]} intensity={2.2} />
       <directionalLight position={[-6, 4, -4]} intensity={0.8} />

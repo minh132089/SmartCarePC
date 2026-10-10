@@ -1,3 +1,4 @@
+import { CaretRight } from '@phosphor-icons/react'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { BOARDS, getBuild } from '../data/builds'
 import { FAMILIES, FAMILY_IDS, type FamilyId } from '../data/families'
@@ -94,12 +95,12 @@ export function Sidebar() {
               role="radio"
               aria-checked={on}
               onClick={() => (m.id === 'gaming' ? setBuild('gaming') : setFamily(m.id))}
-              className={`flex flex-col items-center gap-1 rounded-xl bg-white p-1.5 pb-2 text-center ring-1 transition-[box-shadow,color] duration-150 ${press} ${focus} ${
-                on ? 'text-ink ring-2 ring-accent' : 'text-ink-2 ring-black/[0.06] hover:text-ink'
+              className={`flex flex-col items-center gap-1 rounded-xl bg-surface p-1.5 pb-2 text-center ring-1 transition-[box-shadow,color] duration-150 ${press} ${focus} ${
+                on ? 'text-ink ring-2 ring-accent' : 'text-ink-2 ring-line hover:text-ink'
               }`}
             >
               {m.img ? (
-                <img src={m.img} alt="" className="aspect-square w-full rounded-lg bg-[#f5f5f7] object-contain" loading="lazy" />
+                <img src={m.img} alt="" className="aspect-square w-full rounded-lg bg-canvas object-contain" loading="lazy" />
               ) : (
                 <span className="grid aspect-square w-full place-items-center rounded-lg bg-[#16181d] text-[11px] font-semibold text-[#22d3ee]">GAMING</span>
               )}
@@ -128,7 +129,7 @@ export function Sidebar() {
         </button>
         <button
           onClick={toggleSide}
-          className={`rounded-full bg-fill px-5 py-2.5 text-[15px] font-medium text-ink hover:bg-[#dcdce1] ${press} ${focus}`}
+          className={`rounded-full bg-fill px-5 py-2.5 text-[15px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}
         >
           {machine.glass ? (sideOpen ? 'Lắp kính hông' : 'Tháo kính hông') : sideOpen ? 'Đóng nắp hông' : 'Mở nắp hông'}
         </button>
@@ -143,12 +144,12 @@ export function Sidebar() {
         {parts.map((id, i) => {
           const open = selected === id
           return (
-            <div key={id} data-part={id} className={i < parts.length - 1 ? 'border-b border-black/[0.06]' : ''}>
+            <div key={id} data-part={id} className={i < parts.length - 1 ? 'border-b border-line' : ''}>
               <button
                 onClick={() => select(open ? null : id)}
                 aria-expanded={open}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left text-[15px] transition-colors duration-150 ease-[ease] active:bg-black/[0.04] ${focus} ${
-                  open ? 'text-accent' : 'text-ink'
+                className={`flex w-full items-center justify-between px-4 py-3 text-left text-[15px] transition-colors duration-150 ease-[ease] active:bg-line ${focus} ${
+                  open ? 'text-link' : 'text-ink'
                 }`}
               >
                 <span className={open ? 'font-medium' : ''}>{PARTS[id].name}</span>
@@ -161,7 +162,7 @@ export function Sidebar() {
                     <button
                       onClick={() => inspect(id)}
                       tabIndex={open ? 0 : -1}
-                      className={`mx-4 mb-3.5 text-[14px] font-medium text-accent hover:underline ${focus}`}
+                      className={`mx-4 mb-3.5 text-[14px] font-medium text-link hover:underline ${focus}`}
                     >
                       Xem cận cảnh ›
                     </button>
@@ -184,7 +185,7 @@ export function Sidebar() {
           {CREDITS.map((c) => (
             <li key={c.url}>
               {c.part}: “
-              <a href={c.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              <a href={c.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
                 {c.title}
               </a>
               ” của {c.author}
@@ -193,7 +194,7 @@ export function Sidebar() {
         </ul>
         <p className="mt-2">
           Dùng theo giấy phép{' '}
-          <a href={LICENSE.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+          <a href={LICENSE.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
             {LICENSE.label}
           </a>
           . Đã chỉnh sửa: xoá logo, đổi hướng, thu nhỏ.
@@ -209,12 +210,12 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 /** Danh sách nhóm kiểu app Cài đặt: thẻ trắng bo góc, các dòng ngăn bằng vạch mảnh. */
 function Group({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`overflow-hidden rounded-2xl bg-white ${className}`}>{children}</div>
+  return <div className={`overflow-hidden rounded-2xl bg-surface ${className}`}>{children}</div>
 }
 
 function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
   return (
-    <div className={`flex items-baseline justify-between gap-4 px-4 py-3 text-[15px] ${last ? '' : 'border-b border-black/[0.06]'}`}>
+    <div className={`flex items-baseline justify-between gap-4 px-4 py-3 text-[15px] ${last ? '' : 'border-b border-line'}`}>
       <span className="text-ink">{label}</span>
       <span className="text-right text-ink-2">{value}</span>
     </div>
@@ -223,17 +224,11 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 
 function Chevron({ open }: { open: boolean }) {
   return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
+    <CaretRight
+      size={13}
       aria-hidden
-      className={`shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none ${
-        open ? 'rotate-90 text-accent' : 'text-ink-3'
-      }`}
-    >
-      <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+      className={`shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none ${open ? 'rotate-90 text-link' : 'text-ink-3'}`}
+    />
   )
 }
 
@@ -246,10 +241,10 @@ function PowerButton() {
       onClick={togglePower}
       aria-pressed={powered}
       className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-[15px] font-medium ${press} ${focus} ${
-        powered ? 'bg-ink text-white' : 'bg-fill text-ink hover:bg-[#dcdce1]'
+        powered ? 'bg-ink text-on-ink' : 'bg-fill text-ink hover:bg-fill-hover'
       }`}
     >
-      <span className={`size-2 rounded-full ${powered ? 'bg-[#34c759]' : 'bg-ink-3'}`} aria-hidden />
+      <span className={`size-2 rounded-full ${powered ? 'bg-ok-strong' : 'bg-ink-3'}`} aria-hidden />
       {powered ? 'Tắt máy' : 'Bật máy'}
     </button>
   )
@@ -265,7 +260,7 @@ function GuideCard() {
   const done = loadDone(familyId ?? buildId)
   const count = steps.filter((s) => done.has(s.id)).length
   return (
-    <div className="enter mt-6 rounded-2xl bg-white p-4" style={{ '--i': 3 } as React.CSSProperties}>
+    <div className="enter mt-6 rounded-2xl bg-surface p-4" style={{ '--i': 3 } as React.CSSProperties}>
       <p className="text-[15px] font-semibold text-ink">Tự lắp máy này?</p>
       <p className="mt-1 text-[14px] leading-[1.45] text-ink-2">
         Làm theo hướng dẫn từng bước, có hình minh hoạ. Lắp xong bước nào thì đánh dấu bước đó.
@@ -273,7 +268,7 @@ function GuideCard() {
       {count > 0 && (
         <div className="mt-3">
           <div className="h-1.5 overflow-hidden rounded-full bg-fill">
-            <div className="h-full rounded-full bg-[#34c759]" style={{ width: `${(count / steps.length) * 100}%` }} />
+            <div className="h-full rounded-full bg-ok-strong" style={{ width: `${(count / steps.length) * 100}%` }} />
           </div>
           <p className="mt-1 text-[12px] text-ink-3">
             Đã xong {count}/{steps.length} bước
@@ -314,7 +309,7 @@ function QualityPicker() {
             aria-checked={pref === p}
             onClick={() => setPref(p)}
             className={`rounded-full py-1.5 text-[13px] font-medium transition-colors duration-150 ${focus} ${
-              pref === p ? 'bg-white text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)]' : 'text-ink-2 hover:text-ink'
+              pref === p ? 'bg-surface text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)]' : 'text-ink-2 hover:text-ink'
             }`}
           >
             {p === 'auto' ? 'Tự động' : QUALITY_LABEL[p]}

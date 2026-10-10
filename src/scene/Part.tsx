@@ -69,7 +69,7 @@ export function Part({
         <PartContext.Provider value={id}>{children}</PartContext.Provider>
         {over && (
           <Html center distanceFactor={9} style={{ pointerEvents: 'none' }}>
-            <div className="glass tip whitespace-nowrap rounded-full bg-white/75 px-3 py-1 text-[12px] font-medium text-ink shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur-md">
+            <div className="glass tip whitespace-nowrap rounded-full bg-glass px-3 py-1 text-[12px] font-medium text-ink shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-line backdrop-blur-md">
               {PARTS[id].name}
             </div>
           </Html>

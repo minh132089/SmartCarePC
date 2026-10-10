@@ -45,7 +45,7 @@ export function AssemblySteps() {
   if (!text) return null
   return (
     <div className="pointer-events-none absolute top-4 left-0 z-10 flex w-full justify-center" aria-live="polite">
-      <div key={text} className="swap glass rounded-full bg-white/80 px-4 py-2 text-[14px] font-medium text-ink shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-black/5 backdrop-blur-xl">
+      <div key={text} className="swap glass rounded-full bg-glass px-4 py-2 text-[14px] font-medium text-ink shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-line backdrop-blur-xl">
         {text}
       </div>
     </div>
