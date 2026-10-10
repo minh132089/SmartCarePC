@@ -107,7 +107,7 @@ public class ChatService {
 
     public ChatService(LlmClient client, ComponentService componentService,
             CompatibilityService compatibilityService, PcBuildService pcBuildService, JsonMapper json,
-            @Value("${app.ai.model:deepseek-v4}") String model,
+            @Value("${app.ai.model:deepseek-v4-flash}") String model,
             @Value("${app.ai.max-tokens:2048}") int maxTokens) {
         this.client = client;
         this.componentService = componentService;
