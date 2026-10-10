@@ -2,12 +2,26 @@ import { create } from 'zustand'
 import { FAMILY_IDS, type FamilyId } from '../../data/families'
 
 export type Issue = { rule: string; message: string }
+export type BuildLine = {
+  code: string
+  category: string
+  name: string
+  quantity: number
+  /** Có khi trợ lý chốt cấu hình (propose_build): thông số nên mua, lý do chọn, giá tham khảo cho cả dòng */
+  spec?: string | null
+  reason?: string | null
+  priceMinVnd?: number | null
+  priceMaxVnd?: number | null
+}
 /** Cấu hình trợ lý vừa kiểm tra bằng bộ kiểm tra tương thích của backend */
 export type BuildCard = {
-  items: { code: string; category: string; name: string; quantity: number }[]
+  items: BuildLine[]
   compatible: boolean
   errors: Issue[]
   warnings: Issue[]
+  /** Nhu cầu trợ lý đã hiểu và ngân sách người dùng nói (chỉ có ở cấu hình đã chốt) */
+  summary?: string | null
+  budgetVnd?: number | null
 }
 export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null }
 /** advice: trang tư vấn chọn máy. assembly: khung hỏi đáp khi lắp. */
@@ -90,6 +104,29 @@ function toWire(m: Msg) {
   if (!m.build) return { role: m.role, content: m.content }
   const parts = m.build.items.map((i) => `${i.code}×${i.quantity}`).join(', ')
   return { role: m.role, content: `${m.content}\n\n[Cấu hình đã kiểm tra: ${parts}]` }
+}
+
+/** Tổng giá tham khảo của cấu hình (null nếu trợ lý chưa đưa giá) */
+export function totalOf(card: BuildCard): { min: number; max: number } | null {
+  const priced = card.items.filter((i) => i.priceMinVnd != null || i.priceMaxVnd != null)
+  if (priced.length === 0) return null
+  return priced.reduce(
+    (t, i) => ({ min: t.min + (i.priceMinVnd ?? i.priceMaxVnd ?? 0), max: t.max + (i.priceMaxVnd ?? i.priceMinVnd ?? 0) }),
+    { min: 0, max: 0 },
+  )
+}
+
+/** Đổi số đồng thành chữ dễ đọc: 12 500 000 → "12,5 triệu", 850 000 → "850 nghìn" */
+export function vnd(n: number): string {
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu`
+  return `${Math.round(n / 1e3).toLocaleString('vi-VN')} nghìn`
+}
+
+/** Khoảng giá: "11,2 – 13 triệu"; hai đầu bằng nhau thì chỉ ghi một số */
+export function vndRange(min: number, max: number): string {
+  if (Math.abs(max - min) < 50_000) return vnd(max)
+  if (min >= 1e6 && max >= 1e6) return `${(min / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} – ${vnd(max)}`
+  return `${vnd(min)} – ${vnd(max)}`
 }
 
 /** Kiểu máy 3D tương ứng với vỏ trong cấu hình (vd case_mini_sff → mini_sff), null nếu app chưa có mô hình */

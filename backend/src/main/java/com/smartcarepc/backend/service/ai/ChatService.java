@@ -52,7 +52,14 @@ public class ChatService {
             Đủ để chọn thì làm luôn.
             3. Chọn đủ linh kiện cho một máy và chạy check_build như phần dưới. Luôn chọn một vỏ máy (case) trong danh mục: \
             app sẽ mở mô hình 3D đúng kiểu vỏ đó để hướng dẫn người dùng tự lắp từng bước.
-            4. Kết thúc bằng một câu mời bấm "Xem và lắp máy này" dưới thẻ cấu hình để sang phần hướng dẫn lắp.
+            4. Lắp được rồi thì gọi propose_build đúng một lần với cấu hình cuối cùng. Mỗi linh kiện ghi:
+               - spec: thông số cụ thể nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200", "CPU 6 nhân 12 luồng có sẵn đồ họa");
+               - reason: một câu vì sao hợp với nhu cầu người dùng;
+               - price_min_vnd, price_max_vnd: khoảng giá tham khảo ở Việt Nam cho cả số lượng của dòng đó.
+            5. Giá là ước tính theo thông số phổ thông, không gắn hãng. Tổng giá phải nằm trong ngân sách. Ngân sách quá thấp \
+            so với nhu cầu thì vẫn đề xuất phương án gần nhất, nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
+            6. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
+            Chỉ nói tổng ước tính so với ngân sách, 2 hoặc 3 món quan trọng nhất, rồi mời bấm "Xem và lắp máy này".
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
@@ -90,8 +97,8 @@ public class ChatService {
             5. Danh mục của app chỉ là bộ mẫu nhỏ. Nếu nhu cầu vượt quá danh mục thì nói rõ điều đó.
             - Gọi linh kiện bằng tên tiếng Việt trong danh mục, không đọc mã code cho người dùng.
             - Không nêu tên hãng hay mẫu sản phẩm cụ thể, chỉ nói theo thông số (ví dụ "RAM 16 GB DDR4").
-            - Danh mục chưa có giá. Nếu được hỏi giá, chỉ nói khoảng tham khảo chung và nhắc kiểm tra lại ở cửa hàng. \
-            Không bịa số liệu mà danh mục để trống.
+            - Danh mục chưa có giá. Giá tham khảo chỉ đưa qua propose_build và luôn nói rõ là ước tính, nên hỏi lại cửa hàng. \
+            Không bịa thông số mà danh mục để trống rồi nói như thông tin chắc chắn.
 
             An toàn:
             - Trước mọi việc mở máy, nhắc: tắt máy, rút dây điện, chạm tay vào phần kim loại của vỏ để xả tĩnh điện.
@@ -122,7 +129,26 @@ public class ChatService {
                                                     "code", Map.of("type", "string", "description", "Mã linh kiện"),
                                                     "quantity", Map.of("type", "integer", "minimum", 1)),
                                             "required", List.of("code")))),
-                            "required", List.of("items"))));
+                            "required", List.of("items"))),
+            tool("propose_build",
+                    "Chốt cấu hình đề xuất cho người dùng (gọi một lần, sau khi check_build không còn lỗi). "
+                            + "App vẽ bảng chi tiết từ dữ liệu này. Trả về kết quả kiểm tra tương thích.",
+                    Map.of("type", "object",
+                            "properties", Map.of(
+                                    "summary", Map.of("type", "string",
+                                            "description", "Một câu tóm tắt nhu cầu đã hiểu, vd 'Học online và làm văn phòng, máy nhỏ gọn'"),
+                                    "budget_vnd", Map.of("type", "integer", "description", "Ngân sách người dùng nói, đơn vị đồng; bỏ trống nếu chưa biết"),
+                                    "items", Map.of("type", "array",
+                                            "items", Map.of("type", "object",
+                                                    "properties", Map.of(
+                                                            "code", Map.of("type", "string", "description", "Mã linh kiện trong danh mục"),
+                                                            "quantity", Map.of("type", "integer", "minimum", 1),
+                                                            "spec", Map.of("type", "string", "description", "Thông số cụ thể nên mua"),
+                                                            "reason", Map.of("type", "string", "description", "Vì sao chọn, một câu"),
+                                                            "price_min_vnd", Map.of("type", "integer"),
+                                                            "price_max_vnd", Map.of("type", "integer")),
+                                                    "required", List.of("code", "spec", "reason")))),
+                            "required", List.of("summary", "items"))));
 
     private final LlmClient client;
     private final ComponentService componentService;
@@ -145,8 +171,16 @@ public class ChatService {
         this.maxTokens = maxTokens;
     }
 
-    /** Cấu hình check_build lần gần nhất trong một lượt trả lời */
-    private record Checked(BuildCheckRequest request, CompatibilityResponse result) {
+    /**
+     * Cấu hình kiểm tra gần nhất trong một lượt trả lời. Đề xuất chốt bằng propose_build có thêm
+     * thông tin từng dòng (details, theo mã linh kiện), nhu cầu đã hiểu và ngân sách.
+     */
+    private record Checked(BuildCheckRequest request, CompatibilityResponse result,
+            Map<String, Map<String, Object>> details, String summary, Long budgetVnd) {
+
+        Checked(BuildCheckRequest request, CompatibilityResponse result) {
+            this(request, result, Map.of(), null, null);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -231,15 +265,24 @@ public class ChatService {
                             .map(i -> Map.of("quantity", i.quantity(), "component", brief(i.component()))).toList());
                 }
                 case "check_build" -> {
-                    var req = new BuildCheckRequest(((List<Map<String, Object>>) input.getOrDefault("items", List.of()))
-                            .stream()
-                            .filter(i -> i.get("code") != null)
-                            .map(i -> new BuildCheckRequest.Item(String.valueOf(i.get("code")),
-                                    i.get("quantity") instanceof Number n ? n.intValue() : null))
-                            .toList());
+                    var req = checkRequest(input);
                     var result = compatibilityService.check(req);
-                    last[0] = new Checked(req, result);
+                    // Đã chốt đề xuất thì giữ thẻ đề xuất, check_build sau đó chỉ để model tự thử
+                    if (last[0] == null || last[0].summary() == null) last[0] = new Checked(req, result);
                     yield result;
+                }
+                case "propose_build" -> {
+                    var req = checkRequest(input);
+                    var result = compatibilityService.check(req);
+                    Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+                    ((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
+                            .filter(i -> i.get("code") != null)
+                            .forEach(i -> details.put(String.valueOf(i.get("code")), i));
+                    last[0] = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
+                            input.get("budget_vnd") instanceof Number n ? n.longValue() : null);
+                    yield Map.of("saved", true, "compatibility", result,
+                            "note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
+                                    : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
                 }
                 default -> throw new IllegalArgumentException("Không có công cụ " + name);
             };
@@ -249,6 +292,15 @@ public class ChatService {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private static BuildCheckRequest checkRequest(Map<String, Object> input) {
+        return new BuildCheckRequest(((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
+                .filter(i -> i.get("code") != null)
+                .map(i -> new BuildCheckRequest.Item(String.valueOf(i.get("code")),
+                        i.get("quantity") instanceof Number n ? n.intValue() : null))
+                .toList());
+    }
+
     /** Thẻ cấu hình cho khung chat: tên tiếng Việt và loại của từng linh kiện, kèm kết quả kiểm tra */
     private BuildCard card(Checked c) {
         Map<String, Integer> qty = new LinkedHashMap<>();
@@ -256,10 +308,21 @@ public class ChatService {
         List<Line> lines = new ArrayList<>();
         qty.forEach((code, n) -> {
             ComponentResponse p = componentService.findByCode(code);
-            lines.add(new Line(code, p.category(), p.name(), n));
+            Map<String, Object> d = c.details().getOrDefault(code, Map.of());
+            lines.add(new Line(code, p.category(), p.name(), n, text(d.get("spec")), text(d.get("reason")),
+                    vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd"))));
         });
         var r = c.result();
-        return new BuildCard(lines, r.compatible(), r.errors(), r.warnings());
+        return new BuildCard(lines, r.compatible(), r.errors(), r.warnings(), c.summary(), c.budgetVnd());
+    }
+
+    private static String text(Object o) {
+        return o == null || o.toString().isBlank() ? null : o.toString().strip();
+    }
+
+    /** Giá âm hay không phải số thì bỏ, để giao diện không cộng nhầm */
+    private static Long vnd(Object o) {
+        return o instanceof Number n && n.longValue() >= 0 ? n.longValue() : null;
     }
 
     /** Bản rút gọn của linh kiện cho AI: bỏ đường dẫn model / ảnh và các thông số còn trống */

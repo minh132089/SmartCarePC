@@ -4,6 +4,7 @@ import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
 import { machineOfCard, useAdviceChat, type BuildCard } from './chat/chatStore'
 import { Composer, IconButton, ResetPath, Thread } from './chat/ChatParts'
+import { ProposalView } from './chat/Proposal'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -29,6 +30,14 @@ export function AdvicePage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const empty = messages.length === 0 && !busy && !error
+  // Cấu hình đang xem chi tiết: mặc định là cấu hình mới nhất trợ lý đưa ra
+  const latest = messages.findLastIndex((m) => m.build)
+  // Chọn xem cấu hình cũ; trợ lý đưa cấu hình mới (latest đổi) thì tự quay về cấu hình mới
+  const [picked, setPicked] = useState<{ index: number; latest: number } | null>(null)
+  const shown = picked && picked.latest === latest && messages[picked.index]?.build ? picked.index : latest
+  const card = shown >= 0 ? messages[shown].build! : null
+  // Màn hình hẹp: bảng chi tiết mở thành trang phủ kín, bấm "Xem chi tiết linh kiện" mới hiện
+  const [sheet, setSheet] = useState(false)
 
   // Có tin mới thì cuộn xuống cuối
   useEffect(() => {
@@ -42,9 +51,10 @@ export function AdvicePage() {
     void send(text, {})
   }
 
-  const cardAction = (card: BuildCard) => {
-    const machine = machineOfCard(card)
-    if (!card.compatible) return null
+  /** Nút "Xem và lắp máy này" (chỉ khi cấu hình lắp được và app có mô hình 3D cho vỏ đó) */
+  const buildButton = (c: BuildCard) => {
+    const machine = machineOfCard(c)
+    if (!c.compatible) return null
     if (!machine) return <p className="text-[12.5px] text-ink-2">App chưa có mô hình 3D cho kiểu vỏ này.</p>
     return (
       <button
@@ -58,6 +68,21 @@ export function AdvicePage() {
       </button>
     )
   }
+
+  const cardAction = (c: BuildCard, index: number) => (
+    <div className="space-y-2">
+      <button
+        onClick={() => {
+          setPicked({ index, latest })
+          setSheet(true)
+        }}
+        className={`w-full rounded-full bg-fill px-4 py-2.5 text-[14px] font-medium text-ink hover:bg-[#dcdce1] ${press} ${focus} ${index === shown ? 'lg:ring-2 lg:ring-accent/40' : ''}`}
+      >
+        Xem chi tiết linh kiện
+      </button>
+      {buildButton(c)}
+    </div>
+  )
 
   return (
     <div className="flex h-full flex-col bg-canvas">
@@ -118,19 +143,42 @@ export function AdvicePage() {
           </div>
         </div>
       ) : (
-        <>
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-            <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
-              <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} />
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+              <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
+                <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} />
+              </div>
+            </div>
+            <div className="shrink-0 border-t border-black/5 bg-canvas px-5 pt-3 pb-3">
+              <div className="mx-auto max-w-[760px]">
+                <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={inputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
+                <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
+              </div>
             </div>
           </div>
-          <div className="shrink-0 border-t border-black/5 bg-canvas px-5 pt-3 pb-3">
-            <div className="mx-auto max-w-[760px]">
-              <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={inputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
-              <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
-            </div>
+          {/* Màn hình rộng: bảng chi tiết luôn nằm bên phải khi đã có cấu hình */}
+          {card && (
+            <aside key={shown} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-black/5 bg-[#f0f0f3] px-5 py-6 lg:block">
+              <ProposalView card={card} action={buildButton(card)} />
+            </aside>
+          )}
+        </div>
+      )}
+
+      {/* Màn hình hẹp: bảng chi tiết phủ kín màn hình */}
+      {sheet && card && (
+        <div role="dialog" aria-label="Chi tiết cấu hình" className="chat-pop fixed inset-0 z-50 overflow-y-auto bg-[#f0f0f3] lg:hidden">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black/5 bg-[#f0f0f3]/90 px-5 py-3 backdrop-blur-xl">
+            <span className="text-[15px] font-semibold">Chi tiết linh kiện</span>
+            <IconButton label="Đóng" onClick={() => setSheet(false)}>
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </IconButton>
           </div>
-        </>
+          <div className="mx-auto max-w-[560px] px-5 py-5">
+            <ProposalView card={card} action={buildButton(card)} />
+          </div>
+        </div>
       )}
     </div>
   )

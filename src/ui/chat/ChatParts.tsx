@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
-import type { BuildCard, Msg } from './chatStore'
+import { totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
 
 /** Bong bóng tin nhắn: người dùng bên phải màu xanh, trợ lý bên trái màu trắng */
 export function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
@@ -23,15 +23,15 @@ export function Thread({
   busy: boolean
   error: string | null
   onRetry: () => void
-  /** Nút gắn dưới thẻ cấu hình, vd "Xem và lắp máy này" ở trang tư vấn */
-  cardAction?: (card: BuildCard) => ReactNode
+  /** Nút gắn dưới thẻ cấu hình, vd "Xem và lắp máy này" ở trang tư vấn (index là vị trí tin trong hội thoại) */
+  cardAction?: (card: BuildCard, index: number) => ReactNode
 }) {
   return (
     <>
       {messages.map((m, i) => (
         <div key={i} className="space-y-2">
           <Bubble role={m.role}>{m.role === 'assistant' ? <Rich text={m.content} /> : m.content}</Bubble>
-          {m.build && <BuildCardView card={m.build} action={cardAction?.(m.build)} />}
+          {m.build && <BuildCardView card={m.build} action={cardAction?.(m.build, i)} />}
         </div>
       ))}
       {busy && (
@@ -78,6 +78,12 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
           </li>
         ))}
       </ul>
+      {totalOf(card) && (
+        <div className="flex items-baseline justify-between gap-3 border-t border-black/5 px-3.5 py-2.5 text-[13px]">
+          <span className="text-ink-2">Tổng ước tính</span>
+          <span className="font-semibold text-ink">{vndRange(totalOf(card)!.min, totalOf(card)!.max)}</span>
+        </div>
+      )}
       {(card.errors.length > 0 || card.warnings.length > 0) && (
         <ul className="space-y-1.5 border-t border-black/5 px-3.5 py-2.5 text-[12.5px] leading-snug">
           {card.errors.map((e) => (

@@ -95,6 +95,31 @@ class ChatServiceTests {
     }
 
     @Test
+    void proposeBuildTraVeTheCoThongSoLyDoVaGia() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("case_compact_tower")).thenReturn(part("case_compact_tower", "case", "Vỏ Tower nhỏ gọn"));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        reply(toolCall("p1", "propose_build", """
+                {"summary":"Học online, máy nhỏ gọn","budget_vnd":12000000,"items":[
+                  {"code":"case_compact_tower","spec":"Vỏ mATX nhỏ","reason":"Vừa bàn học","price_min_vnd":700000,"price_max_vnd":1000000},
+                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","price_min_vnd":900000,"price_max_vnd":1200000}]}
+                """), answer("Tổng khoảng 11 triệu."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học online 12 triệu")), null, null, "advice"));
+
+        var card = res.build();
+        assertThat(card.summary()).isEqualTo("Học online, máy nhỏ gọn");
+        assertThat(card.budgetVnd()).isEqualTo(12_000_000L);
+        assertThat(card.items()).hasSize(2);
+        var ram = card.items().get(1);
+        assertThat(ram.quantity()).isEqualTo(2);
+        assertThat(ram.spec()).isEqualTo("16 GB, 2 thanh 8 GB");
+        assertThat(ram.reason()).isEqualTo("Mở nhiều tab vẫn mượt");
+        assertThat(ram.priceMinVnd()).isEqualTo(900_000L);
+        assertThat(ram.priceMaxVnd()).isEqualTo(1_200_000L);
+    }
+
+    @Test
     void congCuLoiThiBaoLaiChoModelThayViNemLoi() {
         reply(toolCall("t1", "khong_ton_tai", "{}"), answer("Ok."));
 
