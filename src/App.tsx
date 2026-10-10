@@ -1,6 +1,7 @@
 import { Scene } from './scene/Scene'
 import { useViewer } from './store'
 import { AssemblySteps } from './ui/AssemblySteps'
+import { ChatPanel } from './ui/ChatPanel'
 import { GuideCaption, GuidePanel } from './ui/GuidePanel'
 import { InspectButton } from './ui/InspectButton'
 import { Inspector } from './ui/Inspector'
@@ -18,6 +19,7 @@ export default function App() {
         <GuideCaption />
         <InspectButton />
         <Inspector />
+        <ChatPanel />
       </main>
     </div>
   )
