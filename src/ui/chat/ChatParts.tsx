@@ -91,7 +91,7 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
           <li key={it.code} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
             <span className="shrink-0 text-ink-2">{PARTS[it.category as PartId]?.name ?? it.category}</span>
             <span className="text-right font-medium text-ink">
-              {it.name}
+              {it.productName || it.spec || it.name}
               {it.quantity > 1 && <span className="text-ink-2"> × {it.quantity}</span>}
             </span>
           </li>

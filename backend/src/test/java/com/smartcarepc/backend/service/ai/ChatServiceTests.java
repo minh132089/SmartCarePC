@@ -36,6 +36,7 @@ import tools.jackson.databind.json.JsonMapper;
 class ChatServiceTests {
 
     private final LlmClient client = mock(LlmClient.class);
+    private final ProductSearch search = mock(ProductSearch.class);
     private final ComponentService components = mock(ComponentService.class);
     private final CompatibilityService compatibility = mock(CompatibilityService.class);
     private final PcBuildService builds = mock(PcBuildService.class);
@@ -46,7 +47,7 @@ class ChatServiceTests {
     @BeforeEach
     void setUp() {
         when(builds.findPresets()).thenReturn(List.of());
-        service = new ChatService(client, components, compatibility, builds, JsonMapper.builder().build(), "test-model", 512);
+        service = new ChatService(client, search, components, compatibility, builds, JsonMapper.builder().build(), "test-model", 512);
     }
 
     @Test
@@ -95,15 +96,20 @@ class ChatServiceTests {
     }
 
     @Test
-    void proposeBuildTraVeTheCoThongSoLyDoVaGia() {
+    void proposeBuildChiGiuLinkCoTrongKetQuaTimKiem() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("case_compact_tower")).thenReturn(part("case_compact_tower", "case", "Vỏ Tower nhỏ gọn"));
         when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
-        reply(toolCall("p1", "propose_build", """
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM DDR4 16GB")).thenReturn(List.of(new ProductSearch.Product(
+                "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://shop-a.vn/ram-16gb", "https://shop-a.vn/ram.jpg")));
+        reply(toolCall("s1", "search_products", "{\"query\":\"RAM DDR4 16GB\"}"),
+                toolCall("p1", "propose_build", """
                 {"summary":"Học online, máy nhỏ gọn","budget_vnd":12000000,"items":[
-                  {"code":"case_compact_tower","spec":"Vỏ mATX nhỏ","reason":"Vừa bàn học","price_min_vnd":700000,"price_max_vnd":1000000},
-                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","price_min_vnd":900000,"price_max_vnd":1200000,
-                   "image_url":"https://example.com/ram.jpg","source_url":"http://example.com/ram"}]}
+                  {"code":"case_compact_tower","spec":"Vỏ mATX nhỏ","reason":"Vừa bàn học","price_min_vnd":700000,"price_max_vnd":1000000,
+                   "product_name":"Vỏ bịa","shop":"Shop B","product_url":"https://bia.vn/vo","image_url":"https://bia.vn/vo.jpg"},
+                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","price_min_vnd":1050000,"price_max_vnd":1050000,
+                   "product_name":"RAM 16GB (2x8GB) DDR4 3200","shop":"Shop A","product_url":"https://shop-a.vn/ram-16gb","image_url":"https://shop-a.vn/ram.jpg"}]}
                 """), answer("Tổng khoảng 11 triệu."));
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học online 12 triệu")), null, null, "advice"));
@@ -111,16 +117,50 @@ class ChatServiceTests {
         var card = res.build();
         assertThat(card.summary()).isEqualTo("Học online, máy nhỏ gọn");
         assertThat(card.budgetVnd()).isEqualTo(12_000_000L);
-        assertThat(card.items()).hasSize(2);
         var ram = card.items().get(1);
         assertThat(ram.quantity()).isEqualTo(2);
         assertThat(ram.spec()).isEqualTo("16 GB, 2 thanh 8 GB");
         assertThat(ram.reason()).isEqualTo("Mở nhiều tab vẫn mượt");
-        assertThat(ram.priceMinVnd()).isEqualTo(900_000L);
-        assertThat(ram.priceMaxVnd()).isEqualTo(1_200_000L);
-        assertThat(ram.imageUrl()).isEqualTo("https://example.com/ram.jpg");
-        assertThat(ram.sourceUrl()).as("link không phải https bị bỏ").isNull();
-        assertThat(card.items().getFirst().imageUrl()).isNull();
+        assertThat(ram.priceMinVnd()).isEqualTo(1_050_000L);
+        assertThat(ram.productName()).isEqualTo("RAM 16GB (2x8GB) DDR4 3200");
+        assertThat(ram.shop()).isEqualTo("Shop A");
+        assertThat(ram.sourceUrl()).isEqualTo("https://shop-a.vn/ram-16gb");
+        assertThat(ram.imageUrl()).isEqualTo("https://shop-a.vn/ram.jpg");
+        var vo = card.items().getFirst();
+        assertThat(vo.sourceUrl()).as("link không có trong kết quả tìm kiếm bị bỏ").isNull();
+        assertThat(vo.imageUrl()).isNull();
+        assertThat(vo.productName()).isNull();
+        // Kết quả tìm kiếm được gửi lại cho model ở lượt sau
+        assertThat((String) messages(1).get(3).get("content")).contains("shop-a.vn/ram-16gb").contains("1050000");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void chuaCoKhoaTimKiemThiKhongDuaCongCuTimKiem() {
+        reply(answer("Ok."));
+
+        service.reply(new ChatRequest(List.of(new Message("user", "?")), null, null, "advice"));
+
+        var tools = (List<Map<String, Object>>) sent.getFirst().get("tools");
+        assertThat(tools).extracting(t -> ((Map<String, Object>) t.get("function")).get("name")).doesNotContain("search_products");
+        assertThat((String) messages(0).getFirst().get("content")).contains("tìm kiếm sản phẩm đang tắt");
+    }
+
+    @Test
+    void modelVanGoiTimKiemKhiTatThiNhanLoiNhac() {
+        reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), answer("Ok."));
+
+        service.reply(new ChatRequest(List.of(new Message("user", "?")), null, null, "advice"));
+
+        assertThat((String) messages(1).get(3).get("content")).contains("Chưa bật tìm kiếm");
+    }
+
+    @Test
+    void docGiaTienDong() {
+        assertThat(ProductSearch.vnd("1.290.000 ₫")).isEqualTo(1_290_000L);
+        assertThat(ProductSearch.vnd("₫1,290,000")).isEqualTo(1_290_000L);
+        assertThat(ProductSearch.vnd("1290000.00")).isEqualTo(1_290_000L);
+        assertThat(ProductSearch.vnd("$129")).as("không phải tiền đồng").isNull();
     }
 
     @Test

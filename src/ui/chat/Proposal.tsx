@@ -1,4 +1,4 @@
-import { ImageSquare } from '@phosphor-icons/react'
+import { ArrowSquareOut, ImageSquare } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
 import { totalOf, vnd, vndRange, type BuildCard, type BuildLine } from './chatStore'
@@ -72,7 +72,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       {action && <div className="mt-6">{action}</div>}
       {total && (
         <p className="mt-3 text-[12px] leading-snug text-ink-3">
-          Giá do AI ước tính theo thông số phổ thông, chưa gồm màn hình, bàn phím và chuột. Giá thật đổi theo cửa hàng, hãy hỏi lại trước khi mua.
+          Giá cửa hàng là giá lúc trợ lý tìm, có thể đã đổi. Dòng ghi "ước tính" là trợ lý ước theo thông số phổ thông. Chưa gồm màn hình, bàn phím và chuột.
         </p>
       )}
     </div>
@@ -111,16 +111,32 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[12px] text-ink-2">{label}</p>
-            <p className="text-[15px] leading-snug font-semibold text-ink">{line.spec || line.name}</p>
+            {/* Tên sản phẩm thật nếu đã tìm được; chưa có thì hiện thông số nên tìm mua. Không hiện tên mẫu trong danh mục 3D. */}
+            <p className="text-[15px] leading-snug font-semibold text-ink">{line.productName || line.spec || part?.name}</p>
+            {line.productName && line.spec && <p className="mt-0.5 text-[12.5px] leading-snug text-ink-3">{line.spec}</p>}
           </div>
           {lo != null && hi != null && (
             <div className="shrink-0 text-right">
               <p className="text-[13px] font-semibold text-ink tabular-nums">{vndRange(lo, hi)}</p>
-              {share != null && <p className="text-[12px] text-ink-3 tabular-nums">{share}% tổng tiền</p>}
+              <p className="text-[12px] text-ink-3 tabular-nums">
+                {line.productName ? 'giá cửa hàng' : 'ước tính'}
+                {share != null && `, ${share}%`}
+              </p>
             </div>
           )}
         </div>
         {line.reason && <p className="mt-1.5 text-[14px] leading-[1.45] text-ink-2">{line.reason}</p>}
+        {line.sourceUrl && (
+          <a
+            href={line.sourceUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-fill-hover ${focus}`}
+          >
+            <span className="truncate">Xem ở {line.shop || hostOf(line.sourceUrl)}</span>
+            <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
+          </a>
+        )}
         {part && (
           <>
             <button
@@ -143,8 +159,8 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
 }
 
 /**
- * Ảnh linh kiện. Trợ lý tìm ảnh sản phẩm trên web rồi gửi link ảnh và link trang nguồn; chưa có link,
- * hoặc ảnh không tải được, thì hiện khung "Ảnh mẫu" giữ chỗ.
+ * Ảnh sản phẩm trợ lý tìm được trên web. Chưa có ảnh, hoặc ảnh không tải được, thì hiện khung "Ảnh mẫu" giữ chỗ.
+ * Link mua nằm dưới phần chữ (PartRow).
  */
 function PartImage({ line, label }: { line: BuildLine; label: string }) {
   const [failed, setFailed] = useState(false)
@@ -171,17 +187,6 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
             <span className="text-[11px] font-medium">Ảnh mẫu</span>
           </div>
         </div>
-      )}
-      {src && line.sourceUrl && (
-        <a
-          href={line.sourceUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          title={`Mở trang nguồn của ảnh: ${hostOf(line.sourceUrl)}`}
-          className={`mt-1 block truncate text-center text-[11px] text-ink-3 hover:text-link hover:underline ${focus}`}
-        >
-          {hostOf(line.sourceUrl)}
-        </a>
       )}
     </div>
   )

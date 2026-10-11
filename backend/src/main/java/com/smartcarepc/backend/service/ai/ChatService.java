@@ -5,6 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -52,15 +55,20 @@ public class ChatService {
             Đủ để chọn thì làm luôn.
             3. Chọn đủ linh kiện cho một máy và chạy check_build như phần dưới. Luôn chọn một vỏ máy (case) trong danh mục: \
             app sẽ mở mô hình 3D đúng kiểu vỏ đó để hướng dẫn người dùng tự lắp từng bước.
-            4. Lắp được rồi thì gọi propose_build đúng một lần với cấu hình cuối cùng. Mỗi linh kiện ghi:
-               - spec: thông số cụ thể nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200", "CPU 6 nhân 12 luồng có sẵn đồ họa");
+            4. Tìm hàng thật: với mỗi linh kiện (trừ đồ nghề), gọi search_products bằng từ khoá tiếng Việt theo thông số, \
+            vd "RAM DDR4 16GB 3200 giá rẻ". Gọi nhiều search_products trong cùng một lượt để nhanh. Trong kết quả, chọn \
+            món RẺ NHẤT mà vẫn đủ thông số và hợp nhu cầu, ưu tiên cửa hàng Việt Nam có ghi giá. Không tìm được thì để \
+            trống phần sản phẩm và dùng giá ước tính.
+            5. Lắp được rồi thì gọi propose_build đúng một lần với cấu hình cuối cùng. Mỗi linh kiện ghi:
+               - spec: thông số nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200");
                - reason: một câu vì sao hợp với nhu cầu người dùng;
-               - price_min_vnd, price_max_vnd: khoảng giá tham khảo ở Việt Nam cho cả số lượng của dòng đó.
-               - image_url, source_url: nếu đã tìm được ảnh sản phẩm đúng thông số trên web thì ghi link ảnh (https) \
-            và link trang chứa ảnh. Chưa có thì bỏ trống, app sẽ hiện khung ảnh mẫu. Không tự bịa link.
-            5. Giá là ước tính theo thông số phổ thông, không gắn hãng. Tổng giá phải nằm trong ngân sách. Ngân sách quá thấp \
-            so với nhu cầu thì vẫn đề xuất phương án gần nhất, nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
-            6. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
+               - product_name, shop, product_url, image_url: chép NGUYÊN VĂN từ kết quả search_products của sản phẩm \
+            đã chọn. Link không có trong kết quả tìm kiếm sẽ bị bỏ, nên tuyệt đối không tự viết link;
+               - price_min_vnd, price_max_vnd: có sản phẩm thì cả hai bằng giá cửa hàng nhân số lượng; chưa có thì \
+            ghi khoảng giá ước tính.
+            6. Tổng giá phải nằm trong ngân sách. Ngân sách quá thấp so với nhu cầu thì vẫn đề xuất phương án gần nhất, \
+            nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
+            7. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
             Chỉ nói tổng ước tính so với ngân sách, 2 hoặc 3 món quan trọng nhất, rồi mời bấm "Xem và lắp máy này".
             Tổng nói trong câu trả lời phải đúng bằng cộng các giá thấp và các giá cao bạn đã đưa, không làm tròn khác đi.
             """;
@@ -101,9 +109,11 @@ public class ChatService {
             - Danh mục đầy đủ đã có ở cuối lời dặn này, dùng luôn, chỉ gọi list_components khi cần xem lại.
             - Khoảng số (giá, ngân sách) viết bằng dấu gạch nối thường, vd "20,9 - 28,9 triệu", không dùng gạch dài.
             - Gọi linh kiện bằng tên tiếng Việt trong danh mục, không đọc mã code cho người dùng.
-            - Không nêu tên hãng hay mẫu sản phẩm cụ thể, chỉ nói theo thông số (ví dụ "RAM 16 GB DDR4").
-            - Danh mục chưa có giá. Giá tham khảo chỉ đưa qua propose_build và luôn nói rõ là ước tính, nên hỏi lại cửa hàng. \
+            - Tên hãng hay mẫu sản phẩm chỉ nêu khi lấy từ kết quả search_products; còn lại nói theo thông số (vd "RAM 16 GB DDR4").
+            - Giá lấy từ cửa hàng là giá lúc tìm, có thể đổi; giá không có sản phẩm là ước tính. Nói rõ điều này. \
             Không bịa thông số mà danh mục để trống rồi nói như thông tin chắc chắn.
+            - Danh mục của app là các kiểu linh kiện để kiểm tra lắp chung và dựng mô hình 3D. Đừng nhắc tên hay mã \
+            trong danh mục với người dùng; người dùng chỉ cần thấy sản phẩm thật nên mua.
 
             An toàn:
             - Trước mọi việc mở máy, nhắc: tắt máy, rút dây điện, chạm tay vào phần kim loại của vỏ để xả tĩnh điện.
@@ -152,14 +162,22 @@ public class ChatService {
                                                             "reason", Map.of("type", "string", "description", "Vì sao chọn, một câu"),
                                                             "price_min_vnd", Map.of("type", "integer"),
                                                             "price_max_vnd", Map.of("type", "integer"),
-                                                            "image_url", Map.of("type", "string",
-                                                                    "description", "Link https tới ảnh sản phẩm tìm được trên web; bỏ trống nếu chưa có"),
-                                                            "source_url", Map.of("type", "string",
-                                                                    "description", "Link https tới trang web chứa ảnh đó")),
+                                                            "product_name", Map.of("type", "string", "description", "Tên sản phẩm, chép từ search_products"),
+                                                            "shop", Map.of("type", "string", "description", "Tên cửa hàng, chép từ search_products"),
+                                                            "product_url", Map.of("type", "string", "description", "Link trang mua, chép từ search_products"),
+                                                            "image_url", Map.of("type", "string", "description", "Link ảnh, chép từ search_products")),
                                                     "required", List.of("code", "spec", "reason")))),
-                            "required", List.of("summary", "items"))));
+                            "required", List.of("summary", "items"))),
+            tool("search_products",
+                    "Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam (kết quả Google). Trả về tối đa 6 món: title, shop, "
+                            + "price_vnd (có thể null), url (trang mua), image_url.",
+                    Map.of("type", "object",
+                            "properties", Map.of("query", Map.of("type", "string",
+                                    "description", "Từ khoá tiếng Việt theo thông số, vd 'SSD NVMe 512GB giá rẻ'")),
+                            "required", List.of("query"))));
 
     private final LlmClient client;
+    private final ProductSearch search;
     private final ComponentService componentService;
     private final CompatibilityService compatibilityService;
     private final PcBuildService pcBuildService;
@@ -167,11 +185,12 @@ public class ChatService {
     private final String model;
     private final int maxTokens;
 
-    public ChatService(LlmClient client, ComponentService componentService,
+    public ChatService(LlmClient client, ProductSearch search, ComponentService componentService,
             CompatibilityService compatibilityService, PcBuildService pcBuildService, JsonMapper json,
             @Value("${app.ai.model:deepseek-v4-flash}") String model,
             @Value("${app.ai.max-tokens:2048}") int maxTokens) {
         this.client = client;
+        this.search = search;
         this.componentService = componentService;
         this.compatibilityService = compatibilityService;
         this.pcBuildService = pcBuildService;
@@ -192,12 +211,25 @@ public class ChatService {
         }
     }
 
+    /**
+     * Trạng thái của một lượt trả lời: cấu hình kiểm tra gần nhất, và mọi link (trang mua, ảnh) đã xuất hiện trong
+     * kết quả search_products. Công cụ trong cùng một lượt chạy song song nên dùng tập an toàn đa luồng.
+     */
+    private static final class Turn {
+        volatile Checked last;
+        final Set<String> seen = ConcurrentHashMap.newKeySet();
+    }
+
     @SuppressWarnings("unchecked")
     public ChatResponse reply(ChatRequest request) {
         List<Map<String, Object>> messages = new ArrayList<>();
         String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
                 : "\nNgười dùng đang làm theo hướng dẫn lắp, hiện ở: " + request.guideStep().strip() + ".\n";
         String intro = "advice".equals(request.mode()) ? ADVICE : ASSEMBLY;
+        if (!search.enabled()) {
+            intro += "\nLƯU Ý: tìm kiếm sản phẩm đang tắt. Bỏ qua bước tìm hàng thật, để trống phần sản phẩm, dùng giá ước tính "
+                    + "và không nêu tên hãng hay mẫu sản phẩm.\n";
+        }
         messages.add(Map.of("role", "system", "content", intro + "\n" + RULES + "\n" + context(request.buildCode()) + step));
         for (var m : request.messages()) {
             // Lời chào mở đầu của khung chat là tin "assistant" đứng đầu: bỏ để hội thoại bắt đầu bằng người dùng
@@ -208,13 +240,16 @@ public class ChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tin cuối cùng phải là câu hỏi của người dùng");
         }
 
-        Checked[] last = { null };
+        Turn turn = new Turn();
+        // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
+        var tools = search.enabled() ? TOOLS
+                : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", maxTokens);
             body.put("messages", messages);
-            body.put("tools", TOOLS);
+            body.put("tools", tools);
 
             Map<String, Object> res = client.complete(body);
             var choices = (List<Map<String, Object>>) res.getOrDefault("choices", List.of());
@@ -222,17 +257,21 @@ public class ChatService {
             var message = (Map<String, Object>) choices.getFirst().getOrDefault("message", Map.of());
             var calls = (List<Map<String, Object>>) message.get("tool_calls");
             if (calls == null || calls.isEmpty()) {
-                return new ChatResponse(clean(message.get("content")), last[0] == null ? null : card(last[0]));
+                return new ChatResponse(clean(message.get("content")), turn.last == null ? null : card(turn.last, turn.seen));
             }
             // Gửi lại nguyên tin của model (kể cả reasoning_content của model suy luận) rồi tới kết quả từng công cụ
             messages.add(message);
-            for (var call : calls) {
-                messages.add(Map.of("role", "tool", "tool_call_id", String.valueOf(call.get("id")),
-                        "content", runTool((Map<String, Object>) call.get("function"), last)));
+            // Chạy song song các công cụ của cùng một lượt (thường là nhiều search_products), rồi trả kết quả theo đúng thứ tự
+            var results = calls.stream()
+                    .map(call -> CompletableFuture.supplyAsync(() -> runTool((Map<String, Object>) call.get("function"), turn)))
+                    .toList();
+            for (int i = 0; i < calls.size(); i++) {
+                messages.add(Map.of("role", "tool", "tool_call_id", String.valueOf(calls.get(i).get("id")),
+                        "content", results.get(i).join()));
             }
         }
         return new ChatResponse("Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé.",
-                last[0] == null ? null : card(last[0]));
+                turn.last == null ? null : card(turn.last, turn.seen));
     }
 
     /** Danh mục linh kiện, máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
@@ -261,7 +300,7 @@ public class ChatService {
 
     /** Chạy một lời gọi công cụ, trả về chuỗi JSON (hoặc lời báo lỗi) để model đọc */
     @SuppressWarnings("unchecked")
-    private String runTool(Map<String, Object> function, Checked[] last) {
+    private String runTool(Map<String, Object> function, Turn turn) {
         try {
             String name = String.valueOf(function.get("name"));
             Object rawArgs = function.get("arguments");
@@ -280,7 +319,7 @@ public class ChatService {
                     var req = checkRequest(input);
                     var result = compatibilityService.check(req);
                     // Đã chốt đề xuất thì giữ thẻ đề xuất, check_build sau đó chỉ để model tự thử
-                    if (last[0] == null || last[0].summary() == null) last[0] = new Checked(req, result);
+                    if (turn.last == null || turn.last.summary() == null) turn.last = new Checked(req, result);
                     yield result;
                 }
                 case "propose_build" -> {
@@ -290,11 +329,30 @@ public class ChatService {
                     ((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
                             .filter(i -> i.get("code") != null)
                             .forEach(i -> details.put(String.valueOf(i.get("code")), i));
-                    last[0] = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
+                    turn.last = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
                             input.get("budget_vnd") instanceof Number n ? n.longValue() : null);
                     yield Map.of("saved", true, "compatibility", result,
                             "note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
                                     : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
+                }
+                case "search_products" -> {
+                    if (!search.enabled()) {
+                        yield Map.of("error", "Chưa bật tìm kiếm sản phẩm. Dùng giá ước tính và để trống phần sản phẩm.");
+                    }
+                    var found = search.search(String.valueOf(input.get("query")));
+                    found.forEach(p -> {
+                        if (p.url() != null) turn.seen.add(p.url());
+                        if (p.imageUrl() != null) turn.seen.add(p.imageUrl());
+                    });
+                    yield found.stream().map(p -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("title", p.title());
+                        m.put("shop", p.shop());
+                        m.put("price_vnd", p.priceVnd());
+                        m.put("url", p.url());
+                        m.put("image_url", p.imageUrl());
+                        return m;
+                    }).toList();
                 }
                 default -> throw new IllegalArgumentException("Không có công cụ " + name);
             };
@@ -314,15 +372,19 @@ public class ChatService {
     }
 
     /** Thẻ cấu hình cho khung chat: tên tiếng Việt và loại của từng linh kiện, kèm kết quả kiểm tra */
-    private BuildCard card(Checked c) {
+    private BuildCard card(Checked c, Set<String> seen) {
         Map<String, Integer> qty = new LinkedHashMap<>();
         c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
         List<Line> lines = new ArrayList<>();
         qty.forEach((code, n) -> {
             ComponentResponse p = componentService.findByCode(code);
             Map<String, Object> d = c.details().getOrDefault(code, Map.of());
+            // Link sản phẩm và ảnh chỉ giữ khi đã xuất hiện trong kết quả search_products của lượt này
+            String productUrl = seenOnly(firstText(d.get("product_url"), d.get("source_url")), seen);
+            String imageUrl = seenOnly(text(d.get("image_url")), seen);
             lines.add(new Line(code, p.category(), p.name(), n, text(d.get("spec")), text(d.get("reason")),
-                    vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd")), https(d.get("image_url")), https(d.get("source_url"))));
+                    vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd")), imageUrl, productUrl,
+                    productUrl == null ? null : text(d.get("product_name")), productUrl == null ? null : text(d.get("shop"))));
         });
         var r = c.result();
         return new BuildCard(lines, r.compatible(), r.errors(), r.warnings(), c.summary(), c.budgetVnd());
@@ -332,10 +394,15 @@ public class ChatService {
         return o == null || o.toString().isBlank() ? null : o.toString().strip();
     }
 
-    /** Chỉ nhận link https (ảnh và trang nguồn do AI đưa), còn lại bỏ để giao diện hiện khung ảnh mẫu */
-    private static String https(Object o) {
-        String s = text(o);
-        return s != null && s.startsWith("https://") && s.length() <= 2000 && !s.contains(" ") ? s : null;
+    /** Link https có trong kết quả tìm kiếm của lượt này; link AI tự viết bị bỏ để giao diện hiện khung ảnh mẫu */
+    private static String seenOnly(String url, Set<String> seen) {
+        String s = ProductSearch.https(url);
+        return s != null && seen.contains(s) ? s : null;
+    }
+
+    private static String firstText(Object a, Object b) {
+        String s = text(a);
+        return s != null ? s : text(b);
     }
 
     /** Giá âm hay không phải số thì bỏ, để giao diện không cộng nhầm */

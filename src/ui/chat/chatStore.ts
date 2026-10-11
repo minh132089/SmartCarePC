@@ -12,7 +12,12 @@ export type BuildLine = {
   reason?: string | null
   priceMinVnd?: number | null
   priceMaxVnd?: number | null
-  /** Ảnh sản phẩm trợ lý tìm được trên web và trang chứa ảnh đó (https); chưa có thì hiện khung ảnh mẫu */
+  /**
+   * Sản phẩm thật trợ lý tìm được (search_products): tên, cửa hàng, ảnh và trang mua. Backend chỉ giữ link có trong
+   * kết quả tìm kiếm, nên không có link bịa. Chưa tìm được thì các trường này null và hiện khung ảnh mẫu.
+   */
+  productName?: string | null
+  shop?: string | null
   imageUrl?: string | null
   sourceUrl?: string | null
 }
