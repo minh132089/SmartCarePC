@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from 'react'
+import { useEffect, useState, type ReactNode, type Ref } from 'react'
 import { ArrowUp, Check, X } from '@phosphor-icons/react'
 import { PARTS, type PartId } from '../../data/parts'
 import { totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
@@ -20,6 +20,7 @@ export function Thread({
   onRetry,
   cardAction,
   compactCards,
+  busyHints,
 }: {
   messages: Msg[]
   busy: boolean
@@ -29,6 +30,8 @@ export function Thread({
   cardAction?: (card: BuildCard, index: number) => ReactNode
   /** Thẻ gọn (chỉ kết quả và tổng giá) khi danh sách linh kiện đã có ở bảng chi tiết bên cạnh */
   compactCards?: boolean
+  /** Dòng trạng thái lần lượt hiện khi chờ lâu (trang tư vấn phải tìm giá ở nhiều cửa hàng, mất cả phút) */
+  busyHints?: string[]
 }) {
   return (
     <>
@@ -43,13 +46,7 @@ export function Thread({
             ))}
         </div>
       ))}
-      {busy && (
-        <div className="flex w-fit gap-1 rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 ring-1 ring-line" aria-label="Trợ lý đang trả lời">
-          {[0, 1, 2].map((d) => (
-            <span key={d} className="typing size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${d * 160}ms` }} />
-          ))}
-        </div>
-      )}
+      {busy && <BusyBubble hints={busyHints} />}
       {error && (
         <div className="rounded-2xl bg-warn-bg px-3.5 py-3 text-[13px] leading-snug text-warn ring-1 ring-warn-line">
           {error}
@@ -59,6 +56,34 @@ export function Thread({
         </div>
       )}
     </>
+  )
+}
+
+/** Mốc thời gian (giây) đổi sang dòng trạng thái kế tiếp */
+const HINT_AT = [0, 6, 20, 50]
+
+/** Ba chấm "đang trả lời", kèm dòng trạng thái đổi theo thời gian chờ nếu có */
+function BusyBubble({ hints }: { hints?: string[] }) {
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    if (!hints?.length) return
+    const timers = HINT_AT.slice(1, hints.length).map((s, i) => setTimeout(() => setStep(i + 1), s * 1000))
+    return () => timers.forEach(clearTimeout)
+  }, [hints])
+  const hint = hints?.[Math.min(step, hints.length - 1)]
+  return (
+    <div className="flex w-fit items-center gap-2.5 rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 ring-1 ring-line" role="status" aria-label={hint ?? 'Trợ lý đang trả lời'}>
+      <span className="flex gap-1" aria-hidden>
+        {[0, 1, 2].map((d) => (
+          <span key={d} className="typing size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${d * 160}ms` }} />
+        ))}
+      </span>
+      {hint && (
+        <span key={hint} className="swap text-[13px] text-ink-2">
+          {hint}
+        </span>
+      )}
+    </div>
   )
 }
 

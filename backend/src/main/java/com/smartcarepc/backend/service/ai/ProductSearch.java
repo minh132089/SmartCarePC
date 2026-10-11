@@ -78,6 +78,24 @@ public class ProductSearch {
         return (p.priceVnd() != null ? 2 : 0) + (p.imageUrl() != null ? 1 : 0);
     }
 
+    /**
+     * Link trong mục Shopping là trang Google Shopping. Với sản phẩm đã chọn, tìm thêm một lần để lấy link trang
+     * sản phẩm trên đúng cửa hàng đó (khi tên cửa hàng là tên miền, vd "Fptshop.com.vn"). Không chắc thì giữ link cũ,
+     * vì từ trang Google Shopping người dùng vẫn bấm sang cửa hàng được.
+     */
+    @SuppressWarnings("unchecked")
+    public String directLink(String title, String shop, String link) {
+        if (!enabled() || link == null || title == null || !link.contains("google.com/")) return link;
+        String domain = shop == null ? null : shop.toLowerCase().strip().replaceFirst("^www\\.", "");
+        if (domain == null || !domain.matches("[a-z0-9.-]+\\.[a-z]{2,}")) return link;
+        Map<String, Object> res = post("/search", title + " site:" + domain);
+        return ((List<Map<String, Object>>) res.getOrDefault("organic", List.of())).stream()
+                .map(i -> https(i.get("link")))
+                .filter(u -> u != null && host(u) != null && (host(u).equals(domain) || host(u).endsWith("." + domain)))
+                .findFirst()
+                .orElse(link);
+    }
+
     @SuppressWarnings("unchecked")
     private List<Product> shopping(String query) {
         Map<String, Object> res = post("/shopping", query);

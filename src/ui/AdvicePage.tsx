@@ -17,6 +17,14 @@ const EXAMPLES = [
   'Mình dựng video cho công việc, máy phải chạy ổn định nhiều giờ, ngân sách trên 40 triệu.',
 ]
 
+/** Trợ lý phải tìm giá ở nhiều cửa hàng nên trả lời mất khoảng 1 đến 2 phút: báo cho người dùng đang làm gì */
+const BUSY_HINTS = [
+  'Đang đọc nhu cầu của bạn…',
+  'Đang tìm giá ở các cửa hàng…',
+  'Đang so giá và kiểm tra các linh kiện lắp chung được không…',
+  'Sắp xong, đang tổng hợp lại…',
+]
+
 /**
  * Trang 1: tư vấn chọn máy bằng AI. Người dùng tự kể nhu cầu, trợ lý phân tích, chọn linh kiện từ danh mục
  * và chạy kiểm tra tương thích. Dưới thẻ cấu hình có nút "Xem và lắp máy này" để sang trang 2 (mô hình 3D).
@@ -159,7 +167,7 @@ export function AdvicePage() {
           <div className="flex min-w-0 flex-1 flex-col">
             <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
               <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
-                <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} compactCards />
+                <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} compactCards busyHints={BUSY_HINTS} />
               </div>
             </div>
             <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">

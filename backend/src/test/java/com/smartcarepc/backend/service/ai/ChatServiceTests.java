@@ -101,6 +101,8 @@ class ChatServiceTests {
         when(components.findByCode("case_compact_tower")).thenReturn(part("case_compact_tower", "case", "Vỏ Tower nhỏ gọn"));
         when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
         when(search.enabled()).thenReturn(true);
+        // Link đã là trang cửa hàng (không phải Google Shopping) thì directLink trả lại nguyên link
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         when(search.search("RAM DDR4 16GB")).thenReturn(List.of(new ProductSearch.Product(
                 "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://shop-a.vn/ram-16gb", "https://shop-a.vn/ram.jpg")));
         reply(toolCall("s1", "search_products", "{\"query\":\"RAM DDR4 16GB\"}"),

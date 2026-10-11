@@ -57,8 +57,10 @@ public class ChatService {
             app sẽ mở mô hình 3D đúng kiểu vỏ đó để hướng dẫn người dùng tự lắp từng bước.
             4. Tìm hàng thật: với mỗi linh kiện (trừ đồ nghề), gọi search_products bằng từ khoá tiếng Việt theo thông số, \
             vd "RAM DDR4 16GB 3200 giá rẻ". Gọi nhiều search_products trong cùng một lượt để nhanh. Trong kết quả, chọn \
-            món RẺ NHẤT mà vẫn đủ thông số và hợp nhu cầu, ưu tiên cửa hàng Việt Nam có ghi giá. Không tìm được thì để \
-            trống phần sản phẩm và dùng giá ước tính.
+            món RẺ NHẤT mà vẫn đủ thông số và hợp nhu cầu, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
+            cũ, "like new", hàng trưng bày, phụ kiện bán kèm, và giá rẻ bất thường (thấp hơn nhiều so với các kết quả \
+            khác cùng loại), vì người mới dễ mua phải hàng kém. Không tìm được thì để trống phần sản phẩm và dùng giá \
+            ước tính.
             5. Lắp được rồi thì gọi propose_build đúng một lần với cấu hình cuối cùng. Mỗi linh kiện ghi:
                - spec: thông số nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200");
                - reason: một câu vì sao hợp với nhu cầu người dùng;
@@ -70,7 +72,8 @@ public class ChatService {
             nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
             7. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
             Chỉ nói tổng ước tính so với ngân sách, 2 hoặc 3 món quan trọng nhất, rồi mời bấm "Xem và lắp máy này".
-            Tổng nói trong câu trả lời phải đúng bằng cộng các giá thấp và các giá cao bạn đã đưa, không làm tròn khác đi.
+            Tổng nói trong câu trả lời lấy đúng total_min_vnd và total_max_vnd mà propose_build trả về, làm tròn tới \
+            0,1 triệu (vd "6,8 - 6,9 triệu"); hai số bằng nhau thì nói một số. Không tự cộng nhẩm.
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
@@ -331,7 +334,14 @@ public class ChatService {
                             .forEach(i -> details.put(String.valueOf(i.get("code")), i));
                     turn.last = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
                             input.get("budget_vnd") instanceof Number n ? n.longValue() : null);
-                    yield Map.of("saved", true, "compatibility", result,
+                    // Tổng do backend cộng, để trợ lý đọc đúng con số thay vì tự cộng nhẩm
+                    long totalMin = 0, totalMax = 0;
+                    for (var d : details.values()) {
+                        Long lo = vnd(d.get("price_min_vnd")), hi = vnd(d.get("price_max_vnd"));
+                        totalMin += lo != null ? lo : (hi != null ? hi : 0);
+                        totalMax += hi != null ? hi : (lo != null ? lo : 0);
+                    }
+                    yield Map.of("saved", true, "compatibility", result, "total_min_vnd", totalMin, "total_max_vnd", totalMax,
                             "note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
                                     : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
                 }
@@ -375,12 +385,20 @@ public class ChatService {
     private BuildCard card(Checked c, Set<String> seen) {
         Map<String, Integer> qty = new LinkedHashMap<>();
         c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
+        // Đổi link Google Shopping của sản phẩm đã chọn thành link thẳng tới cửa hàng (song song, mỗi món một lượt tìm)
+        Map<String, CompletableFuture<String>> direct = new LinkedHashMap<>();
+        qty.keySet().forEach(code -> {
+            Map<String, Object> d = c.details().getOrDefault(code, Map.of());
+            String url = seenOnly(firstText(d.get("product_url"), d.get("source_url")), seen);
+            if (url != null) direct.put(code, CompletableFuture.supplyAsync(
+                    () -> search.directLink(text(d.get("product_name")), text(d.get("shop")), url)));
+        });
         List<Line> lines = new ArrayList<>();
         qty.forEach((code, n) -> {
             ComponentResponse p = componentService.findByCode(code);
             Map<String, Object> d = c.details().getOrDefault(code, Map.of());
             // Link sản phẩm và ảnh chỉ giữ khi đã xuất hiện trong kết quả search_products của lượt này
-            String productUrl = seenOnly(firstText(d.get("product_url"), d.get("source_url")), seen);
+            String productUrl = direct.containsKey(code) ? direct.get(code).join() : null;
             String imageUrl = seenOnly(text(d.get("image_url")), seen);
             lines.add(new Line(code, p.category(), p.name(), n, text(d.get("spec")), text(d.get("reason")),
                     vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd")), imageUrl, productUrl,
