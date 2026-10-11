@@ -62,6 +62,7 @@ public class ChatService {
             so với nhu cầu thì vẫn đề xuất phương án gần nhất, nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
             6. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
             Chỉ nói tổng ước tính so với ngân sách, 2 hoặc 3 món quan trọng nhất, rồi mời bấm "Xem và lắp máy này".
+            Tổng nói trong câu trả lời phải đúng bằng cộng các giá thấp và các giá cao bạn đã đưa, không làm tròn khác đi.
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
@@ -97,6 +98,8 @@ public class ChatService {
             4. App sẽ tự vẽ danh sách linh kiện thành một thẻ ngay dưới câu trả lời, nên đừng liệt kê lại cả danh sách. \
             Chỉ nói vài món quan trọng nhất và lý do chọn.
             5. Danh mục của app chỉ là bộ mẫu nhỏ. Nếu nhu cầu vượt quá danh mục thì nói rõ điều đó.
+            - Danh mục đầy đủ đã có ở cuối lời dặn này, dùng luôn, chỉ gọi list_components khi cần xem lại.
+            - Khoảng số (giá, ngân sách) viết bằng dấu gạch nối thường, vd "20,9 - 28,9 triệu", không dùng gạch dài.
             - Gọi linh kiện bằng tên tiếng Việt trong danh mục, không đọc mã code cho người dùng.
             - Không nêu tên hãng hay mẫu sản phẩm cụ thể, chỉ nói theo thông số (ví dụ "RAM 16 GB DDR4").
             - Danh mục chưa có giá. Giá tham khảo chỉ đưa qua propose_build và luôn nói rõ là ước tính, nên hỏi lại cửa hàng. \
@@ -232,9 +235,12 @@ public class ChatService {
                 last[0] == null ? null : card(last[0]));
     }
 
-    /** Máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
+    /** Danh mục linh kiện, máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
     private String context(String buildCode) {
-        StringBuilder sb = new StringBuilder("Các máy có sẵn trong app (mã: tên, mô tả):\n");
+        // Đưa sẵn danh mục (khoảng 25 món) để trợ lý khỏi mất một lượt gọi list_components, trả lời nhanh hơn
+        StringBuilder sb = new StringBuilder("Danh mục linh kiện của app (JSON):\n")
+                .append(json.writeValueAsString(componentService.findAll(null).stream().map(ChatService::brief).toList()))
+                .append("\n\nCác máy có sẵn trong app (mã: tên, mô tả):\n");
         pcBuildService.findPresets().forEach(b ->
                 sb.append("- ").append(b.code()).append(": ").append(b.name()).append(", ").append(b.tagline()).append('\n'));
         if (buildCode != null && !buildCode.isBlank()) {
