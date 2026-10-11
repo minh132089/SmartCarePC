@@ -96,44 +96,41 @@ class ChatServiceTests {
     }
 
     @Test
-    void proposeBuildChiGiuLinkCoTrongKetQuaTimKiem() {
+    void proposeBuildLayThongTinSanPhamTheoIdKetQuaTimKiem() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("case_compact_tower")).thenReturn(part("case_compact_tower", "case", "Vỏ Tower nhỏ gọn"));
         when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
         when(search.enabled()).thenReturn(true);
-        // Link đã là trang cửa hàng (không phải Google Shopping) thì directLink trả lại nguyên link
-        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         when(search.search("RAM DDR4 16GB")).thenReturn(List.of(new ProductSearch.Product(
-                "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://shop-a.vn/ram-16gb", "https://shop-a.vn/ram.jpg")));
+                "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://www.google.com/search?ibp=oshop&q=ram", "https://img/ram.jpg")));
+        when(search.directLink(any(), any(), any())).thenReturn("https://shop-a.vn/ram-16gb");
         reply(toolCall("s1", "search_products", "{\"query\":\"RAM DDR4 16GB\"}"),
                 toolCall("p1", "propose_build", """
                 {"summary":"Học online, máy nhỏ gọn","budget_vnd":12000000,"items":[
-                  {"code":"case_compact_tower","spec":"Vỏ mATX nhỏ","reason":"Vừa bàn học","price_min_vnd":700000,"price_max_vnd":1000000,
-                   "product_name":"Vỏ bịa","shop":"Shop B","product_url":"https://bia.vn/vo","image_url":"https://bia.vn/vo.jpg"},
-                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","price_min_vnd":1050000,"price_max_vnd":1050000,
-                   "product_name":"RAM 16GB (2x8GB) DDR4 3200","shop":"Shop A","product_url":"https://shop-a.vn/ram-16gb","image_url":"https://shop-a.vn/ram.jpg"}]}
-                """), answer("Tổng khoảng 11 triệu."));
+                  {"code":"case_compact_tower","spec":"Vỏ mATX nhỏ","reason":"Vừa bàn học","price_min_vnd":700000,"price_max_vnd":1000000,"product_id":"s9-9"},
+                  {"code":"ram_ddr4","quantity":2,"spec":"16 GB, 2 thanh 8 GB","reason":"Mở nhiều tab vẫn mượt","product_id":"s1-1","buy_qty":1}]}
+                """), answer("Tổng khoảng 1,8 - 2,1 triệu."));
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học online 12 triệu")), null, null, "advice"));
 
         var card = res.build();
         assertThat(card.summary()).isEqualTo("Học online, máy nhỏ gọn");
-        assertThat(card.budgetVnd()).isEqualTo(12_000_000L);
         var ram = card.items().get(1);
         assertThat(ram.quantity()).isEqualTo(2);
-        assertThat(ram.spec()).isEqualTo("16 GB, 2 thanh 8 GB");
-        assertThat(ram.reason()).isEqualTo("Mở nhiều tab vẫn mượt");
-        assertThat(ram.priceMinVnd()).isEqualTo(1_050_000L);
         assertThat(ram.productName()).isEqualTo("RAM 16GB (2x8GB) DDR4 3200");
         assertThat(ram.shop()).isEqualTo("Shop A");
-        assertThat(ram.sourceUrl()).isEqualTo("https://shop-a.vn/ram-16gb");
-        assertThat(ram.imageUrl()).isEqualTo("https://shop-a.vn/ram.jpg");
+        assertThat(ram.priceMinVnd()).as("bộ kit: mua 1 sản phẩm").isEqualTo(1_050_000L);
+        assertThat(ram.sourceUrl()).as("đã đổi sang link cửa hàng").isEqualTo("https://shop-a.vn/ram-16gb");
+        assertThat(ram.imageUrl()).isEqualTo("https://img/ram.jpg");
         var vo = card.items().getFirst();
-        assertThat(vo.sourceUrl()).as("link không có trong kết quả tìm kiếm bị bỏ").isNull();
-        assertThat(vo.imageUrl()).isNull();
-        assertThat(vo.productName()).isNull();
-        // Kết quả tìm kiếm được gửi lại cho model ở lượt sau
-        assertThat((String) messages(1).get(3).get("content")).contains("shop-a.vn/ram-16gb").contains("1050000");
+        assertThat(vo.productName()).as("id không có trong kết quả tìm kiếm").isNull();
+        assertThat(vo.sourceUrl()).isNull();
+        assertThat(vo.priceMinVnd()).as("không có sản phẩm thì dùng giá ước tính").isEqualTo(700_000L);
+        // Trợ lý chỉ thấy id, tên, cửa hàng, giá; không thấy link dài
+        String toolResult = (String) messages(1).get(3).get("content");
+        assertThat(toolResult).contains("s1-1").contains("1050000").doesNotContain("google.com");
+        // Tổng do backend cộng: 700k-1tr ước tính + 1,05tr giá cửa hàng
+        assertThat((String) messages(2).get(5).get("content")).contains("\"total_min_vnd\":1750000").contains("\"total_max_vnd\":2050000");
     }
 
     @Test

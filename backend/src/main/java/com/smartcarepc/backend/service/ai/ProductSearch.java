@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,7 +51,11 @@ public class ProductSearch {
                 .connectTimeout(Duration.ofSeconds(6)).followRedirects(HttpClient.Redirect.NORMAL).build());
         factory.setReadTimeout(Duration.ofSeconds(8));
         this.serper = RestClient.builder().baseUrl("https://google.serper.dev").requestFactory(factory).build();
-        this.web = RestClient.builder().requestFactory(factory)
+        // Trang cửa hàng chậm thì bỏ qua sớm: chờ tối đa 4 giây, thà thiếu ảnh còn hơn bắt người dùng chờ
+        var pageFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NORMAL).build());
+        pageFactory.setReadTimeout(Duration.ofSeconds(4));
+        this.web = RestClient.builder().requestFactory(pageFactory)
                 .defaultHeader("User-Agent", "Mozilla/5.0 (compatible; PCSmartCare/1.0; +product-preview)")
                 .defaultHeader("Accept-Language", "vi-VN,vi;q=0.9")
                 .build();
@@ -61,9 +66,27 @@ public class ProductSearch {
         return !apiKey.isEmpty();
     }
 
+    /** Kết quả đã tìm trong 30 phút gần đây, theo từ khoá: câu hỏi lặp lại trả lời nhanh và không tốn lượt Serper */
+    private static final long CACHE_MS = 30 * 60 * 1000;
+    private record Cached(long at, List<Product> products) {
+    }
+    private final Map<String, Cached> cache = new ConcurrentHashMap<>();
+
     /** Tìm tối đa 6 sản phẩm, đã bỏ trùng link, ưu tiên món có cả giá và ảnh */
     public List<Product> search(String query) {
         if (!enabled()) throw new IllegalStateException("Chưa bật tìm kiếm sản phẩm (thiếu SERPER_API_KEY)");
+        String key = query.strip().toLowerCase();
+        var hit = cache.get(key);
+        if (hit != null && System.currentTimeMillis() - hit.at() < CACHE_MS) return hit.products();
+        var found = fresh(query);
+        if (!found.isEmpty()) {
+            if (cache.size() > 500) cache.clear();
+            cache.put(key, new Cached(System.currentTimeMillis(), found));
+        }
+        return found;
+    }
+
+    private List<Product> fresh(String query) {
         List<Product> out = new ArrayList<>(shopping(query));
         if (out.size() < 3) out.addAll(organic(query + " giá"));
         Map<String, Product> unique = new LinkedHashMap<>();
