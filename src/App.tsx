@@ -7,12 +7,19 @@ import { GuideCaption, GuidePanel } from './ui/GuidePanel'
 import { InspectButton } from './ui/InspectButton'
 import { Inspector } from './ui/Inspector'
 import { Sidebar } from './ui/Sidebar'
+import { StudyDialogs } from './ui/study/StudyBar'
 
 export default function App() {
   const guide = useViewer((s) => s.guide)
   const page = useViewer((s) => s.page)
   // Trang 1 tư vấn chọn máy; trang 2 là mô hình 3D kèm hướng dẫn lắp và khung chat hỏi khi lắp
-  if (page === 'advice') return <AdvicePage />
+  if (page === 'advice')
+    return (
+      <>
+        <AdvicePage />
+        <StudyDialogs />
+      </>
+    )
   return (
     <div className="flex h-full flex-col-reverse bg-canvas md:flex-row">
       {guide ? <GuidePanel /> : <Sidebar />}
@@ -25,6 +32,7 @@ export default function App() {
         <Inspector />
         <ChatPanel />
       </main>
+      <StudyDialogs />
     </div>
   )
 }

@@ -6,6 +6,8 @@ import { firstUndone, guideSteps, loadDone, saveDone, sceneFor, type GuideStep }
 import type { PartId } from '../data/parts'
 import { useViewer } from '../store'
 import { FlowSteps } from './AdvicePage'
+import { useStudy } from './study/study'
+import { StudyBar } from './study/StudyBar'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -31,6 +33,9 @@ export function GuidePanel() {
   const [confirmReset, setConfirmReset] = useState(false)
   const listRef = useRef<HTMLOListElement>(null)
   const current = steps[Math.min(index, steps.length - 1)]
+  // Người tham gia thử nghiệm lắp xong cả máy: mời gửi phản hồi ngay trong ô chúc mừng
+  const askFeedback = useStudy((s) => s.code != null && !s.answered.includes('feedback'))
+  const openStudy = useStudy((s) => s.open)
 
   useEffect(() => saveDone(machine, done), [machine, done])
 
@@ -81,6 +86,7 @@ export function GuidePanel() {
   return (
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
       <FlowSteps current={2} />
+      <StudyBar />
       <button
         onClick={() => setGuide(false)}
         className={`-ml-1 mt-5 flex items-center gap-1 rounded-full px-1 py-0.5 text-[15px] font-medium text-link hover:underline ${focus}`}
@@ -118,6 +124,14 @@ export function GuidePanel() {
         <div className="swap mt-5 rounded-2xl bg-ok-bg p-4 text-[14px] leading-[1.45] text-ok">
           <p className="text-[15px] font-semibold">Bạn đã lắp xong cả máy!</p>
           <p className="mt-1">Nếu máy chưa lên hình, mở lại bước cuối để xem các lỗi hay gặp.</p>
+          {askFeedback && (
+            <button
+              onClick={() => openStudy('feedback')}
+              className={`mt-3 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
+            >
+              Gửi phản hồi cho nhóm nghiên cứu (2 phút)
+            </button>
+          )}
         </div>
       )}
 

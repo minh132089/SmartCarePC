@@ -6,6 +6,7 @@ import { useViewer } from '../store'
 import { machineOfCard, useAdviceChat, type BuildCard } from './chat/chatStore'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
+import { StudyBar, StudyJoinLink } from './study/StudyBar'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -104,6 +105,9 @@ export function AdvicePage() {
           </button>
         </div>
       </header>
+      <div className="shrink-0 px-5 md:px-10">
+        <StudyBar />
+      </div>
 
       {empty ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -146,6 +150,7 @@ export function AdvicePage() {
               <button onClick={() => setPage('build')} className={`mt-8 px-1 text-[14px] font-medium text-link hover:underline sm:hidden ${focus}`}>
                 Bỏ qua, xem mô hình 3D ›
               </button>
+              <StudyJoinLink className="mt-8 block px-1 text-left" />
             </div>
 
             {/* Ảnh chụp chính mô hình 3D của app (máy Showcase), để người dùng thấy trước thứ mình sẽ lắp. Từ màn hình vừa trở lên. */}
