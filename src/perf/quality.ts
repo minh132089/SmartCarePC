@@ -50,8 +50,10 @@ export function detectQuality(): QualityLevel {
   const mem = nav.deviceMemory ?? 8
   const touchSmall = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820
   if (touchSmall || cores <= 2 || mem <= 2) return 'low'
-  // GPU tích hợp đời cũ / di động
-  if (/Mali|Adreno|PowerVR|Intel.*(HD|UHD) Graphics [0-9]{3}\b|Intel\(R\) HD/i.test(gpu)) return 'medium'
+  // Intel HD đời 2015 trở về trước (số 4 chữ số: HD 4000, HD 5500...) và HD / UHD không số của Celeron, Atom: yếu hơn cả mức vừa
+  if (/Intel.*HD Graphics ([0-9]{4}\b|(?! ?[0-9]))/i.test(gpu)) return 'low'
+  // GPU tích hợp và di động: Intel HD / UHD / Iris (kể cả Iris Xe), AMD Radeon tích hợp (Vega, "Radeon(TM) Graphics", 6xxM)
+  if (/Mali|Adreno|PowerVR|Intel.*(HD|UHD) Graphics|Intel.*Iris|Radeon\(TM\) Graphics|Radeon.*Vega|Radeon [0-9]{3}M\b/i.test(gpu)) return 'medium'
   if (cores <= 4 || mem <= 4) return 'medium'
   return 'high'
 }

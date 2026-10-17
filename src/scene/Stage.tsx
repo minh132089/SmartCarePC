@@ -1,8 +1,9 @@
-import { ContactShadows, Grid, MeshReflectorMaterial } from '@react-three/drei'
+import { Grid, MeshReflectorMaterial } from '@react-three/drei'
 import { Bloom, EffectComposer, N8AO } from '@react-three/postprocessing'
 import { QUALITY } from '../perf/quality'
 import { useViewer } from '../store'
 import { useStage } from '../theme'
+import { StaticContactShadows } from './StaticContactShadows'
 
 /**
  * Sàn studio kiểu trưng bày sản phẩm: mặt sàn bóng phản chiếu mờ, lưới mảnh nhạt dần theo khoảng cách,
@@ -49,7 +50,7 @@ export function StudioFloor({ y }: { y: number }) {
         fadeStrength={1.6}
         infiniteGrid
       />
-      <ContactShadows key={q.shadow} position={[0, 0.004, 0]} scale={14} resolution={q.shadow} blur={2.6} opacity={0.5} far={5} color={c.shadow} />
+      <StaticContactShadows position={[0, 0.004, 0]} scale={14} resolution={q.shadow} blur={2.6} opacity={0.5} far={5} color={c.shadow} />
     </group>
   )
 }

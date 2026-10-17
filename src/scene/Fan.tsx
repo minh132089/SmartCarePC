@@ -54,7 +54,7 @@ function ProceduralFan({
       <Box size={[t, bar, size]} position={[0, -half, 0]} color="#1b1d22" />
       <Box size={[t, size, bar]} position={[0, 0, half]} color="#1b1d22" />
       <Box size={[t, size, bar]} position={[0, 0, -half]} color="#1b1d22" />
-      <group ref={blades}>
+      <group ref={blades} userData={{ spinner: true }}>
         <mesh rotation={[0, 0, Math.PI / 2]}>
           <cylinderGeometry args={[size * 0.16, size * 0.16, t * 0.8, 24]} />
           <Mat color="#2a2d33" />

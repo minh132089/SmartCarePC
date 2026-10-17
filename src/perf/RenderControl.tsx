@@ -11,6 +11,9 @@ import { useViewer } from '../store'
 export function RenderControl({ watchFps = true }: { watchFps?: boolean }) {
   const invalidate = useThree((s) => s.invalidate)
   const until = useRef(0)
+  // Khung trước có tự xin vẽ tiếp không: nếu có thì khoảng cách tới khung này là thời gian vẽ thật, không phải quãng nghỉ
+  const chained = useRef(false)
+  const fps = useRef({ t: 0, n: 0, last: 0 })
   useEffect(() => {
     const kick = () => {
       until.current = performance.now() + 900
@@ -20,30 +23,30 @@ export function RenderControl({ watchFps = true }: { watchFps?: boolean }) {
     return useViewer.subscribe(kick)
   }, [invalidate])
   useFrame(() => {
-    if (useViewer.getState().powered || performance.now() < until.current) invalidate()
+    const now = performance.now()
+    if (watchFps) watch(fps.current, now, chained.current)
+    chained.current = useViewer.getState().powered || now < until.current
+    if (chained.current) invalidate()
   })
-  return watchFps ? <FpsWatch /> : null
+  return null
 }
 
 /**
  * Đo khung hình khi cảnh đang chạy liên tục (kéo xoay, tách lắp, máy đang bật). Trung bình dưới 28 khung/giây
- * trong ~3 giây thì hạ một mức chất lượng (chỉ ở chế độ tự động). Bỏ qua quãng nghỉ của chế độ vẽ khi cần.
+ * trong ~2 giây thì hạ một mức chất lượng (chỉ ở chế độ tự động). Đo theo thời gian chứ không theo số khung,
+ * để máy chỉ chạy được 8–10 khung/giây cũng được hạ sau 2 giây thay vì phải chịu giật gần 10 giây.
+ * Bỏ qua quãng nghỉ của chế độ vẽ khi cần: khung trước không tự xin vẽ tiếp và cách hơn 250 ms.
  */
-function FpsWatch() {
-  const acc = useRef({ t: 0, n: 0, last: 0 })
-  useFrame(() => {
-    const now = performance.now()
-    const a = acc.current
-    const dt = now - a.last
-    a.last = now
-    if (dt > 100) return // khung đầu sau quãng nghỉ: không tính
-    a.t += dt
-    a.n += 1
-    if (a.n < 90) return
-    const fps = (1000 * a.n) / a.t
-    a.t = 0
-    a.n = 0
-    if (fps < 28) useViewer.getState().lowerQuality()
-  })
-  return null
+function watch(a: { t: number; n: number; last: number }, now: number, chained: boolean) {
+  const dt = now - a.last
+  a.last = now
+  // Khung đầu sau quãng nghỉ, tab đang ẩn, hoặc vừa quay lại tab (trình duyệt dừng vẽ khi tab ẩn): không tính
+  if ((!chained && dt > 250) || dt > 1000 || document.hidden) return
+  a.t += dt
+  a.n += 1
+  if (a.t < 2000 || a.n < 8) return
+  const fps = (1000 * a.n) / a.t
+  a.t = 0
+  a.n = 0
+  if (fps < 28) useViewer.getState().lowerQuality()
 }
