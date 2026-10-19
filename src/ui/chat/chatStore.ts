@@ -34,7 +34,11 @@ export type BuildCard = {
   modelNote?: string | null
   /** Phương án: cheap = Rẻ, balanced = Phù hợp cho bạn, quality = Chất lượng */
   tier?: Tier | null
+  /** Build trong phương án: 1 = trợ lý chọn; 2, 3 = cùng linh kiện, sản phẩm khác giá gần để tham khảo */
+  variant?: number
 }
+/** Build đang xem trong bảng so sánh */
+export type Pick = { tier: Tier; variant: number }
 export type Tier = 'cheap' | 'balanced' | 'quality'
 /** options: ba phương án để so sánh (khi trợ lý đưa đủ); build là phương án "Phù hợp cho bạn" */
 export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null; options?: BuildCard[] | null }

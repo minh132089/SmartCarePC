@@ -201,6 +201,147 @@ class ChatServiceTests {
     }
 
     @Test
+    void build2Va3DoiSangSanPhamCungNhomGiaGan() {
+        var chosen = new ProductSearch.Product("RAM Kingston 16GB (2x8GB) 3200", "Phong Vũ", 1_000_000L, "https://phongvu.vn/a", null);
+        var group = List.of(chosen,
+                new ProductSearch.Product("RAM Corsair 16GB (2x8GB) 3200", "Hacom", 1_050_000L, "https://hacom.vn/b", null),
+                new ProductSearch.Product("RAM Gskill 16GB (2x8GB) 3200", "GEARVN", 900_000L, "https://gearvn.com/c", null),
+                new ProductSearch.Product("RAM Kingston 8GB 3200", "X", 980_000L, "https://x.vn/d", null),
+                new ProductSearch.Product("RAM 16GB 2x8GB like new", "Y", 1_000_000L, "https://y.vn/e", null),
+                new ProductSearch.Product("RAM TeamGroup 16GB (2x8GB)", "Z", 2_000_000L, "https://z.vn/f", null));
+        // Bộ 2 thanh: chỉ đổi sang bộ khác; bỏ hàng like new và món đắt gấp đôi; gần giá nhất trước
+        assertThat(ChatService.alternatives(chosen, group, true, "quality")).extracting(ProductSearch.Product::title)
+                .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200");
+        // Không phải bộ: lấy cả thanh lẻ, nhưng cửa hàng biết tên miền (Hacom, GEARVN) đứng trước shop lạ dù giá gần hơn
+        assertThat(ChatService.alternatives(chosen, group, false, "quality")).extracting(ProductSearch.Product::title)
+                .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200");
+        // Phương án Rẻ: không lấy món đắt hơn 15%; Chất lượng: không lấy món rẻ hơn 15%
+        assertThat(ChatService.alternatives(chosen, group, true, "cheap")).extracting(ProductSearch.Product::title)
+                .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200");
+        assertThat(ChatService.candidates(chosen, group, false, "quality")).extracting(ProductSearch.Product::title)
+                .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200", "RAM Kingston 8GB 3200");
+        var cheapOnly = List.of(chosen, new ProductSearch.Product("RAM X 16GB (2x8GB)", "S", 800_000L, "https://s.vn/x", null));
+        assertThat(ChatService.alternatives(chosen, cheapOnly, true, "quality")).isEmpty();
+    }
+
+    @Test
+    void moiTierCoBaBuildDeThamKhao() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD 1TB")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A 1TB", "Shop A", 1_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 1TB", "Shop B", 1_550_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 1TB", "Shop C", 1_400_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ chỗ\",\"product_id\":\"s1-1\"}";
+        var calls = new ArrayList<Map<String, Object>>();
+        for (String t : List.of("cheap", "balanced", "quality")) {
+            calls.add(Map.of("id", "p-" + t, "type", "function", "function", Map.of("name", "propose_build",
+                    "arguments", "{\"tier\":\"" + t + "\",\"summary\":\"Học\",\"items\":[" + item + "]}")));
+        }
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD 1TB\"}"),
+                Map.of("choices", List.of(Map.of("finish_reason", "tool_calls", "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))),
+                answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 12 triệu")), null, null, "advice"));
+
+        assertThat(res.options()).hasSize(9);
+        var balanced = res.options().stream().filter(o -> "balanced".equals(o.tier())).toList();
+        assertThat(balanced).extracting(o -> o.variant()).containsExactly(1, 2, 3);
+        assertThat(balanced).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD A 1TB", "SSD B 1TB", "SSD C 1TB");
+        assertThat(res.build().variant()).isEqualTo(1);
+        assertThat(res.build().tier()).isEqualTo("balanced");
+    }
+
+    @Test
+    void monKhongCoLinkCuaHangThiDoiSangMonCungNhomCoLink() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RTX 3060")).thenReturn(List.of(
+                new ProductSearch.Product("RTX 3060 Shop Nho", "Tân Thành", 7_000_000L, "https://www.google.com/x", null),
+                new ProductSearch.Product("RTX 3060 Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> "Phong Vũ".equals(inv.getArgument(1)) ? "https://phongvu.vn/rtx3060" : null);
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"gpu_280","spec":"RTX 3060","reason":"Chơi game","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
+
+        assertThat(line.productName()).isEqualTo("RTX 3060 Phong Vu");
+        assertThat(line.sourceUrl()).isEqualTo("https://phongvu.vn/rtx3060");
+        assertThat(line.priceMinVnd()).isEqualTo(7_200_000L);
+    }
+
+    @Test
+    void linkChiLaTrangChuThiDoiSangMonCoTrangSanPham() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RTX 3060")).thenReturn(List.of(
+                new ProductSearch.Product("RTX 3060 Shop Nho", "hotgear.vn", 7_000_000L, "https://www.google.com/x", null),
+                new ProductSearch.Product("RTX 3060 Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
+        // Shop nhỏ tìm không ra trang sản phẩm nên chỉ có trang chủ
+        when(search.directLink(any(), any(), any())).thenAnswer(inv ->
+                "Phong Vũ".equals(inv.getArgument(1)) ? "https://phongvu.vn/rtx3060" : "https://hotgear.vn/");
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"gpu_280","spec":"RTX 3060","reason":"Chơi game","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
+
+        assertThat(line.productName()).isEqualTo("RTX 3060 Phong Vu");
+        assertThat(line.sourceUrl()).isEqualTo("https://phongvu.vn/rtx3060");
+    }
+
+    @Test
+    void tranGiaTheoPhuongAn() {
+        assertThat(ChatService.tierCap(12_000_000L, "cheap")).isEqualTo(12_000_000L);
+        assertThat(ChatService.tierCap(12_000_000L, "balanced")).isEqualTo(12_000_000L);
+        assertThat(ChatService.tierCap(12_000_000L, "quality")).isEqualTo(13_800_000L);
+        assertThat(ChatService.tierCap(null, "quality")).isNull();
+    }
+
+    @Test
+    void tenNganVaNhanBietTrangChu() {
+        assertThat(ProductSearch.shortTitle("CPU Intel Core i5-12400F (Up to 4.4GHz, 6 nhân 12 luồng) - Chính hãng"))
+                .isEqualTo("CPU Intel Core i5-12400F");
+        assertThat(ProductSearch.shortTitle("Card màn hình MSI GeForce RTX 4060 Ventus 2X Black 8G OC"))
+                .isEqualTo("Card màn hình MSI GeForce RTX 4060 Ventus");
+        assertThat(ProductSearch.shortTitle("(Hot) RAM")).isEqualTo("(Hot) RAM");
+        assertThat(ProductSearch.homePage("https://hotgear.vn/")).isTrue();
+        assertThat(ProductSearch.homePage("https://hotgear.vn")).isTrue();
+        assertThat(ProductSearch.homePage("https://phongvu.vn/rtx3060")).isFalse();
+    }
+
+    @Test
+    void buildThamKhaoCuaPhuongAnPhuHopKhongVuotNganSach() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        // Ngân sách 1 triệu, trợ lý chọn món 1 triệu: món 1,2 triệu (gần giá nhất) làm vượt ngân sách nên phải dùng món rẻ hơn
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A", "A", 1_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD Dat", "B", 1_200_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD Re", "C", 850_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
+                toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        // Build 1 do trợ lý chọn; build 2 là món rẻ hơn (món đắt hơn làm vượt ngân sách); build 3 không có cách nào
+        // khác mà vẫn trong ngân sách nên bị bỏ
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD A", "SSD Re");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
+    }
+
+    @Test
     void nhanTenCuaHangRaTenMien() {
         assertThat(ProductSearch.domainOf("Phong Vũ")).isEqualTo("phongvu.vn");
         assertThat(ProductSearch.domainOf("Nguyễn Vũ Store")).isEqualTo("nguyenvu.store");

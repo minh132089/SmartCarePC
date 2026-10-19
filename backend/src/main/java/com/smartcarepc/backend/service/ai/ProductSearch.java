@@ -49,7 +49,8 @@ public class ProductSearch {
     public ProductSearch(@Value("${app.search.serper-key:}") String apiKey) {
         var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(6)).followRedirects(HttpClient.Redirect.NORMAL).build());
-        factory.setReadTimeout(Duration.ofSeconds(8));
+        // Ba phương án và build tham khảo tìm link cùng lúc nên Serper có lúc trả chậm; 8 giây làm đứt giữa chừng
+        factory.setReadTimeout(Duration.ofSeconds(15));
         this.serper = RestClient.builder().baseUrl("https://google.serper.dev").requestFactory(factory).build();
         // Trang cửa hàng chậm thì bỏ qua sớm: chờ tối đa 4 giây, thà thiếu ảnh còn hơn bắt người dùng chờ
         var pageFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
@@ -108,6 +109,7 @@ public class ProductSearch {
     private static final Map<String, String> SHOP_DOMAINS = Map.ofEntries(
             Map.entry("phongvu", "phongvu.vn"), Map.entry("hacom", "hacom.vn"), Map.entry("gearvn", "gearvn.com"),
             Map.entry("anphatpc", "anphatpc.com.vn"), Map.entry("anphat", "anphatpc.com.vn"),
+            Map.entry("tinhocanhphat", "tinhocanhphat.vn"),
             Map.entry("nguyenvustore", "nguyenvu.store"), Map.entry("nguyenvu", "nguyenvu.store"),
             Map.entry("fptshop", "fptshop.com.vn"), Map.entry("thegioididong", "thegioididong.com"),
             Map.entry("dienmayxanh", "dienmayxanh.com"), Map.entry("cellphones", "cellphones.com.vn"),
@@ -125,13 +127,31 @@ public class ProductSearch {
      * 3. vẫn không có thì trang chủ của cửa hàng (biết tên miền), hoặc trang sản phẩm đầu tiên ngoài Google.
      * Không bao giờ trả về link Google; không tìm được gì thì null (giao diện dùng nút tìm trên trang cửa hàng).
      */
-    @SuppressWarnings("unchecked")
+    /** Link cửa hàng đã đổi, theo tên + cửa hàng: build 2 / 3 và các phương án hay trùng sản phẩm, khỏi tìm lại */
+    private final Map<String, String> linkCache = new ConcurrentHashMap<>();
+
     public String directLink(String title, String shop, String link) {
         if (link != null && !isGoogle(link)) return link;
         if (!enabled() || title == null) return null;
+        String key = title + "|" + shop;
+        String hit = linkCache.get(key);
+        if (hit != null) return hit;
+        String found = resolve(title, shop);
+        if (found != null) {
+            if (linkCache.size() > 2000) linkCache.clear();
+            linkCache.put(key, found);
+        }
+        return found;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolve(String title, String shop) {
         String domain = domainOf(shop);
         if (domain != null) {
             String hit = firstOn(post("/search", title + " site:" + domain), domain);
+            // Tên trong Shopping hay dài, kèm mã và quà tặng nên trang cửa hàng không khớp: thử lại với vài chữ đầu
+            String brief = shortTitle(title);
+            if (hit == null && !brief.equals(title)) hit = firstOn(post("/search", brief + " site:" + domain), domain);
             return hit != null ? hit : "https://" + domain + "/";
         }
         var organic = (List<Map<String, Object>>) post("/search", title + (shop == null ? "" : " " + shop)).getOrDefault("organic", List.of());
@@ -144,6 +164,30 @@ public class ProductSearch {
             if (any == null) any = u;
         }
         return any;
+    }
+
+    /** "CPU Intel Core i5-12400F (Up to 4.4GHz, 6 nhân 12 luồng) - Chính hãng" -> "CPU Intel Core i5-12400F" (tối đa 8 chữ) */
+    static String shortTitle(String title) {
+        String t = title.replaceAll("[(\\[|].*$", "").replaceAll("\\s+-\\s+.*$", "").strip();
+        if (t.isEmpty()) return title;
+        String[] w = t.split("\\s+");
+        return w.length <= 8 ? t : String.join(" ", java.util.Arrays.copyOf(w, 8));
+    }
+
+    /** Link chỉ là trang chủ cửa hàng (tìm không ra trang sản phẩm): người dùng còn phải tự tìm lại */
+    public static boolean homePage(String url) {
+        if (url == null) return false;
+        try {
+            String path = java.net.URI.create(url).getPath();
+            return path == null || path.isEmpty() || path.equals("/");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** Cửa hàng biết tên miền: đổi sang link trang cửa hàng gần như chắc chắn được */
+    public static boolean knownShop(String shop) {
+        return domainOf(shop) != null;
     }
 
     /** Tên miền của cửa hàng theo tên hiện trong kết quả Shopping, null nếu không biết */
@@ -205,20 +249,55 @@ public class ProductSearch {
         return futures.stream().map(CompletableFuture::join).toList();
     }
 
+    /** Serper cho tối đa 5 lượt mỗi giây; giữ 4 cho chắc. Mốc thời gian các lượt gần đây, dùng chung mọi luồng */
+    private static final int PER_SECOND = 4;
+    private final java.util.ArrayDeque<Long> recent = new java.util.ArrayDeque<>();
+
+    /** Chờ tới lượt: trong 1 giây gần nhất chưa quá PER_SECOND lượt (ba phương án và build tham khảo tìm link song song) */
+    private void throttle() {
+        while (true) {
+            long wait;
+            synchronized (recent) {
+                long now = System.currentTimeMillis();
+                while (!recent.isEmpty() && now - recent.peekFirst() >= 1000) recent.pollFirst();
+                if (recent.size() < PER_SECOND) {
+                    recent.addLast(now);
+                    return;
+                }
+                wait = 1000 - (now - recent.peekFirst()) + 5;
+            }
+            try {
+                Thread.sleep(wait);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> post(String path, String query) {
-        try {
-            Map<String, Object> res = serper.post().uri(path)
-                    .header("X-API-KEY", apiKey)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("q", query, "gl", "vn", "hl", "vi", "num", 10))
-                    .retrieve()
-                    .body(Map.class);
-            return res == null ? Map.of() : res;
-        } catch (RestClientException e) {
-            log.warn("Serper {} lỗi: {}", path, e.getMessage());
-            return Map.of();
+        for (int attempt = 0; attempt < 3; attempt++) {
+            throttle();
+            try {
+                Map<String, Object> res = serper.post().uri(path)
+                        .header("X-API-KEY", apiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(Map.of("q", query, "gl", "vn", "hl", "vi", "num", 10))
+                        .retrieve()
+                        .body(Map.class);
+                return res == null ? Map.of() : res;
+            } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
+                log.info("Serper {} quá giới hạn, thử lại", path); // vòng sau throttle() tự chờ
+            } catch (RestClientException e) {
+                // Mạng chập chờn / trả chậm bị cắt: thử lại; lỗi khác (khoá sai, 4xx) thì thôi
+                boolean transientError = e instanceof org.springframework.web.client.ResourceAccessException
+                        || e.getMessage() != null && e.getMessage().startsWith("Error while extracting response");
+                log.warn("Serper {} lỗi{}: {}", path, transientError ? ", thử lại" : "", e.getMessage());
+                if (!transientError) return Map.of();
+            }
         }
+        return Map.of();
     }
 
     /** [ảnh og:image, giá] đọc từ HTML trang sản phẩm; lỗi thì trả rỗng */
