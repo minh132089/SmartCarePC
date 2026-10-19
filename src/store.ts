@@ -34,6 +34,8 @@ interface ViewerState {
   guidePart: AssemblyKey | null
   /** "Xem toàn cảnh": hiện cả máy đã lắp đủ thay cho trạng thái của bước đang xem */
   guideFull: boolean
+  /** Chỉ dùng khi kiểm tra đường lắp (scene/pathCheck.ts): linh kiện nhảy ngay tới đích, không chạy lò xo */
+  instantMotion: boolean
   setGuidePart: (part: AssemblyKey | null) => void
   setGuideFull: (on: boolean) => void
   setGuide: (on: boolean) => void
@@ -76,6 +78,7 @@ export const useViewer = create<ViewerState>((set) => ({
   setGuideIndex: (guideIndex) => set({ guideIndex, guideFull: false }),
   guidePart: null,
   guideFull: false,
+  instantMotion: false,
   setGuidePart: (guidePart) => set({ guidePart }),
   setGuideFull: (guideFull) => set({ guideFull }),
   ...initialQuality(),

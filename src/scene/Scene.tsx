@@ -168,8 +168,14 @@ function GuideCamera({ back }: { back: boolean }) {
 /** Chỉ ở bản dev: cho công cụ kiểm tra (tools/shot.mjs, console) đọc cảnh qua window.__scene. */
 function DevExpose() {
   const scene = useThree((s) => s.scene)
+  const get = useThree((s) => s.get)
   useEffect(() => {
-    Object.assign(window, { __scene: scene })
-  }, [scene])
+    // __checkPaths: kiểm tra nguyên tắc "linh kiện không đi xuyên qua nhau" (src/scene/pathCheck.ts)
+    const checkPaths = (machines?: import('./pathCheck').Machine[]) =>
+      import('./pathCheck').then((m) => m.checkPaths(scene, () => get().advance(performance.now(), true), machines))
+    const findPaths = (machines?: import('./pathCheck').Machine[], parts?: import('../data/assembly').AssemblyKey[]) =>
+      import('./pathCheck').then((m) => m.findPaths(scene, () => get().advance(performance.now(), true), machines, parts))
+    Object.assign(window, { __scene: scene, __checkPaths: checkPaths, __findPaths: findPaths })
+  }, [scene, get])
   return null
 }

@@ -22,6 +22,7 @@ import {
 } from '../data/gaming'
 import { useViewer } from '../store'
 import { useOut } from '../data/assembly'
+import { installPath, type Vec3 } from '../data/installPaths'
 import { Cable, type Route } from './Cables'
 import { GamingModel, GamingSpinner } from './Models'
 import { Mat, Part } from './Part'
@@ -35,6 +36,7 @@ const PANEL = ['side_panel'] // nắp kín phía sau khay
  * Mọi số đo nằm trong src/data/gaming.ts (mm), đổi sang đơn vị app bằng u().
  */
 export function GamingRig() {
+  const xp = (path: string, fallback: Vec3) => ({ path, explode: installPath('gaming', path, fallback) })
   const coolerOut = useOut('cooler')
   const cablesOut = useOut('cables')
   // Chọn "Dây cáp" thì tháo nắp kín phía sau khay để thấy dây đi sau lưng bo
@@ -50,40 +52,40 @@ export function GamingRig() {
         <GamingModel name="motherboard" />
       </Part>
       {/* Tấm đỡ bơm nằm sau bo, tâm trùng socket; lắp trước khi bắt bo vào case */}
-      <Part id="cooler" position={u(onBoard(ON_BOARD.backplate))} step="cooler">
+      <Part id="cooler" position={u(onBoard(ON_BOARD.backplate))} step="cooler" {...xp('cooler.0', [0, 0, 0])}>
         <GamingModel name="aio_backplate" />
       </Part>
-      <Part id="cpu" position={u(onBoard(ON_BOARD.cpu))} explode={[0, 0, 0.9]} step="cpu">
+      <Part id="cpu" position={u(onBoard(ON_BOARD.cpu))} step="cpu" {...xp('cpu.0', [0, 0, 0.9])}>
         <GamingModel name="cpu" />
       </Part>
       {ON_BOARD.ram.map((p, i) => (
-        <Part key={i} id="ram" position={u(onBoard(p))} explode={[0, 0, 1.2]} step="ram">
+        <Part key={i} id="ram" position={u(onBoard(p))} step="ram" {...xp(`ram.${i}`, [0, 0, 1.2])}>
           <GamingModel name="ram" />
         </Part>
       ))}
-      <Part id="ssd" position={u(onBoard(ON_BOARD.ssd))} explode={[0, 0, 0.7]} step="ssd">
+      <Part id="ssd" position={u(onBoard(ON_BOARD.ssd))} step="ssd" {...xp('ssd.0', [0, 0, 0.7])}>
         <GamingModel name="ssd" />
       </Part>
-      <Part id="gpu" position={u(onBoard(ON_BOARD.gpu))} explode={[0, 0, 1.5]} step="gpu">
+      <Part id="gpu" position={u(onBoard(ON_BOARD.gpu))} step="gpu" {...xp('gpu.0', [0, 0, 1.5])}>
         <GamingSpinner name="gpu" nodes={GPU_FANS} axis="y" />
       </Part>
 
-      <Part id="cooler" position={u(onBoard(ON_BOARD.pump))} explode={[0, 0, 1.9]} step="cooler">
+      <Part id="cooler" position={u(onBoard(ON_BOARD.pump))} step="cooler" {...xp('cooler.1', [0, 0, 1.9])}>
         <GamingModel name="aio_pump" hide={INSTALLED} />
       </Part>
-      <Part id="cooler" position={u(CASE_PARTS.radiator)} explode={[0, 0, 1.6]} step="cooler">
+      <Part id="cooler" position={u(CASE_PARTS.radiator)} step="cooler" {...xp('cooler.2', [0, 0, 1.6])}>
         <GamingSpinner name="aio_radiator" nodes={RAD_FANS} axis="y" />
       </Part>
       {!coolerOut && <AioHoses />}
 
       {[...CASE_PARTS.frontFans, CASE_PARTS.rearFan].map((p, i) => (
         // Quạt trước tháo ra phía trước, quạt sau ra phía sau; quay theo chiều kim đồng hồ khi nhìn vào mặt hút (+x)
-        <Part key={i} id="fans" position={u(p)} explode={[i < 3 ? 0.9 : -0.9, 0, 0]} step="fans">
+        <Part key={i} id="fans" position={u(p)} step="fans" {...xp(`fans.${i}`, [i < 3 ? 0.9 : -0.9, 0, 0])}>
           <GamingSpinner name={i < 3 ? 'case_fan_argb' : 'case_fan'} nodes={CASE_FAN} axis="x" speed={-4} />
         </Part>
       ))}
 
-      <Part id="psu" position={u(CASE_PARTS.psu)} explode={[0, 0, 2.3]} step="psu">
+      <Part id="psu" position={u(CASE_PARTS.psu)} step="psu" {...xp('psu.0', [0, 0, 2.3])}>
         <GamingModel name="psu" />
       </Part>
 

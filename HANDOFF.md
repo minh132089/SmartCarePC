@@ -75,6 +75,17 @@ Trong app: `src/scene/ToolKit.tsx` bày thảm trên sàn trước máy khi tác
 - 3 mức chất lượng `src/perf/quality.ts` (Cao / Vừa / Nhẹ: dpr, N8AO, Bloom, sàn phản chiếu, bóng). Chế độ Tự động đoán theo GPU / CPU / RAM rồi tự hạ khi đo < 28 khung/giây. Nút chọn ở thanh bên, lưu localStorage.
 - Hiệu ứng mới cần chuyển động liên tục thì phải gọi `invalidate()` (hoặc đổi store) nếu không sẽ đứng hình.
 
+## NGUYÊN TẮC CỨNG: hoạt cảnh lắp không được đi xuyên vật
+
+Khi lắp (và tách rời), mọi linh kiện phải đi theo đường mà ngoài đời làm được: **không khối nào đi xuyên qua khối khác**
+(vỏ, tấm che, bo mạch, linh kiện đã lắp). Chỉ được chạm trong 10 mm cuối, là đoạn cắm vào khe / socket / ốp vào chỗ bắt vít.
+
+- Đường lắp của từng khối nằm trong `src/data/installPaths.ts` (mã khối `<bước>.<thứ tự>`, vd `fans.2`); Part trong
+  `FamilyRig` / `GamingRig` nhận `path` + `explode` qua `xp(...)`.
+- Kiểm tra: `npm run dev` rồi `npm run check:paths` (tools/check_paths.mjs, Chrome headless). Còn vi phạm thì thoát mã 1.
+  Tìm đường sạch cho khối vi phạm: `npm run check:paths -- --find [máy ...]`. Logic ở `src/scene/pathCheck.ts`.
+- Đổi model, vị trí lắp, thứ tự bước hay đường lắp nào cũng phải chạy lại và **không còn vi phạm** mới được commit.
+
 ## Quy ước và bẫy quan trọng
 
 - Trục: Blender (x, y, z) ↔ app (x, z, −y). Trong `build_gaming.py` mọi số là **mm theo trục app**: x lưng → trước, y đáy → nóc, z nắp kín → kính.

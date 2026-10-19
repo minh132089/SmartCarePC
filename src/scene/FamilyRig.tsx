@@ -4,6 +4,7 @@ import { FAMILIES, HEADER_Z, MODEL_URL, RAD_FITTING_X, familyPlacement, gpuBehin
 import { PUMP_FITTINGS, add, u, type Mm3 } from '../data/gaming'
 import { useViewer } from '../store'
 import { useOut } from '../data/assembly'
+import { installPath, type Vec3 } from '../data/installPaths'
 import { Cable, type Route } from './Cables'
 import { GlbModel, GlbSpinner } from './Models'
 import { Mat, Part } from './Part'
@@ -43,6 +44,8 @@ export function FamilyRig({ id }: { id: FamilyId }) {
   const hide = sideOpen ? (backOpen ? OPEN_CLOSED : OPEN) : backOpen ? CLOSED : undefined
   const cooler = f.cooler.kind
   const aio = cooler === 'aio_240' || cooler === 'aio_360'
+  // Đường lắp từng khối: bảng đã kiểm (data/installPaths.ts) hoặc offset mặc định
+  const xp = (path: string, fallback: Vec3) => ({ path, explode: installPath(id, path, fallback) })
 
   return (
     <>
@@ -59,23 +62,23 @@ export function FamilyRig({ id }: { id: FamilyId }) {
         <GlbModel url={MODEL_URL.board[f.board.ff]} />
       </Part>
       {/* Tấm chống cong đi cùng bước lắp tản (explode 0: tách rời thì nằm yên, hướng dẫn thì hiện cùng tản) */}
-      <Part id="cooler" position={u(P.backplate)} step="cooler">
+      <Part id="cooler" position={u(P.backplate)} step="cooler" {...xp('cooler.0', [0, 0, 0])}>
         <GlbModel url={MODEL_URL.backplate} />
       </Part>
-      <Part id="cpu" position={u(P.cpu)} explode={[0, 0, 0.9]} step="cpu">
+      <Part id="cpu" position={u(P.cpu)} step="cpu" {...xp('cpu.0', [0, 0, 0.9])}>
         <GlbModel url={MODEL_URL.cpu} />
       </Part>
       {P.ram.map((p, i) => (
-        <Part key={i} id="ram" position={u(p)} explode={[0, 0, 1.2]} step="ram">
+        <Part key={i} id="ram" position={u(p)} step="ram" {...xp(`ram.${i}`, [0, 0, 1.2])}>
           <GlbModel url={MODEL_URL.ram} />
         </Part>
       ))}
-      <Part id="ssd" position={u(P.ssd)} explode={[0, 0, 0.7]} step="ssd">
+      <Part id="ssd" position={u(P.ssd)} step="ssd" {...xp('ssd.0', [0, 0, 0.7])}>
         <GlbModel url={MODEL_URL.ssd} />
       </Part>
 
       {/* Tản CPU: tản khí (quạt quay) hoặc bơm AIO + két + ống */}
-      <Part id="cooler" position={u(P.ihs)} explode={[0, 0, 1.9]} step="cooler">
+      <Part id="cooler" position={u(P.ihs)} step="cooler" {...xp('cooler.1', [0, 0, 1.9])}>
         {aio ? (
           <GlbModel url={MODEL_URL.pump} hide={PEEL} />
         ) : (
@@ -83,7 +86,7 @@ export function FamilyRig({ id }: { id: FamilyId }) {
         )}
       </Part>
       {f.radiator && (
-        <Part id="cooler" position={u(f.radiator.origin)} explode={[0, 1.2, 0]} step="cooler">
+        <Part id="cooler" position={u(f.radiator.origin)} step="cooler" {...xp('cooler.2', [0, 1.2, 0])}>
           <GlbSpinner url={MODEL_URL.radiator[f.radiator.kind]} nodes={RAD_FANS[f.radiator.kind]} axis="y" />
         </Part>
       )}
@@ -91,27 +94,27 @@ export function FamilyRig({ id }: { id: FamilyId }) {
 
       {/* GPU: R0 cắm thẳng vào khe; R+ / R- dựng qua riser */}
       {/* Card nằm sau tấm đỡ bo (Mini): tháo ra và lắp vào qua hông sau (-z); nếu ra +z thì card xuyên qua bo mạch */}
-      <Part id="gpu" position={u(f.gpu.origin)} explode={gpuBehindBoard(f) ? [0, 0, -1.4] : f.riser ? [0, 0, 1.4] : [0, 0, 1.5]} step="gpu">
+      <Part id="gpu" position={u(f.gpu.origin)} step="gpu" {...xp('gpu.0', gpuBehindBoard(f) ? [0, 0, -1.4] : f.riser ? [0, 0, 1.4] : [0, 0, 1.5])}>
         <group rotation-x={rotX(f.gpu.rot)}>
           <GlbSpinner url={MODEL_URL.gpu[f.gpu.kind]} nodes={GPU_FANS[f.gpu.kind]} axis="y" />
         </group>
       </Part>
       {f.riser && !gpuOut && <Riser f={f} fingers={P.gpuFingers} />}
 
-      <Part id="psu" position={u(f.psu.center as Mm3)} explode={[0, 0, 1.8]} step="psu">
+      <Part id="psu" position={u(f.psu.center as Mm3)} step="psu" {...xp('psu.0', [0, 0, 1.8])}>
         <group rotation-x={rotX(f.psu.rot)}>
           <GlbModel url={MODEL_URL.psu[f.psu.kind]} />
         </group>
       </Part>
 
       {f.fans.map((fan, i) => (
-        <Part key={i} id="fans" position={u(fan.at)} explode={fanExplode(fan)} step="fans">
+        <Part key={i} id="fans" position={u(fan.at)} step="fans" {...xp(`fans.${i}`, fanExplode(fan))}>
           <group rotation={fanRotation(fan)}>
             <GlbSpinner url={MODEL_URL.fan[fan.model]} nodes={BLADES} axis="x" speed={-4} />
           </group>
         </Part>
       ))}
-      <Part id="fans" step="fans">
+      <Part id="fans" step="fans" {...xp(`fans.${f.fans.length}`, [0, 0, 0])}>
         {f.hub && (
           <group position={u(f.hub)} rotation-y={Math.PI}>
             <GlbModel url={MODEL_URL.hub} />

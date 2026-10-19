@@ -22,6 +22,7 @@ export function Part({
   explode = [0, 0, 0],
   order = 0,
   step,
+  path,
   children,
 }: {
   id: PartId
@@ -31,6 +32,8 @@ export function Part({
   order?: number
   /** Bước lắp của linh kiện (data/assembly.ts). Có thì tách / lắp lần lượt từng bước thay vì cùng lúc. */
   step?: AssemblyKey
+  /** Mã khối trong bảng đường lắp (data/installPaths.ts), vd "fans.2"; bộ kiểm tra đường lắp đọc mã này */
+  path?: string
   children: ReactNode
 }) {
   const exploded = useViewer((s) => s.exploded)
@@ -42,11 +45,12 @@ export function Part({
   const [over, setOver] = useState(false)
   // Lò xo không nảy (damping 1, response 0,4 s), các linh kiện tháo lần lượt cách nhau 60 ms
   const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const instant = useViewer((s) => s.instantMotion)
   const spring = useSpring({
     offset: out ? explode : [0, 0, 0],
     delay: reduce || step ? 0 : (exploded ? order : MAX_ORDER - order) * 60,
     config: { tension: 247, friction: 31.4 },
-    immediate: reduce,
+    immediate: reduce || instant,
   })
 
   // Ẩn thì không nhận chuột (three.js vẫn bắn tia trúng vật ẩn), để rê và bấm xuyên tới vỏ, bo phía sau
@@ -69,7 +73,7 @@ export function Part({
   }
 
   return (
-    <group name={`mount_${id}`} position={position} visible={!hidden}>
+    <group name={`mount_${id}`} position={position} visible={!hidden} userData={{ step, path }}>
       <animated.group position={spring.offset as unknown as Vec3} onPointerOver={onOver} onPointerOut={onOut} onClick={onClick}>
         <PartContext.Provider value={id}>{children}</PartContext.Provider>
         {over && (
