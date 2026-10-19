@@ -2,6 +2,7 @@ package com.smartcarepc.backend.service.ai;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -51,13 +52,13 @@ public class LlmClient {
                     "Trợ lý AI chưa được bật vì máy chủ chưa có khoá API (biến môi trường AI_API_KEY).");
         }
         try {
-            return http.post()
+            return checkReply(http.post()
                     .uri("/chat/completions")
                     .header("Authorization", "Bearer " + apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
-                    .body(Map.class);
+                    .body(Map.class));
         } catch (HttpStatusCodeException e) {
             log.warn("API AI trả lỗi {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
             throw new AiUnavailableException(HttpStatus.BAD_GATEWAY, switch (e.getStatusCode().value()) {
@@ -73,5 +74,19 @@ public class LlmClient {
             throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
                     "Không kết nối được tới trợ lý AI. Bạn kiểm tra mạng rồi thử lại nhé.");
         }
+    }
+
+    /**
+     * Có nhà cung cấp trả mã 200 nhưng thân là lỗi (vd {"error": {"message": "Upstream returned no output"}}) hoặc không
+     * có choices: coi là lỗi của dịch vụ AI, không để vòng chat hiểu nhầm thành "tra cứu nhiều quá"
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> checkReply(Map<String, Object> res) {
+        if (res != null && res.get("choices") instanceof List<?> c && !c.isEmpty()) return res;
+        Object err = res == null ? null : res.get("error");
+        String detail = err instanceof Map<?, ?> m && m.get("message") != null ? String.valueOf(m.get("message")) : String.valueOf(err);
+        log.warn("API AI trả 200 nhưng không có câu trả lời: {}", detail);
+        throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
+                "Dịch vụ AI bên ngoài đang không trả lời, nên trợ lý chưa tư vấn được. Bạn thử lại sau ít phút nhé.");
     }
 }
