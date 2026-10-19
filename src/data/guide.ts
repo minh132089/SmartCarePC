@@ -250,7 +250,10 @@ function gpuStep(m: GuideMachine): GuideStep {
       ? [
           'Máy này dựng card bằng cáp riser: một dải cáp dẹt nối khe PCIe trên bo với card ở chỗ khác trong vỏ.',
           ...(m.gpuBehind
-            ? ['Card nằm phía sau tấm đỡ bo mạch nên lắp từ hông bên kia: tháo tấm hông đó ra (hình bên cạnh đã xoay sang mặt này).']
+            ? [
+                'Card nằm phía sau tấm đỡ bo mạch nên lắp từ hông bên kia: tháo tấm hông đó ra (hình bên cạnh đã xoay sang mặt này).',
+                'Bên đó là một buồng riêng chỉ có card, không bị nguồn hay tản che, nên lắp card sau cùng vẫn với tay tới dễ dàng. Nhìn từ hông có bo thì không thấy card là bình thường.',
+              ]
             : []),
           'Cắm đầu riser vào khe PCIe x16 trên bo (khe dài nhất, gần CPU nhất).',
           'Cắm card vào đầu riser còn lại cho tới khi lẫy kêu "tách", rồi bắt vít card vào khung đỡ.',
