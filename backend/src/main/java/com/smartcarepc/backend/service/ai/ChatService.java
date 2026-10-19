@@ -1,0 +1,484 @@
+package com.smartcarepc.backend.service.ai;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.smartcarepc.backend.dto.BuildCheckRequest;
+import com.smartcarepc.backend.dto.ChatRequest;
+import com.smartcarepc.backend.dto.ChatResponse;
+import com.smartcarepc.backend.dto.ChatResponse.BuildCard;
+import com.smartcarepc.backend.dto.ChatResponse.Line;
+import com.smartcarepc.backend.dto.CompatibilityResponse;
+import com.smartcarepc.backend.dto.ComponentResponse;
+import com.smartcarepc.backend.dto.PcBuildResponse;
+import com.smartcarepc.backend.exception.ResourceNotFoundException;
+import com.smartcarepc.backend.service.CompatibilityService;
+import com.smartcarepc.backend.service.ComponentService;
+import com.smartcarepc.backend.service.PcBuildService;
+
+import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Trợ lý tư vấn build PC trong khung chat. Model được dùng 3 công cụ để trả lời bằng dữ liệu thật của app
+ * thay vì đoán: xem danh mục linh kiện, xem một máy có sẵn, và chạy bộ kiểm tra tương thích.
+ * Cấu hình được kiểm tra cuối cùng trong lượt trả lời được gửi kèm để khung chat vẽ thành thẻ.
+ * Không mở transaction ở đây vì mỗi lượt chờ AI có thể mất vài giây; từng service tự mở khi đọc DB.
+ */
+@Slf4j
+@Service
+public class ChatService {
+
+    /** Số lượt gọi công cụ tối đa cho một câu hỏi, tránh vòng lặp vô tận */
+    private static final int MAX_ROUNDS = 8;
+
+    /** Trang 1 "Tư vấn chọn máy": người dùng tự kể nhu cầu, trợ lý phân tích rồi chọn linh kiện */
+    private static final String ADVICE = """
+            Bạn là trợ lý tư vấn build PC của PC SmartCare, một app 3D giúp người không rành kỹ thuật chọn rồi tự lắp \
+            máy tính để bàn. Người dùng kể nhu cầu bằng lời của họ, thường không có thuật ngữ, ví dụ "mình học online, \
+            hay chơi game nhẹ, có khoảng 15 triệu, bàn hơi chật".
+
+            Việc của bạn:
+            1. Phân tích lời kể thành: dùng máy để làm gì, ngân sách, kích thước hay kiểu dáng mong muốn, có cần nâng cấp \
+            về sau không. Mở đầu câu trả lời bằng một dòng tóm tắt bạn hiểu nhu cầu thế nào, để người dùng sửa nếu sai.
+            2. Thiếu điều quan trọng (thường là ngân sách hoặc mục đích) thì hỏi lại, gộp thành một câu ngắn. \
+            Đủ để chọn thì làm luôn.
+            3. Chọn đủ linh kiện cho một máy từ danh mục. Luôn chọn một vỏ máy (case): app sẽ mở mô hình 3D đúng kiểu \
+            vỏ đó để hướng dẫn người dùng tự lắp từng bước.
+            4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
+            check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá tiếng Việt theo thông số, vd \
+            "RAM DDR4 16GB 3200 giá rẻ". Mỗi kết quả có một id ngắn (vd "s3-2"). Trong kết quả, chọn \
+            món RẺ NHẤT mà vẫn đủ thông số và hợp nhu cầu, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
+            cũ, "like new", hàng trưng bày, phụ kiện bán kèm, và giá rẻ bất thường (thấp hơn nhiều so với các kết quả \
+            khác cùng loại), vì người mới dễ mua phải hàng kém. Không tìm được thì để trống phần sản phẩm và dùng giá \
+            ước tính.
+            Món nào chưa có kết quả hợp thì được tìm lại TỐI ĐA MỘT LẦN, gộp mọi lần tìm lại vào cùng một lượt; vẫn \
+            không có thì dùng giá ước tính cho món đó.
+            5. Sau lượt tìm kiếm, gọi thẳng propose_build (nó tự kiểm tra lắp chung). Không gọi check_build thêm lần nữa; \
+            propose_build báo lỗi thì sửa đúng chỗ đó rồi gọi lại propose_build. Xem kỹ thông số trong danh mục trước khi \
+            chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. Mỗi linh kiện ghi:
+               - spec: thông số nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200");
+               - reason: một câu vì sao hợp với nhu cầu người dùng;
+               - product_id: id của kết quả đã chọn (vd "s3-2"). App tự điền tên, cửa hàng, giá, ảnh và link mua từ id \
+            này, nên KHÔNG chép tên hay link. Không tìm được sản phẩm thì bỏ trống;
+               - buy_qty: số sản phẩm đó cần mua, mặc định bằng quantity. Chọn bộ kit nhiều thanh thì buy_qty = 1 \
+            (vd RAM quantity 2 nhưng mua một bộ "2x8GB" thì buy_qty = 1);
+               - price_min_vnd, price_max_vnd: chỉ ghi khi không có product_id (khoảng giá ước tính).
+            6. Tổng giá phải nằm trong ngân sách. Ngân sách quá thấp so với nhu cầu thì vẫn đề xuất phương án gần nhất, \
+            nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
+            7. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
+            Chỉ nói tổng ước tính so với ngân sách, 2 hoặc 3 món quan trọng nhất, rồi mời bấm "Xem và lắp máy này".
+            Tổng nói trong câu trả lời lấy đúng total_min_vnd và total_max_vnd mà propose_build trả về, làm tròn tới \
+            0,1 triệu (vd "6,8 - 6,9 triệu"); hai số bằng nhau thì nói một số. Không tự cộng nhẩm.
+            """;
+
+    /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
+    private static final String ASSEMBLY = """
+            Bạn là trợ lý của PC SmartCare, một app 3D giúp người không rành kỹ thuật tự lắp máy tính để bàn theo \
+            từng bước. Người hỏi thường đang lắp dở, tay đang cầm linh kiện, chưa biết thuật ngữ và sợ làm hỏng.
+            Việc chính của bạn là gỡ rối trong lúc lắp: hiểu chuyện gì đang xảy ra và chỉ cách làm tiếp cho an toàn.
+
+            Gỡ rối khi lắp:
+            1. Nếu biết người dùng đang ở bước nào thì trả lời đúng theo bước đó.
+            2. Đưa ra cách kiểm tra từ dễ tới khó, mỗi cách một dòng, nói rõ nhìn vào đâu, bấm hay ấn chỗ nào.
+            3. Mô tả chưa rõ thì hỏi lại đúng một câu (ví dụ: đèn nào sáng, quạt có quay không, nghe tiếng gì).
+            4. Việc có thể làm hỏng linh kiện (ấn mạnh CPU, cắm ngược đầu dây, cắm khi máy đang có điện) thì cảnh báo trước.
+            """;
+
+    /** Luật chung cho cả hai trang */
+    private static final String RULES = """
+            Cách trả lời:
+            - Trả lời bằng ngôn ngữ người dùng đang viết (thường là tiếng Việt). Giọng thân thiện, xưng "mình", gọi "bạn".
+            - Ngắn gọn, khoảng 150 chữ trở xuống, trừ khi người dùng xin giải thích kỹ. Không dùng bảng, không dùng tiêu đề.
+              Được dùng gạch đầu dòng "- " và **chữ đậm** cho ý chính.
+            - Gặp thuật ngữ thì giải thích luôn bằng một câu đời thường, ví dụ "RAM là bộ nhớ tạm, càng nhiều thì mở \
+            được càng nhiều chương trình cùng lúc".
+            - Giải thích vì sao bạn chọn như vậy, để người dùng tự kiểm tra được lời khuyên chứ không chỉ làm theo.
+
+            Khi người dùng hỏi chọn hay đổi linh kiện:
+            1. Cần biết ngân sách và máy dùng để làm gì (học, văn phòng, chơi game, dựng phim...). Thiếu thì hỏi lại, \
+            gộp thành một câu hỏi ngắn. Có rồi thì làm luôn, đừng hỏi thêm.
+            2. Chọn linh kiện từ danh mục của app (list_components). Một máy cần đủ: vỏ, bo mạch chủ, CPU, tản nhiệt, \
+            RAM, SSD, nguồn; thêm card đồ họa khi chơi game hoặc làm đồ họa, hoặc khi CPU không có sẵn đồ họa.
+            3. Luôn chạy check_build với cấu hình định đề xuất. Còn lỗi (errors) thì đổi linh kiện rồi chạy lại cho tới \
+            khi lắp được. Cảnh báo (warnings) thì nói lại cho người dùng bằng lời dễ hiểu.
+            4. App sẽ tự vẽ danh sách linh kiện thành một thẻ ngay dưới câu trả lời, nên đừng liệt kê lại cả danh sách. \
+            Chỉ nói vài món quan trọng nhất và lý do chọn.
+            5. Danh mục của app chỉ là bộ mẫu nhỏ. Nếu nhu cầu vượt quá danh mục thì nói rõ điều đó.
+            - Danh mục đầy đủ đã có ở cuối lời dặn này, dùng luôn, chỉ gọi list_components khi cần xem lại.
+            - Khoảng số (giá, ngân sách) viết bằng dấu gạch nối thường, vd "20,9 - 28,9 triệu", không dùng gạch dài.
+            - Gọi linh kiện bằng tên tiếng Việt trong danh mục, không đọc mã code cho người dùng.
+            - Tên hãng hay mẫu sản phẩm chỉ nêu khi lấy từ kết quả search_products; còn lại nói theo thông số (vd "RAM 16 GB DDR4").
+            - Giá lấy từ cửa hàng là giá lúc tìm, có thể đổi; giá không có sản phẩm là ước tính. Nói rõ điều này. \
+            Không bịa thông số mà danh mục để trống rồi nói như thông tin chắc chắn.
+            - Danh mục của app là các kiểu linh kiện để kiểm tra lắp chung và dựng mô hình 3D. Đừng nhắc tên hay mã \
+            trong danh mục với người dùng; người dùng chỉ cần thấy sản phẩm thật nên mua.
+
+            An toàn:
+            - Trước mọi việc mở máy, nhắc: tắt máy, rút dây điện, chạm tay vào phần kim loại của vỏ để xả tĩnh điện.
+            - Có mùi khét, khói, tụ phồng, hoặc lỗi ở bộ nguồn thì khuyên mang ra thợ. Không hướng dẫn mở bộ nguồn.
+
+            Phạm vi: chỉ trả lời về máy tính (chọn mua, lắp ráp, nâng cấp, bảo dưỡng, máy chậm / nóng / ồn). \
+            Câu hỏi ngoài lề thì từ chối nhẹ nhàng và gợi ý một câu hỏi phù hợp.
+            """;
+
+    private static final List<Map<String, Object>> TOOLS = List.of(
+            tool("list_components",
+                    "Danh mục linh kiện của app kèm thông số. Lọc theo loại hoặc bỏ trống để lấy tất cả. "
+                            + "Loại: case, motherboard, cpu, cooler, ram, gpu, ssd, psu, fans, tools.",
+                    Map.of("type", "object",
+                            "properties", Map.of("category", Map.of("type", "string", "description", "Mã loại linh kiện")))),
+            tool("get_build",
+                    "Xem toàn bộ linh kiện của một máy có sẵn trong app, theo mã máy.",
+                    Map.of("type", "object",
+                            "properties", Map.of("code", Map.of("type", "string", "description", "Mã máy, vd standard_tower")),
+                            "required", List.of("code"))),
+            tool("check_build",
+                    "Kiểm tra các linh kiện có lắp chung được không. Trả về errors (không lắp được) "
+                            + "và warnings (lắp được nhưng nên xem lại). Cần đủ vỏ, bo mạch, CPU, nguồn, RAM, SSD.",
+                    Map.of("type", "object",
+                            "properties", Map.of("items", Map.of("type", "array",
+                                    "items", Map.of("type", "object",
+                                            "properties", Map.of(
+                                                    "code", Map.of("type", "string", "description", "Mã linh kiện"),
+                                                    "quantity", Map.of("type", "integer", "minimum", 1)),
+                                            "required", List.of("code")))),
+                            "required", List.of("items"))),
+            tool("propose_build",
+                    "Chốt cấu hình đề xuất cho người dùng (gọi một lần, sau khi check_build không còn lỗi). "
+                            + "App vẽ bảng chi tiết từ dữ liệu này. Trả về kết quả kiểm tra tương thích.",
+                    Map.of("type", "object",
+                            "properties", Map.of(
+                                    "summary", Map.of("type", "string",
+                                            "description", "Một câu tóm tắt nhu cầu đã hiểu, vd 'Học online và làm văn phòng, máy nhỏ gọn'"),
+                                    "budget_vnd", Map.of("type", "integer", "description", "Ngân sách người dùng nói, đơn vị đồng; bỏ trống nếu chưa biết"),
+                                    "items", Map.of("type", "array",
+                                            "items", Map.of("type", "object",
+                                                    "properties", Map.of(
+                                                            "code", Map.of("type", "string", "description", "Mã linh kiện trong danh mục"),
+                                                            "quantity", Map.of("type", "integer", "minimum", 1),
+                                                            "spec", Map.of("type", "string", "description", "Thông số cụ thể nên mua"),
+                                                            "reason", Map.of("type", "string", "description", "Vì sao chọn, một câu"),
+                                                            "price_min_vnd", Map.of("type", "integer"),
+                                                            "price_max_vnd", Map.of("type", "integer"),
+                                                            "product_id", Map.of("type", "string", "description", "id kết quả search_products đã chọn, vd s3-2"),
+                                                            "buy_qty", Map.of("type", "integer", "minimum", 1, "description", "Số sản phẩm cần mua, mặc định = quantity")),
+                                                    "required", List.of("code", "spec", "reason")))),
+                            "required", List.of("summary", "items"))),
+            tool("search_products",
+                    "Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam (kết quả Google). Trả về tối đa 6 món: id, title, shop, "
+                            + "price_vnd (có thể null). Dùng id trong propose_build.",
+                    Map.of("type", "object",
+                            "properties", Map.of("query", Map.of("type", "string",
+                                    "description", "Từ khoá tiếng Việt theo thông số, vd 'SSD NVMe 512GB giá rẻ'")),
+                            "required", List.of("query"))));
+
+    private final LlmClient client;
+    private final ProductSearch search;
+    private final ComponentService componentService;
+    private final CompatibilityService compatibilityService;
+    private final PcBuildService pcBuildService;
+    private final JsonMapper json;
+    private final String model;
+    private final int maxTokens;
+
+    public ChatService(LlmClient client, ProductSearch search, ComponentService componentService,
+            CompatibilityService compatibilityService, PcBuildService pcBuildService, JsonMapper json,
+            @Value("${app.ai.model:deepseek-v4-flash}") String model,
+            @Value("${app.ai.max-tokens:2048}") int maxTokens) {
+        this.client = client;
+        this.search = search;
+        this.componentService = componentService;
+        this.compatibilityService = compatibilityService;
+        this.pcBuildService = pcBuildService;
+        this.json = json;
+        this.model = model;
+        this.maxTokens = maxTokens;
+    }
+
+    /**
+     * Cấu hình kiểm tra gần nhất trong một lượt trả lời. Đề xuất chốt bằng propose_build có thêm
+     * thông tin từng dòng (details, theo mã linh kiện), nhu cầu đã hiểu và ngân sách.
+     */
+    private record Checked(BuildCheckRequest request, CompatibilityResponse result,
+            Map<String, Map<String, Object>> details, String summary, Long budgetVnd,
+            Map<String, ProductSearch.Product> picks, Map<String, CompletableFuture<String>> links) {
+
+        Checked(BuildCheckRequest request, CompatibilityResponse result) {
+            this(request, result, Map.of(), null, null, Map.of(), Map.of());
+        }
+    }
+
+    /**
+     * Trạng thái của một lượt trả lời: cấu hình kiểm tra gần nhất và mọi kết quả search_products theo id ngắn.
+     * Trợ lý chỉ chọn bằng id, nên tên, giá, ảnh, link luôn lấy từ kết quả tìm kiếm thật, không thể bịa.
+     * Công cụ trong cùng một lượt chạy song song nên dùng cấu trúc an toàn đa luồng.
+     */
+    private static final class Turn {
+        volatile Checked last;
+        final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
+        final AtomicInteger searches = new AtomicInteger();
+    }
+
+    @SuppressWarnings("unchecked")
+    public ChatResponse reply(ChatRequest request) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
+                : "\nNgười dùng đang làm theo hướng dẫn lắp, hiện ở: " + request.guideStep().strip() + ".\n";
+        String intro = "advice".equals(request.mode()) ? ADVICE : ASSEMBLY;
+        if (!search.enabled()) {
+            intro += "\nLƯU Ý: tìm kiếm sản phẩm đang tắt. Bỏ qua bước tìm hàng thật, để trống phần sản phẩm, dùng giá ước tính "
+                    + "và không nêu tên hãng hay mẫu sản phẩm.\n";
+        }
+        messages.add(Map.of("role", "system", "content", intro + "\n" + RULES + "\n" + context(request.buildCode()) + step));
+        for (var m : request.messages()) {
+            // Lời chào mở đầu của khung chat là tin "assistant" đứng đầu: bỏ để hội thoại bắt đầu bằng người dùng
+            if (messages.size() == 1 && m.role().equals("assistant")) continue;
+            messages.add(Map.of("role", m.role(), "content", m.content()));
+        }
+        if (messages.size() == 1 || !messages.getLast().get("role").equals("user")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tin cuối cùng phải là câu hỏi của người dùng");
+        }
+
+        Turn turn = new Turn();
+        // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
+        var tools = search.enabled() ? TOOLS
+                : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
+        for (int round = 0; round < MAX_ROUNDS; round++) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", model);
+            body.put("max_tokens", maxTokens);
+            body.put("messages", messages);
+            body.put("tools", tools);
+
+            long t0 = System.nanoTime();
+            Map<String, Object> res = client.complete(body);
+            long aiMs = (System.nanoTime() - t0) / 1_000_000;
+            var choices = (List<Map<String, Object>>) res.getOrDefault("choices", List.of());
+            if (choices.isEmpty()) break;
+            var message = (Map<String, Object>) choices.getFirst().getOrDefault("message", Map.of());
+            var calls = (List<Map<String, Object>>) message.get("tool_calls");
+            if (calls == null || calls.isEmpty()) {
+                log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
+                long tc = System.nanoTime();
+                var done = turn.last == null ? null : card(turn.last);
+                log.info("Chat: dựng thẻ (đổi link cửa hàng) {} ms", (System.nanoTime() - tc) / 1_000_000);
+                return new ChatResponse(clean(message.get("content")), done);
+            }
+            // Gửi lại nguyên tin của model (kể cả reasoning_content của model suy luận) rồi tới kết quả từng công cụ
+            messages.add(message);
+            // Chạy song song các công cụ của cùng một lượt (thường là nhiều search_products), rồi trả kết quả theo đúng thứ tự
+            var results = calls.stream()
+                    .map(call -> CompletableFuture.supplyAsync(() -> runTool((Map<String, Object>) call.get("function"), turn)))
+                    .toList();
+            long t1 = System.nanoTime();
+            for (int i = 0; i < calls.size(); i++) {
+                messages.add(Map.of("role", "tool", "tool_call_id", String.valueOf(calls.get(i).get("id")),
+                        "content", results.get(i).join()));
+            }
+            log.info("Chat vòng {}: AI {} ms, {} công cụ {} chạy {} ms", round + 1, aiMs, calls.size(),
+                    calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
+                    (System.nanoTime() - t1) / 1_000_000);
+        }
+        return new ChatResponse("Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé.",
+                turn.last == null ? null : card(turn.last));
+    }
+
+    /** Danh mục linh kiện, máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
+    private String context(String buildCode) {
+        // Đưa sẵn danh mục (khoảng 25 món) để trợ lý khỏi mất một lượt gọi list_components, trả lời nhanh hơn
+        StringBuilder sb = new StringBuilder("Danh mục linh kiện của app (JSON):\n")
+                .append(json.writeValueAsString(componentService.findAll(null).stream().map(ChatService::brief).toList()))
+                .append("\n\nCác máy có sẵn trong app (mã: tên, mô tả):\n");
+        pcBuildService.findPresets().forEach(b ->
+                sb.append("- ").append(b.code()).append(": ").append(b.name()).append(", ").append(b.tagline()).append('\n'));
+        if (buildCode != null && !buildCode.isBlank()) {
+            try {
+                PcBuildResponse b = pcBuildService.findByCode(buildCode);
+                sb.append("\nNgười dùng đang xem máy \"").append(b.name()).append("\" (mã ").append(b.code())
+                        .append(") trên màn hình 3D. Linh kiện: ")
+                        .append(b.items().stream()
+                                .map(i -> i.quantity() + " × " + i.component().name() + " [" + i.component().code() + "]")
+                                .collect(Collectors.joining(", ")))
+                        .append(".\nKhi người dùng nói \"máy này\" là nói về máy đó.\n");
+            } catch (ResourceNotFoundException ignored) {
+                // Máy chưa có trong DB: trả lời chung, không kèm ngữ cảnh
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Chạy một lời gọi công cụ, trả về chuỗi JSON (hoặc lời báo lỗi) để model đọc */
+    @SuppressWarnings("unchecked")
+    private String runTool(Map<String, Object> function, Turn turn) {
+        try {
+            String name = String.valueOf(function.get("name"));
+            Object rawArgs = function.get("arguments");
+            Map<String, Object> input = rawArgs == null || rawArgs.toString().isBlank()
+                    ? Map.of()
+                    : json.readValue(rawArgs.toString(), Map.class);
+            Object out = switch (name) {
+                case "list_components" -> componentService.findAll(blankToNull(input.get("category"))).stream()
+                        .map(ChatService::brief).toList();
+                case "get_build" -> {
+                    PcBuildResponse b = pcBuildService.findByCode(String.valueOf(input.get("code")));
+                    yield Map.of("code", b.code(), "name", b.name(), "tagline", b.tagline(), "items", b.items().stream()
+                            .map(i -> Map.of("quantity", i.quantity(), "component", brief(i.component()))).toList());
+                }
+                case "check_build" -> {
+                    var req = checkRequest(input);
+                    var result = compatibilityService.check(req);
+                    // Đã chốt đề xuất thì giữ thẻ đề xuất, check_build sau đó chỉ để model tự thử
+                    if (turn.last == null || turn.last.summary() == null) turn.last = new Checked(req, result);
+                    yield result;
+                }
+                case "propose_build" -> {
+                    var req = checkRequest(input);
+                    var result = compatibilityService.check(req);
+                    Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+                    ((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
+                            .filter(i -> i.get("code") != null)
+                            .forEach(i -> details.put(String.valueOf(i.get("code")), i));
+                    // Sản phẩm đã chọn theo id; bắt đầu đổi link Google Shopping sang link cửa hàng ngay bây giờ,
+                    // chạy song song trong lúc trợ lý viết câu trả lời
+                    Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
+                    Map<String, CompletableFuture<String>> links = new LinkedHashMap<>();
+                    details.forEach((code, d) -> {
+                        var pick = turn.results.get(String.valueOf(d.get("product_id")).strip());
+                        if (pick == null) return;
+                        picks.put(code, pick);
+                        links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
+                    });
+                    turn.last = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
+                            input.get("budget_vnd") instanceof Number n ? n.longValue() : null, picks, links);
+                    // Tổng do backend cộng (giá cửa hàng nhân số lượng, hoặc giá ước tính), để trợ lý đọc đúng con số
+                    long totalMin = 0, totalMax = 0;
+                    for (var i : req.items()) {
+                        Long[] range = price(details.getOrDefault(i.code(), Map.of()), picks.get(i.code()), i.qty());
+                        totalMin += range[0] != null ? range[0] : (range[1] != null ? range[1] : 0);
+                        totalMax += range[1] != null ? range[1] : (range[0] != null ? range[0] : 0);
+                    }
+                    yield Map.of("saved", true, "compatibility", result, "total_min_vnd", totalMin, "total_max_vnd", totalMax,
+                            "note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
+                                    : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
+                }
+                case "search_products" -> {
+                    if (!search.enabled()) {
+                        yield Map.of("error", "Chưa bật tìm kiếm sản phẩm. Dùng giá ước tính và để trống phần sản phẩm.");
+                    }
+                    var found = search.search(String.valueOf(input.get("query")));
+                    int n = turn.searches.incrementAndGet();
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (int i = 0; i < found.size(); i++) {
+                        String id = "s" + n + "-" + (i + 1);
+                        var p = found.get(i);
+                        turn.results.put(id, p);
+                        // Không gửi link và ảnh cho trợ lý: nó chỉ cần chọn, link dài làm nó viết chậm
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("id", id);
+                        m.put("title", p.title());
+                        m.put("shop", p.shop());
+                        m.put("price_vnd", p.priceVnd());
+                        rows.add(m);
+                    }
+                    yield rows;
+                }
+                default -> throw new IllegalArgumentException("Không có công cụ " + name);
+            };
+            return json.writeValueAsString(out);
+        } catch (RuntimeException e) {
+            return "Lỗi: " + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static BuildCheckRequest checkRequest(Map<String, Object> input) {
+        return new BuildCheckRequest(((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
+                .filter(i -> i.get("code") != null)
+                .map(i -> new BuildCheckRequest.Item(String.valueOf(i.get("code")),
+                        i.get("quantity") instanceof Number n ? n.intValue() : null))
+                .toList());
+    }
+
+    /** Thẻ cấu hình cho khung chat: loại của từng linh kiện, sản phẩm đã chọn (nếu có), kèm kết quả kiểm tra */
+    private BuildCard card(Checked c) {
+        Map<String, Integer> qty = new LinkedHashMap<>();
+        c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
+        List<Line> lines = new ArrayList<>();
+        qty.forEach((code, n) -> {
+            ComponentResponse part = componentService.findByCode(code);
+            Map<String, Object> d = c.details().getOrDefault(code, Map.of());
+            var pick = c.picks().get(code);
+            Long[] range = price(d, pick, n);
+            String link = pick == null ? null : c.links().get(code).join();
+            lines.add(new Line(code, part.category(), part.name(), n, text(d.get("spec")), text(d.get("reason")),
+                    range[0], range[1], pick == null ? null : pick.imageUrl(), link,
+                    pick == null ? null : pick.title(), pick == null ? null : pick.shop()));
+        });
+        var r = c.result();
+        return new BuildCard(lines, r.compatible(), r.errors(), r.warnings(), c.summary(), c.budgetVnd());
+    }
+
+    /** [giá thấp, giá cao] của một dòng: giá cửa hàng nhân số lượng nếu có sản phẩm, còn lại là giá ước tính */
+    private static Long[] price(Map<String, Object> d, ProductSearch.Product pick, int qty) {
+        if (pick != null && pick.priceVnd() != null) {
+            // buy_qty: số sản phẩm phải mua (bộ kit 2 thanh RAM là 1 sản phẩm dù dòng có quantity 2)
+            int buy = d.get("buy_qty") instanceof Number b && b.intValue() > 0 ? b.intValue() : qty;
+            long v = pick.priceVnd() * buy;
+            return new Long[] { v, v };
+        }
+        return new Long[] { vnd(d.get("price_min_vnd")), vnd(d.get("price_max_vnd")) };
+    }
+
+    private static String text(Object o) {
+        return o == null || o.toString().isBlank() ? null : o.toString().strip();
+    }
+
+    /** Giá âm hay không phải số thì bỏ, để giao diện không cộng nhầm */
+    private static Long vnd(Object o) {
+        return o instanceof Number n && n.longValue() >= 0 ? n.longValue() : null;
+    }
+
+    /** Bản rút gọn của linh kiện cho AI: bỏ đường dẫn model / ảnh và các thông số còn trống */
+    private static Map<String, Object> brief(ComponentResponse c) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("code", c.code());
+        m.put("category", c.category());
+        m.put("name", c.name());
+        if (c.description() != null) m.put("description", c.description());
+        if (c.price() != null) m.put("price", c.price());
+        Map<String, Object> specs = new LinkedHashMap<>();
+        c.specs().forEach((k, v) -> {
+            if (v != null) specs.put(k, v);
+        });
+        m.put("specs", specs);
+        return m;
+    }
+
+    private static Map<String, Object> tool(String name, String description, Map<String, Object> parameters) {
+        return Map.of("type", "function",
+                "function", Map.of("name", name, "description", description, "parameters", parameters));
+    }
+
+    private static String blankToNull(Object o) {
+        return o == null || o.toString().isBlank() ? null : o.toString();
+    }
+
+    /** Bỏ phần suy nghĩ <think>...</think> mà vài model suy luận để lẫn trong câu trả lời */
+    private static String clean(Object content) {
+        String t = content == null ? "" : content.toString().replaceAll("(?s)<think>.*?</think>", "").strip();
+        return t.isEmpty() ? "Xin lỗi, mình chưa trả lời được câu này. Bạn thử hỏi theo cách khác nhé." : t;
+    }
+}

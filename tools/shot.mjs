@@ -1,5 +1,5 @@
 // Chụp app đang chạy (npm run dev, cổng 5173) bằng Chrome headless qua giao thức DevTools.
-// Dùng: node tools/shot.mjs <tiền tố ảnh> [bước ...]
+// Dùng: node tools/shot.mjs <tiền tố ảnh> [bước ...]   (đặt SHOT_SCHEME=dark để chụp chế độ tối)
 // Mỗi bước chụp một ảnh sau khi làm:
 //   ""            không làm gì
 //   "drag:dx,dy"  kéo chuột trên canvas để xoay camera
@@ -31,6 +31,8 @@ ws.addEventListener('message', (e) => {
 })
 const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })) })
 await send('Emulation.setDeviceMetricsOverride', { width: 1800, height: 1100, deviceScaleFactor: 1, mobile: false })
+// SHOT_SCHEME=dark để chụp giao diện chế độ tối
+if (process.env.SHOT_SCHEME) await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: process.env.SHOT_SCHEME }] })
 await send('Page.navigate', { url: 'http://localhost:5173/' })
 await sleep(9000)
 const list = steps.length ? steps : ['']

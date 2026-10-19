@@ -1,10 +1,9 @@
-import { ContactShadows, Grid, MeshReflectorMaterial } from '@react-three/drei'
+import { Grid, MeshReflectorMaterial } from '@react-three/drei'
 import { Bloom, EffectComposer, N8AO } from '@react-three/postprocessing'
 import { QUALITY } from '../perf/quality'
 import { useViewer } from '../store'
-
-// Màu nền studio sáng: trùng với nền, sương mù và sàn để sàn tan vào nền, không thấy đường chân trời
-export const STAGE_COLOR = '#fafafb'
+import { useStage } from '../theme'
+import { StaticContactShadows } from './StaticContactShadows'
 
 /**
  * Sàn studio kiểu trưng bày sản phẩm: mặt sàn bóng phản chiếu mờ, lưới mảnh nhạt dần theo khoảng cách,
@@ -12,17 +11,19 @@ export const STAGE_COLOR = '#fafafb'
  */
 export function StudioFloor({ y }: { y: number }) {
   const q = QUALITY[useViewer((s) => s.quality)]
+  // Màu sàn, lưới và bóng theo chế độ sáng / tối; nền và sương mù đặt ở Scene với cùng bảng màu
+  const c = useStage()
   return (
     <group position={[0, y, 0]}>
       <mesh rotation-x={-Math.PI / 2} raycast={() => null}>
         <planeGeometry args={[160, 160]} />
         {q.reflector === 0 ? (
           // Mức nhẹ: sàn thường, không phải vẽ cả cảnh thêm một lần để làm phản chiếu
-          <meshStandardMaterial color="#d4d4da" roughness={0.9} metalness={0.05} />
+          <meshStandardMaterial color={c.floor} roughness={0.9} metalness={0.05} />
         ) : (
         <MeshReflectorMaterial
           key={q.reflector}
-          color="#c9c9d0"
+          color={c.reflector}
           resolution={q.reflector}
           blur={[400, 120]}
           mixBlur={1}
@@ -41,15 +42,15 @@ export function StudioFloor({ y }: { y: number }) {
         args={[40, 40]}
         cellSize={0.5}
         cellThickness={0.55}
-        cellColor="#dcdce2"
+        cellColor={c.cell}
         sectionSize={2.5}
         sectionThickness={0.9}
-        sectionColor="#cfcfd7"
+        sectionColor={c.section}
         fadeDistance={24}
         fadeStrength={1.6}
         infiniteGrid
       />
-      <ContactShadows key={q.shadow} position={[0, 0.004, 0]} scale={14} resolution={q.shadow} blur={2.6} opacity={0.5} far={5} color="#1d1d1f" />
+      <StaticContactShadows position={[0, 0.004, 0]} scale={14} resolution={q.shadow} blur={2.6} opacity={0.5} far={5} color={c.shadow} />
     </group>
   )
 }

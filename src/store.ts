@@ -5,6 +5,9 @@ import type { PartId } from './data/parts'
 import { detectQuality, LOWER, loadPref, savePref, type QualityLevel, type QualityPref } from './perf/quality'
 
 interface ViewerState {
+  /** Trang đang mở: tư vấn chọn máy trước, rồi tới trang hướng dẫn (mô hình 3D) */
+  page: 'advice' | 'build'
+  setPage: (page: 'advice' | 'build') => void
   buildId: BuildId
   /** Họ case đang xem; null = máy Gaming đầy đủ (buildId) */
   familyId: FamilyId | null
@@ -19,6 +22,12 @@ interface ViewerState {
   /** "Bật máy": quạt quay, cảnh vẽ liên tục. Tắt thì cảnh đứng yên và chỉ vẽ lại khi có thay đổi. */
   powered: boolean
   togglePower: () => void
+  /** Đang mở hướng dẫn lắp từng bước: bảng bên trái thành danh sách bước, hình 3D lắp theo bước đang xem */
+  guide: boolean
+  /** Bước đang xem trong hướng dẫn (chỉ số trong guideSteps) */
+  guideIndex: number
+  setGuide: (on: boolean) => void
+  setGuideIndex: (i: number) => void
   /** Lựa chọn chất lượng của người dùng và mức đang dùng thực tế */
   qualityPref: QualityPref
   quality: QualityLevel
@@ -37,6 +46,8 @@ interface ViewerState {
 }
 
 export const useViewer = create<ViewerState>((set) => ({
+  page: 'advice',
+  setPage: (page) => set({ page }),
   buildId: 'gaming',
   familyId: null,
   exploded: false,
@@ -47,6 +58,11 @@ export const useViewer = create<ViewerState>((set) => ({
   inspecting: null,
   powered: false,
   togglePower: () => set((s) => ({ powered: !s.powered })),
+  guide: false,
+  guideIndex: 0,
+  // Mở hay đóng hướng dẫn đều đưa máy về trạng thái lắp đủ (exploded = false): đóng thì máy tự lắp lại từng bước
+  setGuide: (guide) => set({ guide, exploded: false, selected: null, inspecting: null }),
+  setGuideIndex: (guideIndex) => set({ guideIndex }),
   ...initialQuality(),
   setQualityPref: (qualityPref) => {
     savePref(qualityPref)
