@@ -90,7 +90,8 @@ export function FamilyRig({ id }: { id: FamilyId }) {
       {f.radiator && !coolerOut && <Hoses f={f} ihs={P.ihs} />}
 
       {/* GPU: R0 cắm thẳng vào khe; R+ / R- dựng qua riser */}
-      <Part id="gpu" position={u(f.gpu.origin)} explode={f.riser ? [0, 0, 1.4] : [0, 0, 1.5]} step="gpu">
+      {/* Card nằm sau tấm đỡ bo (Mini): tháo ra và lắp vào qua hông sau (-z); nếu ra +z thì card xuyên qua bo mạch */}
+      <Part id="gpu" position={u(f.gpu.origin)} explode={gpuBehindBoard(f) ? [0, 0, -1.4] : f.riser ? [0, 0, 1.4] : [0, 0, 1.5]} step="gpu">
         <group rotation-x={rotX(f.gpu.rot)}>
           <GlbSpinner url={MODEL_URL.gpu[f.gpu.kind]} nodes={GPU_FANS[f.gpu.kind]} axis="y" />
         </group>

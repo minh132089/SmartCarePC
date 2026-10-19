@@ -246,15 +246,20 @@ function gpuStep(m: GuideMachine): GuideStep {
     part: 'gpu',
     title: 'Cắm card đồ họa',
     why: 'Card đồ họa xử lý hình ảnh, cần cho chơi game, dựng phim và làm 3D.',
-    actions: m.riser
+    actions: m.gpuBehind
+      ? [
+          'Máy này dựng card bằng cáp riser: một dải cáp dẹt nối khe PCIe trên bo với card ở buồng phía sau tấm đỡ bo.',
+          'Trước khi lật vỏ: cắm đầu riser phía bo vào khe PCIe x16 trên bo (khe dài nhất, gần CPU nhất) cho tới khi kêu "tách".',
+          'Lật vỏ nằm nghiêng, hông có bo mạch úp xuống bàn, rồi tháo tấm hông đang hướng lên trên (hình bên cạnh đã xoay sang mặt này).',
+          'Mặt này là một buồng riêng chỉ dành cho card, nằm ngay dưới tấm hông vừa tháo, nên card được đặt từ trên xuống, không phải luồn vào sâu.',
+          'Ở mặt sau vỏ, tháo 2 tấm chắn ngang với khung card để lộ chỗ cho cổng màn hình.',
+          'Đặt card vào buồng, quạt card hướng lên phía tấm hông vừa tháo, cổng màn hình hướng ra mặt sau vỏ. Cắm card vào đầu riser còn lại cho tới khi lẫy kêu "tách", rồi bắt vít giữ card vào mặt sau vỏ.',
+          'Luồn dây nguồn PCIe 8 chân từ phía nguồn qua lỗ trên tấm đỡ sang buồng card.',
+          power,
+        ]
+      : m.riser
       ? [
           'Máy này dựng card bằng cáp riser: một dải cáp dẹt nối khe PCIe trên bo với card ở chỗ khác trong vỏ.',
-          ...(m.gpuBehind
-            ? [
-                'Card nằm phía sau tấm đỡ bo mạch nên lắp từ hông bên kia: tháo tấm hông đó ra (hình bên cạnh đã xoay sang mặt này).',
-                'Bên đó là một buồng riêng chỉ có card, không bị nguồn hay tản che, nên lắp card sau cùng vẫn với tay tới dễ dàng. Nhìn từ hông có bo thì không thấy card là bình thường.',
-              ]
-            : []),
           'Cắm đầu riser vào khe PCIe x16 trên bo (khe dài nhất, gần CPU nhất).',
           'Cắm card vào đầu riser còn lại cho tới khi lẫy kêu "tách", rồi bắt vít card vào khung đỡ.',
           power,
