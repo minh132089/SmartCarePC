@@ -136,6 +136,48 @@ class ChatServiceTests {
     }
 
     @Test
+    void monChuaCoSanPhamThiAppTuTimVaGan() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("low_profile_47")).thenReturn(part("low_profile_47", "cooler", "Tản khí thấp 47 mm"));
+        when(components.findByCode("tool_kit")).thenReturn(part("tool_kit", "tools", "Bộ đồ nghề"));
+        when(search.enabled()).thenReturn(true);
+        // Tìm theo thông số ra 3 món: phụ kiện rẻ bất thường, món hợp khoảng giá, món đắt; chọn món rẻ nhất trong khoảng
+        when(search.search("Tản khí thấp 47 mm, socket AM4")).thenReturn(List.of(
+                new ProductSearch.Product("Keo tản nhiệt", "Shop X", 40_000L, "https://x/keo", null),
+                new ProductSearch.Product("Tản ID-Cooling IS-40X", "Shop B", 450_000L, "https://b/is40", "https://img/is40.jpg"),
+                new ProductSearch.Product("Tản Noctua L9a", "Shop C", 1_300_000L, "https://c/l9a", null)));
+        // Thông số không ra gì thì tìm theo tên loại linh kiện
+        when(search.search("Bộ đồ nghề")).thenReturn(List.of(new ProductSearch.Product("Bộ tua vít 24 in 1", "Shop D", 150_000L, "https://d/tuavit", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("p1", "propose_build", """
+                {"summary":"Văn phòng nhỏ","items":[
+                  {"code":"low_profile_47","spec":"Tản khí thấp 47 mm, socket AM4","reason":"Vừa vỏ Mini","price_min_vnd":350000,"price_max_vnd":600000},
+                  {"code":"tool_kit","spec":"Tua vít đầu từ","reason":"Để tự lắp"}]}
+                """), answer("Xong."));
+
+        var card = service.reply(new ChatRequest(List.of(new Message("user", "máy văn phòng nhỏ")), null, null, "advice")).build();
+
+        assertThat(card.items().get(0).productName()).isEqualTo("Tản ID-Cooling IS-40X");
+        assertThat(card.items().get(0).sourceUrl()).isEqualTo("https://b/is40");
+        assertThat(card.items().get(0).priceMinVnd()).isEqualTo(450_000L);
+        assertThat(card.items().get(1).productName()).isEqualTo("Bộ tua vít 24 in 1");
+        // Trợ lý được báo món nào app đã tự gắn, để không nói "chưa tìm được hàng"
+        String toolResult = (String) messages(1).get(3).get("content");
+        assertThat(toolResult).contains("auto_filled").contains("Tản ID-Cooling IS-40X").contains("\"total_min_vnd\":600000");
+    }
+
+    @Test
+    void chonSanPhamTheoKhoangGia() {
+        var junk = new ProductSearch.Product("Phụ kiện", "S", 30_000L, "https://a", null);
+        var mid = new ProductSearch.Product("Hợp", "S", 500_000L, "https://b", null);
+        var noPrice = new ProductSearch.Product("Không giá", "S", null, "https://c", null);
+        assertThat(ChatService.choose(List.of(junk, mid), 400_000L, 600_000L)).isEqualTo(mid);
+        assertThat(ChatService.choose(List.of(noPrice, junk), null, null)).as("không có ước tính: món có giá đầu tiên").isEqualTo(junk);
+        assertThat(ChatService.choose(List.of(noPrice), 400_000L, null)).as("không món nào có giá").isEqualTo(noPrice);
+        assertThat(ChatService.choose(List.of(), 1L, 2L)).isNull();
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void chuaCoKhoaTimKiemThiKhongDuaCongCuTimKiem() {
         reply(answer("Ok."));

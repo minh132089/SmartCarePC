@@ -1,6 +1,7 @@
 package com.smartcarepc.backend.service.ai;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -67,17 +69,16 @@ public class ChatService {
             "RAM DDR4 16GB 3200 giá rẻ". Mỗi kết quả có một id ngắn (vd "s3-2"). Trong kết quả, chọn \
             món RẺ NHẤT mà vẫn đủ thông số và hợp nhu cầu, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
             cũ, "like new", hàng trưng bày, phụ kiện bán kèm, và giá rẻ bất thường (thấp hơn nhiều so với các kết quả \
-            khác cùng loại), vì người mới dễ mua phải hàng kém. Không tìm được thì để trống phần sản phẩm và dùng giá \
-            ước tính.
+            khác cùng loại), vì người mới dễ mua phải hàng kém.
             Món nào chưa có kết quả hợp thì được tìm lại TỐI ĐA MỘT LẦN, gộp mọi lần tìm lại vào cùng một lượt; vẫn \
-            không có thì dùng giá ước tính cho món đó.
+            không có thì để trống product_id: app sẽ tự tìm và gắn sản phẩm thật cho món đó (xem auto_filled).
             5. Sau lượt tìm kiếm, gọi thẳng propose_build (nó tự kiểm tra lắp chung). Không gọi check_build thêm lần nữa; \
             propose_build báo lỗi thì sửa đúng chỗ đó rồi gọi lại propose_build. Xem kỹ thông số trong danh mục trước khi \
             chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. Mỗi linh kiện ghi:
                - spec: thông số nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200");
-               - reason: một câu vì sao hợp với nhu cầu người dùng;
+               - reason: một câu vì sao hợp với nhu cầu người dùng (không nói chuyện tìm được hàng hay chưa);
                - product_id: id của kết quả đã chọn (vd "s3-2"). App tự điền tên, cửa hàng, giá, ảnh và link mua từ id \
-            này, nên KHÔNG chép tên hay link. Không tìm được sản phẩm thì bỏ trống;
+            này, nên KHÔNG chép tên hay link. Không tìm được sản phẩm thì bỏ trống, app tự tìm;
                - buy_qty: số sản phẩm đó cần mua, mặc định bằng quantity. Chọn bộ kit nhiều thanh thì buy_qty = 1 \
             (vd RAM quantity 2 nhưng mua một bộ "2x8GB" thì buy_qty = 1);
                - price_min_vnd, price_max_vnd: chỉ ghi khi không có product_id (khoảng giá ước tính).
@@ -376,6 +377,12 @@ public class ChatService {
                         picks.put(code, pick);
                         links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
+                    // Món trợ lý chưa chọn được sản phẩm: app tự tìm, để dòng nào cũng có hàng thật kèm link mua
+                    var auto = autoPick(req, details, picks);
+                    auto.forEach((code, pick) -> {
+                        picks.put(code, pick);
+                        links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
+                    });
                     turn.last = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
                             input.get("budget_vnd") instanceof Number n ? n.longValue() : null, picks, links);
                     // Tổng do backend cộng (giá cửa hàng nhân số lượng, hoặc giá ước tính), để trợ lý đọc đúng con số
@@ -385,9 +392,25 @@ public class ChatService {
                         totalMin += range[0] != null ? range[0] : (range[1] != null ? range[1] : 0);
                         totalMax += range[1] != null ? range[1] : (range[0] != null ? range[0] : 0);
                     }
-                    yield Map.of("saved", true, "compatibility", result, "total_min_vnd", totalMin, "total_max_vnd", totalMax,
-                            "note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
-                                    : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
+                    Map<String, Object> saved = new LinkedHashMap<>();
+                    saved.put("saved", true);
+                    saved.put("compatibility", result);
+                    saved.put("total_min_vnd", totalMin);
+                    saved.put("total_max_vnd", totalMax);
+                    saved.put("note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
+                            : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
+                    if (!auto.isEmpty()) {
+                        saved.put("auto_filled", auto.entrySet().stream().map(e -> {
+                            Map<String, Object> m = new LinkedHashMap<>();
+                            m.put("code", e.getKey());
+                            m.put("product", e.getValue().title());
+                            m.put("price_vnd", e.getValue().priceVnd());
+                            return m;
+                        }).toList());
+                        saved.put("auto_note", "App đã tự gắn sản phẩm thật cho các món trong auto_filled. Tổng ở trên đã tính giá "
+                                + "của chúng. Đừng nói là chưa tìm được hàng; nếu nhắc tới món đó thì dùng đúng tên và giá này.");
+                    }
+                    yield saved;
                 }
                 case "search_products" -> {
                     if (!search.enabled()) {
@@ -455,6 +478,65 @@ public class ChatService {
     /** Lời nhắn cho trợ lý có kèm mã linh kiện trong ngoặc vuông; người dùng không cần thấy mã */
     private static List<Issue> forUser(List<Issue> issues) {
         return issues.stream().map(i -> new Issue(i.rule(), i.message().replaceAll(" \\[[a-z0-9_]+\\]", ""))).toList();
+    }
+
+    /**
+     * Người dùng không rành kỹ thuật không tự tìm hàng theo thông số được, nên món nào trợ lý chưa chọn sản phẩm thì
+     * app tự tìm: theo thông số trợ lý ghi, không ra thì theo tên loại linh kiện. Các món tìm song song.
+     */
+    private Map<String, ProductSearch.Product> autoPick(BuildCheckRequest req, Map<String, Map<String, Object>> details,
+            Map<String, ProductSearch.Product> picks) {
+        if (!search.enabled()) return Map.of();
+        Map<String, CompletableFuture<ProductSearch.Product>> jobs = new LinkedHashMap<>();
+        for (var i : req.items()) {
+            if (picks.containsKey(i.code()) || jobs.containsKey(i.code())) continue;
+            Map<String, Object> d = details.getOrDefault(i.code(), Map.of());
+            String spec = text(d.get("spec"));
+            String name;
+            try {
+                name = componentService.findByCode(i.code()).name();
+            } catch (ResourceNotFoundException e) {
+                continue; // mã lạ: kiểm tra tương thích đã báo lỗi
+            }
+            Long lo = vnd(d.get("price_min_vnd")), hi = vnd(d.get("price_max_vnd"));
+            jobs.put(i.code(), CompletableFuture.supplyAsync(() -> findFor(spec, name, lo, hi)));
+        }
+        Map<String, ProductSearch.Product> out = new LinkedHashMap<>();
+        jobs.forEach((code, job) -> {
+            var p = job.join();
+            if (p != null) out.put(code, p);
+        });
+        return out;
+    }
+
+    private ProductSearch.Product findFor(String spec, String name, Long lo, Long hi) {
+        for (String query : Stream.of(spec, name).filter(Objects::nonNull).distinct().toList()) {
+            try {
+                var p = choose(search.search(query), lo, hi);
+                if (p != null) return p;
+            } catch (RuntimeException e) {
+                log.warn("Tự tìm sản phẩm cho \"{}\" lỗi: {}", query, e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Chọn một kết quả: món rẻ nhất có giá trong khoảng trợ lý ước tính (nới từ một nửa giá thấp tới gấp đôi giá cao, để
+     * tránh phụ kiện rẻ bất thường); không có ước tính hay không món nào lọt khoảng thì lấy món có giá xếp đầu (kết quả
+     * tìm kiếm đã xếp món liên quan nhất lên trước); không món nào có giá thì lấy kết quả đầu tiên.
+     */
+    static ProductSearch.Product choose(List<ProductSearch.Product> found, Long lo, Long hi) {
+        if (found.isEmpty()) return null;
+        var priced = found.stream().filter(p -> p.priceVnd() != null).toList();
+        if (lo != null || hi != null) {
+            long min = (lo != null ? lo : hi) / 2;
+            long max = (hi != null ? hi : lo) * 2;
+            var inRange = priced.stream().filter(p -> p.priceVnd() >= min && p.priceVnd() <= max)
+                    .min(Comparator.comparing(ProductSearch.Product::priceVnd));
+            if (inRange.isPresent()) return inRange.get();
+        }
+        return priced.isEmpty() ? found.getFirst() : priced.getFirst();
     }
 
     /** [giá thấp, giá cao] của một dòng: giá cửa hàng nhân số lượng nếu có sản phẩm, còn lại là giá ước tính */
