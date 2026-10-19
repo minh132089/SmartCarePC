@@ -105,8 +105,8 @@ public class DataInitializer implements CommandLineRunner {
                 { "ram", "Cắm RAM", "Rút RAM" },
                 { "ssd", "Lắp ổ SSD M.2", "Tháo ổ SSD" },
                 { "cooler", "Bôi keo, lắp tản nhiệt", "Tháo tản nhiệt" },
-                { "gpu", "Cắm card đồ họa", "Rút card đồ họa" },
                 { "fans", "Bắt quạt case", "Tháo quạt case" },
+                { "gpu", "Cắm card đồ họa", "Rút card đồ họa" },
                 { "cables", "Cắm và gom dây", "Rút dây cáp" },
         };
         for (int i = 0; i < steps.length; i++) {

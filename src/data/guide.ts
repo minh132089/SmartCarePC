@@ -142,12 +142,11 @@ export function guideSteps(familyId: FamilyId | null, buildId: BuildId): GuideSt
       check: 'SSD nằm phẳng sát bo mạch, đã bắt vít.',
     },
     coolerStep(m),
-    gpuStep(m),
     {
       id: 'fans',
       part: 'fans',
       title: 'Bắt quạt case',
-      why: 'Quạt case hút gió mát vào và đẩy gió nóng ra khỏi vỏ.',
+      why: 'Quạt case hút gió mát vào và đẩy gió nóng ra khỏi vỏ. Lắp quạt trước card đồ họa, vì card nằm ngang sẽ che chỗ bắt vít quạt và chân cắm quạt trên bo.',
       actions: [
         'Xem hai mũi tên nhỏ ở cạnh khung quạt: một mũi chỉ hướng gió, một mũi chỉ chiều quay.',
         'Quạt mặt trước và đáy thổi gió vào trong. Quạt phía sau và trên nóc thổi gió ra ngoài.',
@@ -161,6 +160,7 @@ export function guideSteps(familyId: FamilyId | null, buildId: BuildId): GuideSt
       warning: 'Dây đèn ARGB 3 chân (5 V) và RGB 4 chân (12 V) khác nhau. Cắm nhầm có thể làm cháy đèn.',
       check: 'Quạt bắt chắc, không chạm dây, mũi tên hướng gió đúng.',
     },
+    gpuStep(m),
     {
       id: 'cables',
       part: 'cables',

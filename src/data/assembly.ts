@@ -10,8 +10,9 @@ export const ASSEMBLY = [
   { key: 'ram', install: 'Cắm RAM', remove: 'Rút RAM' },
   { key: 'ssd', install: 'Lắp ổ SSD M.2', remove: 'Tháo ổ SSD' },
   { key: 'cooler', install: 'Bôi keo, lắp tản nhiệt', remove: 'Tháo tản nhiệt' },
-  { key: 'gpu', install: 'Cắm card đồ họa', remove: 'Rút card đồ họa' },
+  // Quạt trước card: card nằm ngang giữa vỏ sẽ che chỗ bắt vít quạt trước / đáy và chân cắm quạt trên bo
   { key: 'fans', install: 'Bắt quạt case', remove: 'Tháo quạt case' },
+  { key: 'gpu', install: 'Cắm card đồ họa', remove: 'Rút card đồ họa' },
   { key: 'cables', install: 'Cắm và gom dây', remove: 'Rút dây cáp' },
 ] as const
 
