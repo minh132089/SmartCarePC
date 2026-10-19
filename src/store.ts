@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { AssemblyKey } from './data/assembly'
 import type { BuildId } from './data/builds'
 import type { FamilyId } from './data/families'
 import type { PartId } from './data/parts'
@@ -26,6 +27,15 @@ interface ViewerState {
   guide: boolean
   /** Bước đang xem trong hướng dẫn (chỉ số trong guideSteps) */
   guideIndex: number
+  /**
+   * Linh kiện được lắp ở bước đang xem. Trong hướng dẫn, linh kiện của các bước sau chưa hiện:
+   * tới bước nào thì linh kiện của bước đó mới xuất hiện (xem Part.tsx).
+   */
+  guidePart: AssemblyKey | null
+  /** "Xem toàn cảnh": hiện cả máy đã lắp đủ thay cho trạng thái của bước đang xem */
+  guideFull: boolean
+  setGuidePart: (part: AssemblyKey | null) => void
+  setGuideFull: (on: boolean) => void
   setGuide: (on: boolean) => void
   setGuideIndex: (i: number) => void
   /** Lựa chọn chất lượng của người dùng và mức đang dùng thực tế */
@@ -61,8 +71,13 @@ export const useViewer = create<ViewerState>((set) => ({
   guide: false,
   guideIndex: 0,
   // Mở hay đóng hướng dẫn đều đưa máy về trạng thái lắp đủ (exploded = false): đóng thì máy tự lắp lại từng bước
-  setGuide: (guide) => set({ guide, exploded: false, selected: null, inspecting: null }),
-  setGuideIndex: (guideIndex) => set({ guideIndex }),
+  setGuide: (guide) => set({ guide, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null }),
+  // Chọn một bước thì thoát toàn cảnh để hình quay về đúng bước đó
+  setGuideIndex: (guideIndex) => set({ guideIndex, guideFull: false }),
+  guidePart: null,
+  guideFull: false,
+  setGuidePart: (guidePart) => set({ guidePart }),
+  setGuideFull: (guideFull) => set({ guideFull }),
   ...initialQuality(),
   setQualityPref: (qualityPref) => {
     savePref(qualityPref)

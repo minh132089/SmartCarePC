@@ -50,7 +50,7 @@ export function GamingRig() {
         <GamingModel name="motherboard" />
       </Part>
       {/* Tấm đỡ bơm nằm sau bo, tâm trùng socket; lắp trước khi bắt bo vào case */}
-      <Part id="cooler" position={u(onBoard(ON_BOARD.backplate))}>
+      <Part id="cooler" position={u(onBoard(ON_BOARD.backplate))} step="cooler">
         <GamingModel name="aio_backplate" />
       </Part>
       <Part id="cpu" position={u(onBoard(ON_BOARD.cpu))} explode={[0, 0, 0.9]} step="cpu">

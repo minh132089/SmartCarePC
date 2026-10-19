@@ -55,7 +55,8 @@ export function FamilyRig({ id }: { id: FamilyId }) {
       <Part id="motherboard" position={u(f.board.origin)}>
         <GlbModel url={MODEL_URL.board[f.board.ff]} />
       </Part>
-      <Part id="cooler" position={u(P.backplate)}>
+      {/* Tấm chống cong đi cùng bước lắp tản (explode 0: tách rời thì nằm yên, hướng dẫn thì hiện cùng tản) */}
+      <Part id="cooler" position={u(P.backplate)} step="cooler">
         <GlbModel url={MODEL_URL.backplate} />
       </Part>
       <Part id="cpu" position={u(P.cpu)} explode={[0, 0, 0.9]} step="cpu">
@@ -106,7 +107,7 @@ export function FamilyRig({ id }: { id: FamilyId }) {
           </group>
         </Part>
       ))}
-      <Part id="fans">
+      <Part id="fans" step="fans">
         {f.hub && (
           <group position={u(f.hub)} rotation-y={Math.PI}>
             <GlbModel url={MODEL_URL.hub} />

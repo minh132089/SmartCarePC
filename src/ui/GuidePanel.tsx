@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CaretLeft, Check } from '@phosphor-icons/react'
+import { CaretLeft, Check, Cube, ListNumbers } from '@phosphor-icons/react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
 import { firstUndone, guideSteps, loadDone, saveDone, sceneFor, type GuideStep } from '../data/guide'
@@ -24,6 +24,8 @@ export function GuidePanel() {
   const setGuide = useViewer((s) => s.setGuide)
   const setStep = useViewer((s) => s.setStep)
   const select = useViewer((s) => s.select)
+  const setGuidePart = useViewer((s) => s.setGuidePart)
+  const full = useViewer((s) => s.guideFull)
 
   const machine = familyId ?? buildId
   const machineLabel = familyId ? FAMILIES[familyId].label : getBuild(buildId).label
@@ -39,15 +41,22 @@ export function GuidePanel() {
 
   useEffect(() => saveDone(machine, done), [machine, done])
 
-  // Hình 3D: đưa máy về trạng thái ngay trước bước này, rồi lắp linh kiện của bước vào
+  // Hình 3D: đưa máy về trạng thái ngay trước bước này (linh kiện của các bước sau chưa hiện),
+  // rồi lắp linh kiện của bước vào. "Xem toàn cảnh" thì hiện cả máy đã lắp đủ.
   useEffect(() => {
+    if (full) {
+      setStep(0)
+      select(null)
+      return
+    }
     const { before, after } = sceneFor(current)
+    setGuidePart(current.part)
     setStep(before)
     select(current.part as PartId | null)
     if (before === after) return
     const t = setTimeout(() => setStep(after), 450)
     return () => clearTimeout(t)
-  }, [current, replay, setStep, select])
+  }, [current, replay, full, setStep, select, setGuidePart])
 
   // Đổi bước thì cuộn danh sách tới đầu bước đó. Chờ bước cũ thu lại và bước mới mở ra xong (.reveal 240 ms),
   // nếu cuộn ngay thì vị trí bị lệch vì chiều cao danh sách còn đang đổi
@@ -308,15 +317,27 @@ export function GuideCaption() {
   const familyId = useViewer((s) => s.familyId)
   const buildId = useViewer((s) => s.buildId)
   const index = useViewer((s) => s.guideIndex)
+  const full = useViewer((s) => s.guideFull)
+  const setFull = useViewer((s) => s.setGuideFull)
   const steps = useMemo(() => guideSteps(familyId, buildId), [familyId, buildId])
   if (!guide) return null
   const s = steps[Math.min(index, steps.length - 1)]
-  const text = `Bước ${index + 1}/${steps.length}: ${s.title}`
+  const text = full ? 'Toàn cảnh: máy đã lắp đủ mọi linh kiện' : `Bước ${index + 1}/${steps.length}: ${s.title}`
+  const pill = 'glass rounded-full bg-glass shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-line backdrop-blur-xl'
   return (
-    <div className="pointer-events-none absolute top-4 left-0 z-10 flex w-full justify-center px-4" aria-live="polite">
-      <div key={text} className="swap glass rounded-full bg-glass px-4 py-2 text-center text-[14px] font-medium text-ink shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-line backdrop-blur-xl">
+    <div className="pointer-events-none absolute top-4 left-0 z-10 flex w-full flex-wrap items-center justify-center gap-2 px-4">
+      <div key={text} aria-live="polite" className={`swap px-4 py-2 text-center text-[14px] font-medium text-ink ${pill}`}>
         {text}
       </div>
+      {/* Chuyển giữa "chỉ hiện linh kiện tới bước đang xem" và cả máy đã lắp xong để nhìn toàn cảnh */}
+      <button
+        onClick={() => setFull(!full)}
+        aria-pressed={full}
+        className={`pointer-events-auto flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-link hover:text-ink ${pill} ${press} ${focus}`}
+      >
+        {full ? <ListNumbers size={15} aria-hidden /> : <Cube size={15} aria-hidden />}
+        {full ? 'Về bước đang lắp' : 'Xem toàn cảnh'}
+      </button>
     </div>
   )
 }

@@ -35,6 +35,8 @@ export function Part({
 }) {
   const exploded = useViewer((s) => s.exploded)
   const out = useViewer((s) => (step ? isOut(s.step, step) : s.exploded))
+  // Hướng dẫn lắp: linh kiện của bước sau chưa xuất hiện; linh kiện của bước đang xem hiện ở chỗ tháo rồi bay vào
+  const hidden = useViewer((s) => !!step && s.guide && !s.guideFull && isOut(s.step, step) && s.guidePart !== step)
   const select = useViewer((s) => s.select)
   const hover = useViewer((s) => s.hover)
   const [over, setOver] = useState(false)
@@ -47,7 +49,9 @@ export function Part({
     immediate: reduce,
   })
 
+  // Ẩn thì không nhận chuột (three.js vẫn bắn tia trúng vật ẩn), để rê và bấm xuyên tới vỏ, bo phía sau
   const onOver = (e: ThreeEvent<PointerEvent>) => {
+    if (hidden) return
     e.stopPropagation()
     setOver(true)
     hover(id)
@@ -59,12 +63,13 @@ export function Part({
     document.body.style.cursor = 'auto'
   }
   const onClick = (e: ThreeEvent<MouseEvent>) => {
+    if (hidden) return
     e.stopPropagation()
     select(id)
   }
 
   return (
-    <group name={`mount_${id}`} position={position}>
+    <group name={`mount_${id}`} position={position} visible={!hidden}>
       <animated.group position={spring.offset as unknown as Vec3} onPointerOver={onOver} onPointerOut={onOut} onClick={onClick}>
         <PartContext.Provider value={id}>{children}</PartContext.Provider>
         {over && (
