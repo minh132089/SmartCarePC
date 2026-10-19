@@ -21,6 +21,7 @@ export function Thread({
   cardAction,
   compactCards,
   busyHints,
+  optionsView,
 }: {
   messages: Msg[]
   busy: boolean
@@ -32,18 +33,21 @@ export function Thread({
   compactCards?: boolean
   /** Dòng trạng thái lần lượt hiện khi chờ lâu (trang tư vấn phải tìm giá ở nhiều cửa hàng, mất cả phút) */
   busyHints?: string[]
+  /** Vẽ thay cho thẻ cấu hình khi tin có nhiều phương án (bảng so sánh ở trang tư vấn); trả null thì dùng thẻ thường */
+  optionsView?: (m: Msg, index: number) => ReactNode | null
 }) {
   return (
     <>
       {messages.map((m, i) => (
         <div key={i} className="space-y-2">
           <Bubble role={m.role}>{m.role === 'assistant' ? <Rich text={m.content} /> : m.content}</Bubble>
-          {m.build &&
+          {(m.options && optionsView?.(m, i)) ??
+            (m.build &&
             (compactCards ? (
               <CompactCard card={m.build} action={cardAction?.(m.build, i)} />
             ) : (
               <BuildCardView card={m.build} action={cardAction?.(m.build, i)} />
-            ))}
+            )))}
         </div>
       ))}
       {busy && <BusyBubble hints={busyHints} />}

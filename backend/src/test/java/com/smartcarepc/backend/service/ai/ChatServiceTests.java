@@ -167,6 +167,51 @@ class ChatServiceTests {
     }
 
     @Test
+    void baPhuongAnTraVeOptionsVaLayPhuHopLamTheChinh() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        String item = "{\"code\":\"ram_ddr4\",\"spec\":\"16 GB\",\"reason\":\"Đủ dùng\",\"price_min_vnd\":%d,\"price_max_vnd\":%d}";
+        var calls = new ArrayList<Map<String, Object>>();
+        for (var t : List.of(new Object[] { "cheap", 800_000 }, new Object[] { "balanced", 1_000_000 }, new Object[] { "quality", 1_500_000 })) {
+            calls.add(Map.of("id", "p-" + t[0], "type", "function", "function", Map.of("name", "propose_build",
+                    "arguments", "{\"tier\":\"" + t[0] + "\",\"summary\":\"Học\",\"items\":[" + item.formatted(t[1], t[1]) + "]}")));
+        }
+        reply(Map.of("choices", List.of(Map.of("finish_reason", "tool_calls",
+                "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))), answer("Ba phương án."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 12 triệu")), null, null, "advice"));
+
+        assertThat(res.options()).extracting(o -> o.tier()).containsExactly("cheap", "balanced", "quality");
+        assertThat(res.options()).extracting(o -> o.items().getFirst().priceMinVnd()).containsExactly(800_000L, 1_000_000L, 1_500_000L);
+        assertThat(res.build().tier()).isEqualTo("balanced");
+    }
+
+    @Test
+    void motPhuongAnThiKhongCoOptions() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        reply(toolCall("p1", "propose_build", """
+                {"summary":"Học","items":[{"code":"ram_ddr4","spec":"16 GB","reason":"Đủ dùng"}]}
+                """), answer("Một phương án."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        assertThat(res.options()).isNull();
+        assertThat(res.build().tier()).isEqualTo("balanced");
+    }
+
+    @Test
+    void nhanTenCuaHangRaTenMien() {
+        assertThat(ProductSearch.domainOf("Phong Vũ")).isEqualTo("phongvu.vn");
+        assertThat(ProductSearch.domainOf("Nguyễn Vũ Store")).isEqualTo("nguyenvu.store");
+        assertThat(ProductSearch.domainOf("Fptshop.com.vn")).isEqualTo("fptshop.com.vn");
+        assertThat(ProductSearch.domainOf("GEARVN")).isEqualTo("gearvn.com");
+        assertThat(ProductSearch.domainOf("Cửa hàng lạ")).isNull();
+        assertThat(ProductSearch.isGoogle("https://www.google.com/search?ibp=oshop&q=ram")).isTrue();
+        assertThat(ProductSearch.isGoogle("https://phongvu.vn/ram-16gb")).isFalse();
+    }
+
+    @Test
     void chonSanPhamTheoKhoangGia() {
         var junk = new ProductSearch.Product("Phụ kiện", "S", 30_000L, "https://a", null);
         var mid = new ProductSearch.Product("Hợp", "S", 500_000L, "https://b", null);

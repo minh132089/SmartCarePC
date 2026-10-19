@@ -32,8 +32,12 @@ export type BuildCard = {
   budgetVnd?: number | null
   /** Ghi chú khi số thanh RAM hoặc số quạt khác máy mẫu 3D của vỏ đã chọn (các món chính luôn khớp) */
   modelNote?: string | null
+  /** Phương án: cheap = Rẻ, balanced = Phù hợp cho bạn, quality = Chất lượng */
+  tier?: Tier | null
 }
-export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null }
+export type Tier = 'cheap' | 'balanced' | 'quality'
+/** options: ba phương án để so sánh (khi trợ lý đưa đủ); build là phương án "Phù hợp cho bạn" */
+export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null; options?: BuildCard[] | null }
 /** advice: trang tư vấn chọn máy. assembly: khung hỏi đáp khi lắp. */
 export type ChatMode = 'advice' | 'assembly'
 export type ChatContext = { buildCode?: string | null; guideStep?: string | null }
@@ -78,7 +82,7 @@ function createChat(mode: ChatMode) {
         })
         const data = await res.json().catch(() => null)
         if (!res.ok) throw new Error(data?.detail ?? (res.status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.'))
-        set({ messages: [...next, { role: 'assistant', content: data.reply, build: data.build }] })
+        set({ messages: [...next, { role: 'assistant', content: data.reply, build: data.build, options: data.options }] })
       } catch (e) {
         if (ctrl.signal.aborted) return
         set({ error: e instanceof TypeError ? OFFLINE : (e as Error).message })

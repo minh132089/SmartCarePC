@@ -66,15 +66,21 @@ public class ChatService {
             bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do.
             4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
             check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá tiếng Việt theo thông số, vd \
-            "RAM DDR4 16GB 3200 giá rẻ". Mỗi kết quả có một id ngắn (vd "s3-2"). Trong kết quả, chọn \
-            món RẺ NHẤT mà vẫn đủ thông số và hợp nhu cầu, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
+            "RAM DDR4 16GB 3200". Mỗi kết quả có một id ngắn (vd "s3-2"). Kết quả có nhiều mức giá: dùng chúng cho cả \
+            ba phương án ở bước 5, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
             cũ, "like new", hàng trưng bày, phụ kiện bán kèm, và giá rẻ bất thường (thấp hơn nhiều so với các kết quả \
             khác cùng loại), vì người mới dễ mua phải hàng kém.
             Món nào chưa có kết quả hợp thì được tìm lại TỐI ĐA MỘT LẦN, gộp mọi lần tìm lại vào cùng một lượt; vẫn \
             không có thì để trống product_id: app sẽ tự tìm và gắn sản phẩm thật cho món đó (xem auto_filled).
-            5. Sau lượt tìm kiếm, gọi thẳng propose_build (nó tự kiểm tra lắp chung). Không gọi check_build thêm lần nữa; \
-            propose_build báo lỗi thì sửa đúng chỗ đó rồi gọi lại propose_build. Xem kỹ thông số trong danh mục trước khi \
-            chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. Mỗi linh kiện ghi:
+            5. Sau lượt tìm kiếm, đưa BA PHƯƠNG ÁN để người dùng so sánh: gọi propose_build ba lần TRONG CÙNG MỘT LƯỢT \
+            (song song), mỗi lần một tier:
+               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, tổng không vượt ngân sách;
+               - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng trong ngân sách; đây là gợi ý chính;
+               - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, được vượt ngân sách tối đa khoảng 15%.
+            Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
+            check_build thêm lần nữa. Phương án nào báo lỗi thì sửa đúng chỗ đó rồi gọi lại propose_build với cùng tier. \
+            Xem kỹ thông số trong danh mục trước khi chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. \
+            Mỗi linh kiện ghi:
                - spec: thông số nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200");
                - reason: một câu vì sao hợp với nhu cầu người dùng (không nói chuyện tìm được hàng hay chưa);
                - product_id: id của kết quả đã chọn (vd "s3-2"). App tự điền tên, cửa hàng, giá, ảnh và link mua từ id \
@@ -82,11 +88,12 @@ public class ChatService {
                - buy_qty: số sản phẩm đó cần mua, mặc định bằng quantity. Chọn bộ kit nhiều thanh thì buy_qty = 1 \
             (vd RAM quantity 2 nhưng mua một bộ "2x8GB" thì buy_qty = 1);
                - price_min_vnd, price_max_vnd: chỉ ghi khi không có product_id (khoảng giá ước tính).
-            6. Tổng giá phải nằm trong ngân sách. Ngân sách quá thấp so với nhu cầu thì vẫn đề xuất phương án gần nhất, \
-            nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
-            7. App sẽ vẽ bảng chi tiết từng linh kiện và tổng giá so với ngân sách, nên trong câu trả lời đừng liệt kê lại. \
-            Chỉ nói tổng ước tính so với ngân sách, 2 hoặc 3 món quan trọng nhất, rồi mời bấm "Xem và lắp máy này".
-            Tổng nói trong câu trả lời lấy đúng total_min_vnd và total_max_vnd mà propose_build trả về, làm tròn tới \
+            6. Ngân sách quá thấp so với nhu cầu thì vẫn đưa ba phương án gần nhất, nói rõ thiếu khoảng bao nhiêu hoặc nên \
+            bớt món nào.
+            7. App sẽ vẽ bảng so sánh ba phương án và bảng chi tiết từng linh kiện, nên trong câu trả lời đừng liệt kê lại. \
+            Mỗi phương án viết một dòng: tên phương án, tổng ước tính so với ngân sách, và nó hợp với ai hoặc khác ở món \
+            nào (vd card mạnh hơn, ổ lớn hơn). Rồi gợi ý "Phù hợp cho bạn" và mời chọn một phương án để xem và lắp.
+            Tổng nói trong câu trả lời lấy đúng total_min_vnd và total_max_vnd mà từng propose_build trả về, làm tròn tới \
             0,1 triệu (vd "6,8 - 6,9 triệu"); hai số bằng nhau thì nói một số. Không tự cộng nhẩm.
             """;
 
@@ -167,6 +174,8 @@ public class ChatService {
                             + "App vẽ bảng chi tiết từ dữ liệu này. Trả về kết quả kiểm tra tương thích.",
                     Map.of("type", "object",
                             "properties", Map.of(
+                                    "tier", Map.of("type", "string", "enum", List.of("cheap", "balanced", "quality"),
+                                            "description", "Phương án: cheap = Rẻ, balanced = Phù hợp cho bạn, quality = Chất lượng"),
                                     "summary", Map.of("type", "string",
                                             "description", "Một câu tóm tắt nhu cầu đã hiểu, vd 'Học online và làm văn phòng, máy nhỏ gọn'"),
                                     "budget_vnd", Map.of("type", "integer", "description", "Ngân sách người dùng nói, đơn vị đồng; bỏ trống nếu chưa biết"),
@@ -238,6 +247,8 @@ public class ChatService {
         /** Trang tư vấn: cấu hình phải khớp máy mẫu 3D của vỏ đã chọn (ModelMatchService) */
         final boolean advice;
         volatile Checked last;
+        /** Ba phương án chốt bằng propose_build, theo tier (cheap / balanced / quality) */
+        final Map<String, Checked> tiers = new ConcurrentHashMap<>();
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
 
@@ -287,9 +298,9 @@ public class ChatService {
             if (calls == null || calls.isEmpty()) {
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
-                var done = turn.last == null ? null : card(turn.last, turn.advice);
+                var done = respond(clean(message.get("content")), turn);
                 log.info("Chat: dựng thẻ (đổi link cửa hàng) {} ms", (System.nanoTime() - tc) / 1_000_000);
-                return new ChatResponse(clean(message.get("content")), done);
+                return done;
             }
             // Gửi lại nguyên tin của model (kể cả reasoning_content của model suy luận) rồi tới kết quả từng công cụ
             messages.add(message);
@@ -306,8 +317,22 @@ public class ChatService {
                     calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
                     (System.nanoTime() - t1) / 1_000_000);
         }
-        return new ChatResponse("Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé.",
-                turn.last == null ? null : card(turn.last, turn.advice));
+        return respond("Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé.", turn);
+    }
+
+    /** Thứ tự hiện ba phương án trong bảng so sánh */
+    private static final List<String> TIERS = List.of("cheap", "balanced", "quality");
+
+    /**
+     * Câu trả lời kèm thẻ: có nhiều phương án thì trả cả danh sách (options) và lấy "balanced" làm thẻ chính (build),
+     * để các chỗ chỉ đọc một thẻ (lịch sử hội thoại, nút xem và lắp) vẫn chạy như cũ.
+     */
+    private ChatResponse respond(String reply, Turn turn) {
+        List<BuildCard> options = TIERS.stream().filter(turn.tiers::containsKey)
+                .map(t -> card(turn.tiers.get(t), turn.advice, t)).toList();
+        BuildCard build = options.stream().filter(o -> "balanced".equals(o.tier())).findFirst()
+                .orElseGet(() -> turn.last == null ? null : card(turn.last, turn.advice, null));
+        return new ChatResponse(reply, build, options.size() > 1 ? options : null);
     }
 
     /** Danh mục linh kiện, máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
@@ -383,8 +408,12 @@ public class ChatService {
                         picks.put(code, pick);
                         links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
-                    turn.last = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
+                    // Ba propose_build của cùng một lượt chạy song song: giữ thẻ trong biến riêng, không đọc lại turn.last
+                    var checked = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
                             input.get("budget_vnd") instanceof Number n ? n.longValue() : null, picks, links);
+                    String tier = TIERS.contains(String.valueOf(input.get("tier"))) ? String.valueOf(input.get("tier")) : "balanced";
+                    turn.tiers.put(tier, checked);
+                    turn.last = checked;
                     // Tổng do backend cộng (giá cửa hàng nhân số lượng, hoặc giá ước tính), để trợ lý đọc đúng con số
                     long totalMin = 0, totalMax = 0;
                     for (var i : req.items()) {
@@ -456,7 +485,7 @@ public class ChatService {
     }
 
     /** Thẻ cấu hình cho khung chat: loại của từng linh kiện, sản phẩm đã chọn (nếu có), kèm kết quả kiểm tra */
-    private BuildCard card(Checked c, boolean advice) {
+    private BuildCard card(Checked c, boolean advice, String tier) {
         Map<String, Integer> qty = new LinkedHashMap<>();
         c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
         List<Line> lines = new ArrayList<>();
@@ -472,7 +501,7 @@ public class ChatService {
         });
         var r = c.result();
         String note = advice ? modelMatch.check(c.request()).note() : null;
-        return new BuildCard(lines, r.compatible(), forUser(r.errors()), forUser(r.warnings()), c.summary(), c.budgetVnd(), note);
+        return new BuildCard(lines, r.compatible(), forUser(r.errors()), forUser(r.warnings()), c.summary(), c.budgetVnd(), note, tier);
     }
 
     /** Lời nhắn cho trợ lý có kèm mã linh kiện trong ngoặc vuông; người dùng không cần thấy mã */

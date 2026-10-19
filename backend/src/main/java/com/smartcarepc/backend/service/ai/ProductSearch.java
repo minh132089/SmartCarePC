@@ -102,21 +102,80 @@ public class ProductSearch {
     }
 
     /**
-     * Link trong mục Shopping là trang Google Shopping. Với sản phẩm đã chọn, tìm thêm một lần để lấy link trang
-     * sản phẩm trên đúng cửa hàng đó (khi tên cửa hàng là tên miền, vd "Fptshop.com.vn"). Không chắc thì giữ link cũ,
-     * vì từ trang Google Shopping người dùng vẫn bấm sang cửa hàng được.
+     * Tên cửa hàng máy tính hay gặp trong kết quả Google Shopping -> tên miền. Khoá là tên đã bỏ dấu, viết thường,
+     * bỏ khoảng trắng và ký tự lạ (xem slug()).
+     */
+    private static final Map<String, String> SHOP_DOMAINS = Map.ofEntries(
+            Map.entry("phongvu", "phongvu.vn"), Map.entry("hacom", "hacom.vn"), Map.entry("gearvn", "gearvn.com"),
+            Map.entry("anphatpc", "anphatpc.com.vn"), Map.entry("anphat", "anphatpc.com.vn"),
+            Map.entry("nguyenvustore", "nguyenvu.store"), Map.entry("nguyenvu", "nguyenvu.store"),
+            Map.entry("fptshop", "fptshop.com.vn"), Map.entry("thegioididong", "thegioididong.com"),
+            Map.entry("dienmayxanh", "dienmayxanh.com"), Map.entry("cellphones", "cellphones.com.vn"),
+            Map.entry("memoryzone", "memoryzone.com.vn"), Map.entry("tinhocngoisao", "tinhocngoisao.com"),
+            Map.entry("xgear", "xgear.net"), Map.entry("kccshop", "kccshop.vn"), Map.entry("pcmarket", "pcmarket.vn"),
+            Map.entry("songphuong", "songphuong.vn"), Map.entry("hanoicomputer", "hanoicomputer.vn"),
+            Map.entry("ankhang", "ankhang.vn"), Map.entry("ankhangpc", "ankhang.vn"), Map.entry("vitinhanphu", "vitinhanphu.com"),
+            Map.entry("tandoanh", "tandoanh.vn"), Map.entry("pcx", "pcx.vn"), Map.entry("hoanghapc", "hoanghapc.vn"),
+            Map.entry("shopee", "shopee.vn"), Map.entry("lazada", "lazada.vn"), Map.entry("tiki", "tiki.vn"));
+
+    /**
+     * Link trong mục Shopping là trang Google Shopping. Người dùng phải được đưa thẳng tới trang của cửa hàng, nên:
+     * 1. biết tên miền cửa hàng (tên là tên miền, hoặc có trong SHOP_DOMAINS) thì tìm trang sản phẩm trên tên miền đó;
+     * 2. không thì tìm "tên sản phẩm + tên cửa hàng", lấy kết quả đầu tiên có tên miền giống tên cửa hàng;
+     * 3. vẫn không có thì trang chủ của cửa hàng (biết tên miền), hoặc trang sản phẩm đầu tiên ngoài Google.
+     * Không bao giờ trả về link Google; không tìm được gì thì null (giao diện dùng nút tìm trên trang cửa hàng).
      */
     @SuppressWarnings("unchecked")
     public String directLink(String title, String shop, String link) {
-        if (!enabled() || link == null || title == null || !link.contains("google.com/")) return link;
-        String domain = shop == null ? null : shop.toLowerCase().strip().replaceFirst("^www\\.", "");
-        if (domain == null || !domain.matches("[a-z0-9.-]+\\.[a-z]{2,}")) return link;
-        Map<String, Object> res = post("/search", title + " site:" + domain);
+        if (link != null && !isGoogle(link)) return link;
+        if (!enabled() || title == null) return null;
+        String domain = domainOf(shop);
+        if (domain != null) {
+            String hit = firstOn(post("/search", title + " site:" + domain), domain);
+            return hit != null ? hit : "https://" + domain + "/";
+        }
+        var organic = (List<Map<String, Object>>) post("/search", title + (shop == null ? "" : " " + shop)).getOrDefault("organic", List.of());
+        String key = shop == null ? null : slug(shop);
+        String any = null;
+        for (var i : organic) {
+            String u = https(i.get("link"));
+            if (u == null || isGoogle(u) || host(u) == null) continue;
+            if (key != null && key.length() >= 4 && slug(host(u)).contains(key)) return u;
+            if (any == null) any = u;
+        }
+        return any;
+    }
+
+    /** Tên miền của cửa hàng theo tên hiện trong kết quả Shopping, null nếu không biết */
+    static String domainOf(String shop) {
+        if (shop == null) return null;
+        String s = shop.toLowerCase().strip().replaceFirst("^www\\.", "");
+        if (s.matches("[a-z0-9.-]+\\.[a-z]{2,}")) return s;
+        String key = slug(shop);
+        if (SHOP_DOMAINS.containsKey(key)) return SHOP_DOMAINS.get(key);
+        for (var e : SHOP_DOMAINS.entrySet()) if (key.startsWith(e.getKey()) && e.getKey().length() >= 4) return e.getValue();
+        return null;
+    }
+
+    /** "Nguyễn Vũ Store" -> "nguyenvustore", "phongvu.vn" -> "phongvuvn" */
+    static String slug(String s) {
+        String n = java.text.Normalizer.normalize(s.toLowerCase(), java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").replace('đ', 'd');
+        return n.replaceAll("[^a-z0-9]", "");
+    }
+
+    static boolean isGoogle(String url) {
+        String h = host(url);
+        return h == null || h.equals("google.com") || h.endsWith(".google.com") || h.startsWith("google.");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String firstOn(Map<String, Object> res, String domain) {
         return ((List<Map<String, Object>>) res.getOrDefault("organic", List.of())).stream()
                 .map(i -> https(i.get("link")))
                 .filter(u -> u != null && host(u) != null && (host(u).equals(domain) || host(u).endsWith("." + domain)))
                 .findFirst()
-                .orElse(link);
+                .orElse(null);
     }
 
     @SuppressWarnings("unchecked")
@@ -199,7 +258,7 @@ public class ProductSearch {
         return s != null && s.startsWith("https://") && s.length() <= 2000 && !s.contains(" ") ? s : null;
     }
 
-    private static String host(String url) {
+    static String host(String url) {
         try {
             return URI.create(url).getHost().replaceFirst("^www\\.", "");
         } catch (RuntimeException e) {

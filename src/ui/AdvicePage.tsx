@@ -3,7 +3,9 @@ import { ArrowCounterClockwise, ArrowRight, CaretRight, X } from '@phosphor-icon
 import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
-import { machineOfCard, useAdviceChat, type BuildCard } from './chat/chatStore'
+import { machineOfCard, useAdviceChat, type BuildCard, type Tier } from './chat/chatStore'
+import { OptionsCanvas } from './chat/Options'
+import { TIER_INFO } from './chat/tiers'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
 import { StudyBar, StudyJoinLink } from './study/StudyBar'
@@ -44,7 +46,10 @@ export function AdvicePage() {
   // Chọn xem cấu hình cũ; trợ lý đưa cấu hình mới (latest đổi) thì tự quay về cấu hình mới
   const [picked, setPicked] = useState<{ index: number; latest: number } | null>(null)
   const shown = picked && picked.latest === latest && messages[picked.index]?.build ? picked.index : latest
-  const card = shown >= 0 ? messages[shown].build! : null
+  // Tin có ba phương án: phương án đang xem theo từng tin (mặc định "Phù hợp cho bạn")
+  const [tiers, setTiers] = useState<Record<number, Tier>>({})
+  const tier = tiers[shown] ?? 'balanced'
+  const card = shown >= 0 ? (messages[shown].options?.find((o) => o.tier === tier) ?? messages[shown].build!) : null
   // Màn hình hẹp: bảng chi tiết mở thành trang phủ kín, bấm "Xem chi tiết linh kiện" mới hiện
   const [sheet, setSheet] = useState(false)
 
@@ -175,7 +180,28 @@ export function AdvicePage() {
           <div className="flex min-w-0 flex-1 flex-col">
             <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
               <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
-                <Thread messages={messages} busy={busy} error={error} onRetry={() => retry({})} cardAction={cardAction} compactCards busyHints={BUSY_HINTS} />
+                <Thread
+                  messages={messages}
+                  busy={busy}
+                  error={error}
+                  onRetry={() => retry({})}
+                  cardAction={cardAction}
+                  compactCards
+                  busyHints={BUSY_HINTS}
+                  optionsView={(m, i) =>
+                    m.options ? (
+                      <OptionsCanvas
+                        options={m.options}
+                        selected={i === shown ? tier : (tiers[i] ?? 'balanced')}
+                        onSelect={(t) => {
+                          setTiers((all) => ({ ...all, [i]: t }))
+                          setPicked({ index: i, latest })
+                          setSheet(true) // màn hình hẹp: mở bảng chi tiết; màn rộng bảng đã nằm bên phải
+                        }}
+                      />
+                    ) : null
+                  }
+                />
               </div>
             </div>
             <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">
@@ -187,7 +213,8 @@ export function AdvicePage() {
           </div>
           {/* Màn hình rộng: bảng chi tiết luôn nằm bên phải khi đã có cấu hình */}
           {card && (
-            <aside key={shown} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-line bg-panel px-5 py-6 lg:block">
+            <aside key={`${shown}-${card.tier ?? ''}`} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-line bg-panel px-5 py-6 lg:block">
+              {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label}</p>}
               <ProposalView card={card} action={buildButton(card)} />
             </aside>
           )}
@@ -202,6 +229,7 @@ export function AdvicePage() {
             <IconButton label="Đóng" onClick={() => setSheet(false)} icon={<X size={16} aria-hidden />} />
           </div>
           <div className="mx-auto max-w-[560px] px-5 py-5">
+            {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label}</p>}
             <ProposalView card={card} action={buildButton(card)} />
           </div>
         </div>

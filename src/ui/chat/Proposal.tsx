@@ -137,7 +137,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
           </a>
         )}
-        {/* Trợ lý chưa tìm được sản phẩm thật: vẫn cho một chỗ bắt đầu mua, là trang tìm theo đúng thông số (không phải link sản phẩm) */}
+        {/* Chưa có sản phẩm thật (hiếm, backend đã tự tìm): mở trang tìm theo thông số trên web cửa hàng, không phải link sản phẩm */}
         {!line.sourceUrl && (line.spec || part) && (
           <a
             href={shoppingSearch(line.spec || part!.name)}
@@ -205,9 +205,9 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
   )
 }
 
-/** Trang Google Shopping (khu vực Việt Nam) tìm sẵn theo thông số, cho dòng chưa có sản phẩm thật */
+/** Trang tìm kiếm trên web cửa hàng (GEARVN) theo thông số, cho dòng hiếm hoi chưa có sản phẩm thật; không qua Google */
 function shoppingSearch(query: string) {
-  return `https://www.google.com/search?tbm=shop&hl=vi&gl=vn&q=${encodeURIComponent(query)}`
+  return `https://gearvn.com/search?q=${encodeURIComponent(query)}`
 }
 
 function hostOf(url: string) {
