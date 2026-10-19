@@ -42,3 +42,6 @@ design/**/logs/
 
 # khoá API và mật khẩu cục bộ, không đưa lên GitHub
 .env
+
+# địa chỉ tunnel tạm, tools/demo.sh ghi lại mỗi lần chạy demo
+functions/_backend.js
