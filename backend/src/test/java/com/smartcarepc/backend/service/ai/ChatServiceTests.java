@@ -28,6 +28,7 @@ import com.smartcarepc.backend.dto.PcBuildResponse;
 import com.smartcarepc.backend.entity.enums.BuildType;
 import com.smartcarepc.backend.service.CompatibilityService;
 import com.smartcarepc.backend.service.ComponentService;
+import com.smartcarepc.backend.service.ModelMatchService;
 import com.smartcarepc.backend.service.PcBuildService;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -47,7 +48,8 @@ class ChatServiceTests {
     @BeforeEach
     void setUp() {
         when(builds.findPresets()).thenReturn(List.of());
-        service = new ChatService(client, search, components, compatibility, builds, JsonMapper.builder().build(), "test-model", 512);
+        service = new ChatService(client, search, components, compatibility, builds, new ModelMatchService(builds, components),
+                JsonMapper.builder().build(), "test-model", 512);
     }
 
     @Test

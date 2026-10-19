@@ -30,6 +30,8 @@ export type BuildCard = {
   /** Nhu cầu trợ lý đã hiểu và ngân sách người dùng nói (chỉ có ở cấu hình đã chốt) */
   summary?: string | null
   budgetVnd?: number | null
+  /** Ghi chú khi số thanh RAM hoặc số quạt khác máy mẫu 3D của vỏ đã chọn (các món chính luôn khớp) */
+  modelNote?: string | null
 }
 export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null }
 /** advice: trang tư vấn chọn máy. assembly: khung hỏi đáp khi lắp. */

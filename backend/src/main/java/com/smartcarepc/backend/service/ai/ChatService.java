@@ -21,11 +21,13 @@ import com.smartcarepc.backend.dto.ChatResponse;
 import com.smartcarepc.backend.dto.ChatResponse.BuildCard;
 import com.smartcarepc.backend.dto.ChatResponse.Line;
 import com.smartcarepc.backend.dto.CompatibilityResponse;
+import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
 import com.smartcarepc.backend.dto.ComponentResponse;
 import com.smartcarepc.backend.dto.PcBuildResponse;
 import com.smartcarepc.backend.exception.ResourceNotFoundException;
 import com.smartcarepc.backend.service.CompatibilityService;
 import com.smartcarepc.backend.service.ComponentService;
+import com.smartcarepc.backend.service.ModelMatchService;
 import com.smartcarepc.backend.service.PcBuildService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +58,10 @@ public class ChatService {
             2. Thiếu điều quan trọng (thường là ngân sách hoặc mục đích) thì hỏi lại, gộp thành một câu ngắn. \
             Đủ để chọn thì làm luôn.
             3. Chọn đủ linh kiện cho một máy từ danh mục. Luôn chọn một vỏ máy (case): app sẽ mở mô hình 3D đúng kiểu \
-            vỏ đó để hướng dẫn người dùng tự lắp từng bước.
+            vỏ đó để hướng dẫn người dùng tự lắp từng bước. Mỗi vỏ có máy mẫu dựng sẵn với bo mạch, tản nhiệt, card đồ \
+            họa và nguồn cố định (xem "Món đi kèm từng vỏ" ở cuối lời dặn), và hướng dẫn lắp dạy theo đúng các món đó. \
+            Vì vậy chọn vỏ trước theo nhu cầu (kích thước, kính, tản khí hay tản nước, card dài hay ngắn), rồi dùng đúng \
+            bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do.
             4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
             check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá tiếng Việt theo thông số, vd \
             "RAM DDR4 16GB 3200 giá rẻ". Mỗi kết quả có một id ngắn (vd "s3-2"). Trong kết quả, chọn \
@@ -190,12 +195,13 @@ public class ChatService {
     private final ComponentService componentService;
     private final CompatibilityService compatibilityService;
     private final PcBuildService pcBuildService;
+    private final ModelMatchService modelMatch;
     private final JsonMapper json;
     private final String model;
     private final int maxTokens;
 
     public ChatService(LlmClient client, ProductSearch search, ComponentService componentService,
-            CompatibilityService compatibilityService, PcBuildService pcBuildService, JsonMapper json,
+            CompatibilityService compatibilityService, PcBuildService pcBuildService, ModelMatchService modelMatch, JsonMapper json,
             @Value("${app.ai.model:deepseek-v4-flash}") String model,
             @Value("${app.ai.max-tokens:2048}") int maxTokens) {
         this.client = client;
@@ -203,6 +209,7 @@ public class ChatService {
         this.componentService = componentService;
         this.compatibilityService = compatibilityService;
         this.pcBuildService = pcBuildService;
+        this.modelMatch = modelMatch;
         this.json = json;
         this.model = model;
         this.maxTokens = maxTokens;
@@ -227,9 +234,15 @@ public class ChatService {
      * Công cụ trong cùng một lượt chạy song song nên dùng cấu trúc an toàn đa luồng.
      */
     private static final class Turn {
+        /** Trang tư vấn: cấu hình phải khớp máy mẫu 3D của vỏ đã chọn (ModelMatchService) */
+        final boolean advice;
         volatile Checked last;
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
+
+        Turn(boolean advice) {
+            this.advice = advice;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -252,7 +265,7 @@ public class ChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tin cuối cùng phải là câu hỏi của người dùng");
         }
 
-        Turn turn = new Turn();
+        Turn turn = new Turn("advice".equals(request.mode()));
         // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
@@ -273,7 +286,7 @@ public class ChatService {
             if (calls == null || calls.isEmpty()) {
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
-                var done = turn.last == null ? null : card(turn.last);
+                var done = turn.last == null ? null : card(turn.last, turn.advice);
                 log.info("Chat: dựng thẻ (đổi link cửa hàng) {} ms", (System.nanoTime() - tc) / 1_000_000);
                 return new ChatResponse(clean(message.get("content")), done);
             }
@@ -293,7 +306,7 @@ public class ChatService {
                     (System.nanoTime() - t1) / 1_000_000);
         }
         return new ChatResponse("Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé.",
-                turn.last == null ? null : card(turn.last));
+                turn.last == null ? null : card(turn.last, turn.advice));
     }
 
     /** Danh mục linh kiện, máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
@@ -304,6 +317,8 @@ public class ChatService {
                 .append("\n\nCác máy có sẵn trong app (mã: tên, mô tả):\n");
         pcBuildService.findPresets().forEach(b ->
                 sb.append("- ").append(b.code()).append(": ").append(b.name()).append(", ").append(b.tagline()).append('\n'));
+        String fixed = modelMatch.presetParts();
+        if (!fixed.isEmpty()) sb.append("\nMón đi kèm từng vỏ (mô hình 3D và hướng dẫn lắp dựng theo đúng các món này):\n").append(fixed);
         if (buildCode != null && !buildCode.isBlank()) {
             try {
                 PcBuildResponse b = pcBuildService.findByCode(buildCode);
@@ -339,14 +354,14 @@ public class ChatService {
                 }
                 case "check_build" -> {
                     var req = checkRequest(input);
-                    var result = compatibilityService.check(req);
+                    var result = matched(compatibilityService.check(req), req, turn);
                     // Đã chốt đề xuất thì giữ thẻ đề xuất, check_build sau đó chỉ để model tự thử
                     if (turn.last == null || turn.last.summary() == null) turn.last = new Checked(req, result);
                     yield result;
                 }
                 case "propose_build" -> {
                     var req = checkRequest(input);
-                    var result = compatibilityService.check(req);
+                    var result = matched(compatibilityService.check(req), req, turn);
                     Map<String, Map<String, Object>> details = new LinkedHashMap<>();
                     ((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
                             .filter(i -> i.get("code") != null)
@@ -403,6 +418,11 @@ public class ChatService {
         }
     }
 
+    /** Trang tư vấn: thêm lỗi khi bo mạch, tản nhiệt, card hay nguồn khác máy mẫu 3D của vỏ đã chọn */
+    private CompatibilityResponse matched(CompatibilityResponse result, BuildCheckRequest req, Turn turn) {
+        return turn.advice ? ModelMatchService.merge(result, modelMatch.check(req).errors()) : result;
+    }
+
     @SuppressWarnings("unchecked")
     private static BuildCheckRequest checkRequest(Map<String, Object> input) {
         return new BuildCheckRequest(((List<Map<String, Object>>) input.getOrDefault("items", List.of())).stream()
@@ -413,7 +433,7 @@ public class ChatService {
     }
 
     /** Thẻ cấu hình cho khung chat: loại của từng linh kiện, sản phẩm đã chọn (nếu có), kèm kết quả kiểm tra */
-    private BuildCard card(Checked c) {
+    private BuildCard card(Checked c, boolean advice) {
         Map<String, Integer> qty = new LinkedHashMap<>();
         c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
         List<Line> lines = new ArrayList<>();
@@ -428,7 +448,13 @@ public class ChatService {
                     pick == null ? null : pick.title(), pick == null ? null : pick.shop()));
         });
         var r = c.result();
-        return new BuildCard(lines, r.compatible(), r.errors(), r.warnings(), c.summary(), c.budgetVnd());
+        String note = advice ? modelMatch.check(c.request()).note() : null;
+        return new BuildCard(lines, r.compatible(), forUser(r.errors()), forUser(r.warnings()), c.summary(), c.budgetVnd(), note);
+    }
+
+    /** Lời nhắn cho trợ lý có kèm mã linh kiện trong ngoặc vuông; người dùng không cần thấy mã */
+    private static List<Issue> forUser(List<Issue> issues) {
+        return issues.stream().map(i -> new Issue(i.rule(), i.message().replaceAll(" \\[[a-z0-9_]+\\]", ""))).toList();
     }
 
     /** [giá thấp, giá cao] của một dòng: giá cửa hàng nhân số lượng nếu có sản phẩm, còn lại là giá ước tính */

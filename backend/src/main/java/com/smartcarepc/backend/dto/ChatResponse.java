@@ -11,6 +11,7 @@ import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
  * thông số nên mua, lý do chọn, giá (VND, cho cả số lượng của dòng đó), và sản phẩm thật trợ lý tìm được
  * bằng search_products: tên (productName), cửa hàng (shop), ảnh (imageUrl), trang mua (sourceUrl).
  * Link chỉ nhận khi có trong kết quả tìm kiếm của lượt đó, nên không có link bịa; không có thì null.
+ * modelNote: ghi chú khi số thanh RAM hoặc số quạt khác máy mẫu 3D của vỏ đã chọn (null nếu giống).
  */
 public record ChatResponse(String reply, BuildCard build) {
 
@@ -19,7 +20,7 @@ public record ChatResponse(String reply, BuildCard build) {
     }
 
     public record BuildCard(List<Line> items, boolean compatible, List<Issue> errors, List<Issue> warnings,
-            String summary, Long budgetVnd) {
+            String summary, Long budgetVnd, String modelNote) {
     }
 
     public record Line(String code, String category, String name, int quantity,

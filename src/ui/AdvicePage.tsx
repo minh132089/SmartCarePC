@@ -66,13 +66,16 @@ export function AdvicePage() {
     if (!c.compatible) return null
     if (!machine) return <p className="text-[12.5px] text-ink-2">App chưa có mô hình 3D cho kiểu vỏ này.</p>
     return (
-      <button
-        onClick={() => open(machine)}
-        className={`flex w-full items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
-      >
-        Xem và lắp máy này
-        <CaretRight size={13} aria-hidden />
-      </button>
+      <>
+        <button
+          onClick={() => open(machine)}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
+        >
+          Xem và lắp máy này
+          <CaretRight size={13} aria-hidden />
+        </button>
+        {c.modelNote && <p className="mt-2 text-[12.5px] leading-[1.45] text-ink-2">{c.modelNote}</p>}
+      </>
     )
   }
 
