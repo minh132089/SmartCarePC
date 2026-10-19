@@ -1,6 +1,6 @@
 import { Bounds, Environment, Lightformer, OrbitControls } from '@react-three/drei'
 import { animated, useSpring } from '@react-spring/three'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { getBuild } from '../data/builds'
 import { boardOrigin } from '../data/layout'
@@ -15,7 +15,8 @@ import { Effects, StudioFloor } from './Stage'
 import { useStage } from '../theme'
 import { GamingRig } from './GamingRig'
 import { FamilyRig } from './FamilyRig'
-import { FAMILIES, familyFloorY } from '../data/families'
+import { FAMILIES, familyFloorY, gpuBehindBoard } from '../data/families'
+import { Spherical, Vector3 } from 'three'
 import { ToolKit } from './ToolKit'
 
 export function Scene() {
@@ -87,6 +88,7 @@ export function Scene() {
 
       <StudioFloor y={floorY} />
       <Effects />
+      <GuideCamera back={!!familyId && gpuBehindBoard(FAMILIES[familyId])} />
       {import.meta.env.DEV && <DevExpose />}
       <OrbitControls makeDefault enablePan={false} minDistance={3} maxDistance={20} />
     </Canvas>
@@ -110,6 +112,57 @@ function SwapIn({ children }: { children: ReactNode }) {
       {children}
     </animated.group>
   )
+}
+
+/** Hướng nhìn từ sau-phải, hông có tấm đỡ bo phía sau (đo bằng tia trên Mini / SFF: thấy ~96% card) */
+const BACK_VIEW = new Spherical().setFromVector3(new Vector3(0.5, 0.3, -0.85))
+
+/**
+ * Bước cắm card của máy có card nằm sau tấm đỡ bo (Mini / SFF): từ góc mặc định, card bị tản, bo và nguồn che gần hết
+ * (đo bằng tia: thấy 0–8%). Camera bay vòng quanh máy tới hướng BACK_VIEW, rời bước đó thì quay về góc đang xem trước đó.
+ * Chỉ bay lúc đổi bước; giữa chừng người dùng vẫn tự xoay được.
+ */
+function GuideCamera({ back }: { back: boolean }) {
+  const want = useViewer((s) => back && s.guide && !s.guideFull && s.guidePart === 'gpu')
+  const controls = useThree((s) => s.controls) as unknown as { object: { position: Vector3 }; target: Vector3; update: () => void } | null
+  const invalidate = useThree((s) => s.invalidate)
+  const anim = useRef<{ from: Spherical; to: Spherical; t: number } | null>(null)
+  /** Góc người dùng đang xem trước khi bay ra sau, để quay về đúng chỗ */
+  const saved = useRef<Spherical | null>(null)
+
+  useEffect(() => {
+    if (!controls || want === (saved.current !== null)) return
+    const from = new Spherical().setFromVector3(controls.object.position.clone().sub(controls.target))
+    let to: Spherical
+    if (want) {
+      saved.current = from.clone()
+      to = new Spherical(from.radius, BACK_VIEW.phi, BACK_VIEW.theta)
+    } else {
+      to = saved.current!
+      saved.current = null
+    }
+    // Đi đường vòng ngắn nhất quanh trục đứng
+    let theta = to.theta
+    while (theta - from.theta > Math.PI) theta -= 2 * Math.PI
+    while (theta - from.theta < -Math.PI) theta += 2 * Math.PI
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    anim.current = { from, to: new Spherical(to.radius, to.phi, theta), t: reduce ? 1 : 0 }
+    invalidate()
+  }, [want, controls, invalidate])
+
+  useFrame((_, dt) => {
+    const a = anim.current
+    if (!a || !controls) return
+    a.t = Math.min(1, a.t + dt / 0.9)
+    const e = a.t < 0.5 ? 2 * a.t * a.t : 1 - (-2 * a.t + 2) ** 2 / 2 // ease-in-out
+    const lerp = (x: number, y: number) => x + (y - x) * e
+    const p = new Vector3().setFromSpherical(new Spherical(lerp(a.from.radius, a.to.radius), lerp(a.from.phi, a.to.phi), lerp(a.from.theta, a.to.theta)))
+    controls.object.position.copy(controls.target).add(p)
+    controls.update()
+    if (a.t >= 1) anim.current = null
+    else invalidate()
+  })
+  return null
 }
 
 /** Chỉ ở bản dev: cho công cụ kiểm tra (tools/shot.mjs, console) đọc cảnh qua window.__scene. */

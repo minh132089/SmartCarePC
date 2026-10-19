@@ -1,6 +1,6 @@
 import { ASSEMBLY, STEPS, type AssemblyKey } from './assembly'
 import { getBuild, type BuildId } from './builds'
-import { FAMILIES, type FamilyId } from './families'
+import { FAMILIES, gpuBehindBoard, type FamilyId } from './families'
 
 /**
  * Hướng dẫn lắp máy từng bước cho người mới. Thứ tự các bước lắp trùng với data/assembly.ts
@@ -26,6 +26,8 @@ interface GuideMachine {
   psu: 'atx' | 'sfx'
   board: 'ATX' | 'mATX' | 'ITX'
   riser: boolean
+  /** Card nằm sau tấm đỡ bo mạch: lắp từ hông bên kia của vỏ */
+  gpuBehind: boolean
   hub: boolean
 }
 
@@ -38,6 +40,7 @@ function machineOf(familyId: FamilyId | null, buildId: BuildId): GuideMachine {
       psu: f.psu.kind,
       board: f.board.ff,
       riser: !!f.riser,
+      gpuBehind: gpuBehindBoard(f),
       hub: familyId === 'full_tower' || familyId === 'showcase_dual_chamber',
     }
   }
@@ -47,6 +50,7 @@ function machineOf(familyId: FamilyId | null, buildId: BuildId): GuideMachine {
     psu: b.psu === 'SFX' ? 'sfx' : 'atx',
     board: b.formFactor,
     riser: false,
+    gpuBehind: false,
     hub: false,
   }
 }
@@ -245,6 +249,9 @@ function gpuStep(m: GuideMachine): GuideStep {
     actions: m.riser
       ? [
           'Máy này dựng card bằng cáp riser: một dải cáp dẹt nối khe PCIe trên bo với card ở chỗ khác trong vỏ.',
+          ...(m.gpuBehind
+            ? ['Card nằm phía sau tấm đỡ bo mạch nên lắp từ hông bên kia: tháo tấm hông đó ra (hình bên cạnh đã xoay sang mặt này).']
+            : []),
           'Cắm đầu riser vào khe PCIe x16 trên bo (khe dài nhất, gần CPU nhất).',
           'Cắm card vào đầu riser còn lại cho tới khi lẫy kêu "tách", rồi bắt vít card vào khung đỡ.',
           power,

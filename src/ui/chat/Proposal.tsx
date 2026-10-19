@@ -1,4 +1,4 @@
-import { ArrowSquareOut, ImageSquare } from '@phosphor-icons/react'
+import { ArrowSquareOut, ImageSquare, MagnifyingGlass } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
 import { totalOf, vnd, vndRange, type BuildCard, type BuildLine } from './chatStore'
@@ -137,6 +137,19 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
           </a>
         )}
+        {/* Trợ lý chưa tìm được sản phẩm thật: vẫn cho một chỗ bắt đầu mua, là trang tìm theo đúng thông số (không phải link sản phẩm) */}
+        {!line.sourceUrl && (line.spec || part) && (
+          <a
+            href={shoppingSearch(line.spec || part!.name)}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-fill-hover ${focus}`}
+          >
+            <MagnifyingGlass size={14} aria-hidden className="shrink-0" />
+            <span className="truncate">Tìm mua theo thông số này</span>
+            <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
+          </a>
+        )}
         {part && (
           <>
             <button
@@ -190,6 +203,11 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
       )}
     </div>
   )
+}
+
+/** Trang Google Shopping (khu vực Việt Nam) tìm sẵn theo thông số, cho dòng chưa có sản phẩm thật */
+function shoppingSearch(query: string) {
+  return `https://www.google.com/search?tbm=shop&hl=vi&gl=vn&q=${encodeURIComponent(query)}`
 }
 
 function hostOf(url: string) {

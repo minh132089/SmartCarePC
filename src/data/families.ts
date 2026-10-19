@@ -96,6 +96,12 @@ export const FAMILIES: Record<FamilyId, Family> = Object.fromEntries(
 export const rotate = (r: Rot, [x, y, z]: Mm3): Mm3 => (r === 'R0' ? [x, y, z] : r === 'R+' ? [x, -z, y] : [x, z, -y])
 export const rotX = (r: Rot) => (r === 'R0' ? 0 : r === 'R+' ? Math.PI / 2 : -Math.PI / 2)
 
+/**
+ * Card nằm sau tấm đỡ bo mạch (kiểu "sandwich", nối với bo bằng cáp riser): nhìn từ hông có bo thì bị tản, bo và nguồn
+ * che gần hết, phải lắp và xem từ hông bên kia. Hiện chỉ có Mini / SFF; Showcase dùng riser nhưng card nằm sát kính trước.
+ */
+export const gpuBehindBoard = (f: Family) => !!f.riser && f.gpu.origin[2] < f.board.origin[2]
+
 /** Gốc linh kiện trên bo (tâm bo + toạ độ cục bộ, z theo lưng bo). */
 export const onFamilyBoard = (f: Family, p: Mm3): Mm3 => add(f.board.origin, p)
 

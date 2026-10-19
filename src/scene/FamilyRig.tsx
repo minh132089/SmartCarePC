@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { BufferAttribute, BufferGeometry, CatmullRomCurve3, DoubleSide, TubeGeometry, Vector3 } from 'three'
-import { FAMILIES, HEADER_Z, MODEL_URL, RAD_FITTING_X, familyPlacement, rotX, rotate, type Family, type FamilyId } from '../data/families'
+import { FAMILIES, HEADER_Z, MODEL_URL, RAD_FITTING_X, familyPlacement, gpuBehindBoard, rotX, rotate, type Family, type FamilyId } from '../data/families'
 import { PUMP_FITTINGS, add, u, type Mm3 } from '../data/gaming'
 import { useViewer } from '../store'
 import { useOut } from '../data/assembly'
@@ -37,7 +37,10 @@ export function FamilyRig({ id }: { id: FamilyId }) {
   const cablesOut = useOut('cables')
   const sideOpen = useViewer((s) => s.sideOpen)
   const cablesOpen = useViewer((s) => s.selected === 'cables')
-  const hide = sideOpen ? (cablesOpen ? OPEN_CLOSED : OPEN) : cablesOpen ? CLOSED : undefined
+  // Bước cắm card của máy có card sau tấm đỡ bo: mở luôn tấm hông bên kia (panel_closed) để thấy card
+  const gpuSide = useViewer((s) => s.guide && !s.guideFull && s.guidePart === 'gpu') && gpuBehindBoard(f)
+  const backOpen = cablesOpen || gpuSide
+  const hide = sideOpen ? (backOpen ? OPEN_CLOSED : OPEN) : backOpen ? CLOSED : undefined
   const cooler = f.cooler.kind
   const aio = cooler === 'aio_240' || cooler === 'aio_360'
 
