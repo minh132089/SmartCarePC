@@ -15,8 +15,10 @@ import { Effects, StudioFloor } from './Stage'
 import { useStage } from '../theme'
 import { GamingRig } from './GamingRig'
 import { FamilyRig } from './FamilyRig'
-import { FAMILIES, familyFloorY, gpuBehindBoard } from '../data/families'
-import { Spherical, Vector3 } from 'three'
+import { FAMILIES, familyFloorY } from '../data/families'
+import { guideView } from '../data/guideViews'
+import type { Machine, Vec3 } from '../data/installPaths'
+import { Box3, Spherical, Vector3 } from 'three'
 import { ToolKit } from './ToolKit'
 
 export function Scene() {
@@ -88,7 +90,7 @@ export function Scene() {
 
       <StudioFloor y={floorY} />
       <Effects />
-      <GuideCamera back={!!familyId && gpuBehindBoard(FAMILIES[familyId])} />
+      <GuideCamera machine={familyId ?? 'gaming'} />
       {import.meta.env.DEV && <DevExpose />}
       <OrbitControls makeDefault enablePan={false} minDistance={3} maxDistance={20} />
     </Canvas>
@@ -114,31 +116,44 @@ function SwapIn({ children }: { children: ReactNode }) {
   )
 }
 
-/** Hướng nhìn từ sau-phải, hông có tấm đỡ bo phía sau (đo bằng tia trên Mini / SFF: thấy ~96% card) */
-const BACK_VIEW = new Spherical().setFromVector3(new Vector3(0.5, 0.3, -0.85))
-
 /**
- * Bước cắm card của máy có card nằm sau tấm đỡ bo (Mini / SFF): từ góc mặc định, card bị tản, bo và nguồn che gần hết
- * (đo bằng tia: thấy 0–8%). Camera bay vòng quanh máy tới hướng BACK_VIEW, rời bước đó thì quay về góc đang xem trước đó.
+ * Bước lắp có hướng nhìn riêng (data/guideViews.ts, vd card sau tấm đỡ của Mini, nguồn dưới tấm che): camera bay vòng
+ * quanh máy tới hướng đó, giữ khoảng cách; rời bước thì quay về góc người dùng đang xem trước khi bay.
  * Chỉ bay lúc đổi bước; giữa chừng người dùng vẫn tự xoay được.
  */
-function GuideCamera({ back }: { back: boolean }) {
-  const want = useViewer((s) => back && s.guide && !s.guideFull && s.guidePart === 'gpu')
+function GuideCamera({ machine }: { machine: Machine }) {
+  const view = useViewer((s) => (s.guide && !s.guideFull ? guideView(machine, s.guidePart) : null))
+  const part = useViewer((s) => s.guidePart)
+  const scene = useThree((s) => s.scene)
   const controls = useThree((s) => s.controls) as unknown as { object: { position: Vector3 }; target: Vector3; update: () => void } | null
   const invalidate = useThree((s) => s.invalidate)
-  const anim = useRef<{ from: Spherical; to: Spherical; t: number } | null>(null)
-  /** Góc người dùng đang xem trước khi bay ra sau, để quay về đúng chỗ */
-  const saved = useRef<Spherical | null>(null)
+  const anim = useRef<{ from: Spherical; to: Spherical; fromT: Vector3; toT: Vector3; t: number } | null>(null)
+  /** Góc và điểm nhìn người dùng đang dùng trước khi bay sang hướng riêng, để quay về đúng chỗ */
+  const saved = useRef<{ sph: Spherical; target: Vector3 } | null>(null)
+  const shown = useRef<Vec3 | null>(null)
 
   useEffect(() => {
-    if (!controls || want === (saved.current !== null)) return
+    if (!controls || view === shown.current) return
+    shown.current = view
     const from = new Spherical().setFromVector3(controls.object.position.clone().sub(controls.target))
+    const fromT = controls.target.clone()
     let to: Spherical
-    if (want) {
-      saved.current = from.clone()
-      to = new Spherical(from.radius, BACK_VIEW.phi, BACK_VIEW.theta)
+    let toT: Vector3
+    if (view) {
+      if (!saved.current) saved.current = { sph: from.clone(), target: fromT.clone() }
+      const v = new Spherical().setFromVector3(new Vector3(...view))
+      to = new Spherical(from.radius, v.phi, v.theta)
+      // Dời điểm nhìn 70% về phía linh kiện của bước (vd nguồn ở đáy), vẫn giữ cả vỏ trong khung
+      const box = new Box3()
+      scene.traverse((o) => {
+        if (o.userData.step === part) box.expandByObject(o)
+      })
+      const base = saved.current.target
+      toT = box.isEmpty() ? base.clone() : base.clone().lerp(box.getCenter(new Vector3()), 0.7)
     } else {
-      to = saved.current!
+      if (!saved.current) return
+      to = saved.current.sph
+      toT = saved.current.target
       saved.current = null
     }
     // Đi đường vòng ngắn nhất quanh trục đứng
@@ -146,9 +161,9 @@ function GuideCamera({ back }: { back: boolean }) {
     while (theta - from.theta > Math.PI) theta -= 2 * Math.PI
     while (theta - from.theta < -Math.PI) theta += 2 * Math.PI
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    anim.current = { from, to: new Spherical(to.radius, to.phi, theta), t: reduce ? 1 : 0 }
+    anim.current = { from, to: new Spherical(to.radius, to.phi, theta), fromT, toT, t: reduce ? 1 : 0 }
     invalidate()
-  }, [want, controls, invalidate])
+  }, [view, part, scene, controls, invalidate])
 
   useFrame((_, dt) => {
     const a = anim.current
@@ -157,6 +172,7 @@ function GuideCamera({ back }: { back: boolean }) {
     const e = a.t < 0.5 ? 2 * a.t * a.t : 1 - (-2 * a.t + 2) ** 2 / 2 // ease-in-out
     const lerp = (x: number, y: number) => x + (y - x) * e
     const p = new Vector3().setFromSpherical(new Spherical(lerp(a.from.radius, a.to.radius), lerp(a.from.phi, a.to.phi), lerp(a.from.theta, a.to.theta)))
+    controls.target.lerpVectors(a.fromT, a.toT, e)
     controls.object.position.copy(controls.target).add(p)
     controls.update()
     if (a.t >= 1) anim.current = null
