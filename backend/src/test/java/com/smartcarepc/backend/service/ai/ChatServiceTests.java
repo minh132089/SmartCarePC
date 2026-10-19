@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.smartcarepc.backend.dto.BuildCheckRequest;
 import com.smartcarepc.backend.dto.ChatRequest;
+import com.smartcarepc.backend.dto.ChatResponse;
 import com.smartcarepc.backend.dto.ChatRequest.Message;
 import com.smartcarepc.backend.dto.ChatResponse.Line;
 import com.smartcarepc.backend.dto.CompatibilityResponse;
@@ -295,6 +296,55 @@ class ChatServiceTests {
 
         assertThat(line.productName()).isEqualTo("RTX 3060 Phong Vu");
         assertThat(line.sourceUrl()).isEqualTo("https://phongvu.vn/rtx3060");
+    }
+
+    @Test
+    void phuongAnReKhongBaoGioVuotNganSach() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        // Ngân sách 1 triệu nhưng trợ lý chọn món 1,1 triệu cho phương án Rẻ (và không sửa dù được báo)
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A", "A", 1_100_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B", "B", 950_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C", "C", 900_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
+                toolCall("p1", "propose_build", """
+                {"tier":"cheap","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
+                """), toolCall("p2", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-2"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        // Build vượt ngân sách bị bỏ, option đánh số lại từ 1
+        var cheap = res.options().stream().filter(o -> "cheap".equals(o.tier())).toList();
+        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD B", "SSD C");
+        assertThat(cheap).extracting(ChatResponse.BuildCard::variant).containsExactly(1, 2);
+        assertThat(res.options()).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_000_000L));
+    }
+
+    @Test
+    void doiMonLayLinkKhongDayPhuongAnQuaNganSach() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        // Món trợ lý chọn không có link; món giá gần nhất (B) làm vượt ngân sách nên phải lấy món rẻ hơn (C)
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A", "A", 950_000L, "https://www.google.com/a", null),
+                new ProductSearch.Product("SSD B", "B", 1_020_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C", "C", 870_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> "SSD A".equals(inv.getArgument(0)) ? null : inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
+                toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD C");
+        assertThat(res.build().items().getFirst().sourceUrl()).isEqualTo("https://c.vn/1");
     }
 
     @Test

@@ -74,8 +74,8 @@ public class ChatService {
             không có thì để trống product_id: app sẽ tự tìm và gắn sản phẩm thật cho món đó (xem auto_filled).
             5. Sau lượt tìm kiếm, đưa BA PHƯƠNG ÁN để người dùng so sánh: gọi propose_build ba lần TRONG CÙNG MỘT LƯỢT \
             (song song), mỗi lần một tier:
-               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, tổng không vượt ngân sách;
-               - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng trong ngân sách; đây là gợi ý chính;
+               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, tổng TUYỆT ĐỐI không vượt ngân sách;
+               - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng TUYỆT ĐỐI không vượt ngân sách; đây là gợi ý chính;
                - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, được vượt ngân sách tối đa khoảng 15%.
             Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
             check_build thêm lần nữa. Phương án nào báo lỗi hoặc over_budget thì sửa đúng chỗ đó rồi gọi lại propose_build với cùng tier. \
@@ -339,14 +339,62 @@ public class ChatService {
             // Mọi nút mua phải vào thẳng web cửa hàng. Link đã đổi song song lúc trợ lý viết câu trả lời; món nào vẫn
             // không có link thì thay bằng sản phẩm cùng nhóm có link (hiếm, vài giây)
             Checked base = turn.tiers.get(t);
-            if (turn.advice && search.enabled()) base = withLinkedPicks(base, t);
-            options.add(card(base, turn.advice, t, 1));
-            int v = 2;
-            for (var alt : turn.variants.getOrDefault(t, List.of())) options.add(card(withLinks(alt, base), turn.advice, t, v++));
+            Long cap = turn.advice ? tierCap(base.budgetVnd(), t) : null;
+            if (turn.advice && search.enabled()) base = withLinkedPicks(base, t, cap);
+            List<Checked> all = new ArrayList<>();
+            all.add(base);
+            for (var alt : turn.variants.getOrDefault(t, List.of())) all.add(withLinks(alt, base));
+            // Luật cứng: Rẻ và Phù hợp không vượt ngân sách, Chất lượng không vượt quá 15%. Đo trên thẻ cuối cùng (sau khi
+            // đổi món lấy link), cùng cách cộng với giao diện; build nào vượt thì bỏ, số option đánh lại từ 1
+            List<Checked> kept = withinCap(all, cap);
+            if (kept.isEmpty() && search.enabled()) {
+                // Trợ lý vẫn chọn vượt dù đã được báo: thử bộ rẻ nhất trong cùng các lần tìm kiếm
+                var low = cheapest(base, t, cap);
+                if (total(low.request(), low.details(), low.picks()) <= cap) kept = List.of(low);
+            }
+            if (kept.isEmpty()) {
+                kept = List.of(all.stream().min(Comparator.comparingLong(c -> total(c.request(), c.details(), c.picks()))).orElseThrow());
+                log.warn("Phương án {} vượt trần {} dù đã thử bộ rẻ nhất", t, cap);
+            }
+            int v = 1;
+            for (var c : kept) options.add(card(c, turn.advice, t, v++));
         }
         BuildCard build = options.stream().filter(o -> "balanced".equals(o.tier()) && o.variant() == 1).findFirst()
                 .orElseGet(() -> turn.last == null ? null : card(turn.last, turn.advice, null, 1));
         return new ChatResponse(reply, build, options.size() > 1 ? options : null);
+    }
+
+    /** Các build không vượt trần (cap null: không giới hạn), bỏ build trùng hệt nhau sau khi đổi món lấy link */
+    private static List<Checked> withinCap(List<Checked> all, Long cap) {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        return all.stream()
+                .filter(c -> cap == null || total(c.request(), c.details(), c.picks()) <= cap)
+                .filter(c -> seen.add(signature(c.picks())))
+                .toList();
+    }
+
+    /** Mỗi món đổi sang sản phẩm rẻ nhất cùng nhóm tìm kiếm (hàng mới, đúng loại bộ / thanh lẻ), rồi lấy link */
+    private Checked cheapest(Checked c, String tier, Long cap) {
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        for (var e : c.picks().entrySet()) {
+            var p = e.getValue();
+            if (p.priceVnd() == null) continue;
+            candidates(p, c.siblings().getOrDefault(e.getKey(), List.of()), kit(c.request(), c.details(), e.getKey()), "cheap").stream()
+                    .filter(a -> a.priceVnd() < p.priceVnd())
+                    .min(Comparator.comparingLong(ProductSearch.Product::priceVnd))
+                    .ifPresent(a -> {
+                        picks.put(e.getKey(), a);
+                        links.put(e.getKey(), CompletableFuture.supplyAsync(() -> search.directLink(a.title(), a.shop(), a.url())));
+                    });
+        }
+        return withLinkedPicks(new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings()), tier, cap);
+    }
+
+    /** Dòng mua theo bộ (buy_qty nhỏ hơn số lượng, vd RAM 2x8GB là 1 sản phẩm cho 2 thanh) */
+    private static boolean kit(BuildCheckRequest req, Map<String, Map<String, Object>> details, String code) {
+        int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
+        return details.getOrDefault(code, Map.of()).get("buy_qty") instanceof Number b && b.intValue() < qty;
     }
 
     /** Hàng không nên đưa người mới tham khảo */
@@ -370,8 +418,8 @@ public class ChatService {
         for (int v = 0; v < 2; v++) {
             var picks = variantPicks(c, tier, v, false);
             // Vượt trần thì chỉ đổi sang món không đắt hơn món trợ lý chọn; vẫn vượt thì bỏ build này
-            if (cap != null && total(c, picks) > Math.max(cap, total(c, c.picks()))) picks = variantPicks(c, tier, v, true);
-            if (cap != null && total(c, picks) > Math.max(cap, total(c, c.picks()))) continue;
+            if (cap != null && total(c.request(), c.details(), picks) > cap) picks = variantPicks(c, tier, v, true);
+            if (cap != null && total(c.request(), c.details(), picks) > cap) continue;
             if (!seen.add(signature(picks))) continue;
             Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
             picks.forEach((code, p) -> {
@@ -391,9 +439,7 @@ public class ChatService {
     private Map<String, ProductSearch.Product> variantPicks(Checked c, String tier, int v, boolean notPricier) {
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
         for (var e : c.picks().entrySet()) {
-            Map<String, Object> d = c.details().getOrDefault(e.getKey(), Map.of());
-            int qty = c.request().items().stream().filter(i -> i.code().equals(e.getKey())).mapToInt(BuildCheckRequest.Item::qty).sum();
-            boolean kit = d.get("buy_qty") instanceof Number b && b.intValue() < qty;
+            boolean kit = kit(c.request(), c.details(), e.getKey());
             long base = e.getValue().priceVnd() == null ? Long.MAX_VALUE : e.getValue().priceVnd();
             var alts = candidates(e.getValue(), c.siblings().getOrDefault(e.getKey(), List.of()), kit, tier).stream()
                     .filter(a -> !notPricier || a.priceVnd() <= base).limit(2).toList();
@@ -402,12 +448,15 @@ public class ChatService {
         return picks;
     }
 
-    /** Tổng giá của bộ sản phẩm (giá cửa hàng nhân số mua, dòng không có sản phẩm dùng giá ước tính thấp) */
-    private static long total(Checked c, Map<String, ProductSearch.Product> picks) {
+    /**
+     * Tổng giá của bộ sản phẩm (giá cửa hàng nhân số mua; dòng không có sản phẩm lấy giá ước tính cao), cùng cách giao
+     * diện tính "dư / vượt" ngân sách
+     */
+    private static long total(BuildCheckRequest req, Map<String, Map<String, Object>> details, Map<String, ProductSearch.Product> picks) {
         long sum = 0;
-        for (var i : c.request().items()) {
-            Long[] r = price(c.details().getOrDefault(i.code(), Map.of()), picks.get(i.code()), i.qty());
-            sum += r[0] != null ? r[0] : (r[1] != null ? r[1] : 0);
+        for (var i : req.items()) {
+            Long[] r = price(details.getOrDefault(i.code(), Map.of()), picks.get(i.code()), i.qty());
+            sum += r[1] != null ? r[1] : (r[0] != null ? r[0] : 0);
         }
         return sum;
     }
@@ -439,23 +488,30 @@ public class ChatService {
      * Chờ đổi link cửa hàng cho mọi món (song song). Món nào không có link hoặc chỉ có trang chủ cửa hàng thì thử các
      * sản phẩm cùng nhóm tìm kiếm, giá gần nhất trong khoảng của phương án, tới khi có link (tối đa 4 lần mỗi món).
      */
-    private Checked withLinkedPicks(Checked c, String tier) {
+    private Checked withLinkedPicks(Checked c, String tier, Long cap) {
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
         Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
-        linkedPicks(c.request(), c.details(), picks, links, c.siblings(), tier);
+        linkedPicks(c.request(), c.details(), picks, links, c.siblings(), tier, cap);
         return new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
     private void linkedPicks(BuildCheckRequest req, Map<String, Map<String, Object>> details, Map<String, ProductSearch.Product> picks,
-            Map<String, CompletableFuture<String>> links, Map<String, List<ProductSearch.Product>> siblings, String tier) {
+            Map<String, CompletableFuture<String>> links, Map<String, List<ProductSearch.Product>> siblings, String tier, Long cap) {
         Map<String, CompletableFuture<ProductSearch.Product>> fixes = new LinkedHashMap<>();
-        links.forEach((code, link) -> {
-            String now = link.join();
-            if (now != null && !ProductSearch.homePage(now)) return;
+        var weak = links.entrySet().stream().filter(e -> {
+            String l = e.getValue().join();
+            return l == null || ProductSearch.homePage(l);
+        }).map(Map.Entry::getKey).toList();
+        // Phần còn dư tới trần chia đều cho các món phải đổi, để đổi món lấy link không làm phương án vượt trần
+        long allowance = cap == null || weak.isEmpty() ? Long.MAX_VALUE : (cap - total(req, details, picks)) / weak.size();
+        weak.forEach(code -> {
+            String now = links.get(code).join();
             var pick = picks.get(code);
             int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
-            boolean kit = details.getOrDefault(code, Map.of()).get("buy_qty") instanceof Number b && b.intValue() < qty;
-            var candidates = candidates(pick, siblings.getOrDefault(code, List.of()), kit, tier);
+            Long[] was = price(details.getOrDefault(code, Map.of()), pick, qty);
+            var candidates = candidates(pick, siblings.getOrDefault(code, List.of()), kit(req, details, code), tier).stream()
+                    .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
+                    .toList();
             fixes.put(code, CompletableFuture.supplyAsync(() -> {
                 // Ưu tiên món có trang sản phẩm; chỉ toàn trang chủ thì món đang chọn đã có trang chủ vẫn giữ nguyên
                 ProductSearch.Product home = null;
@@ -599,10 +655,11 @@ public class ChatService {
                     saved.put("total_max_vnd", totalMax);
                     saved.put("note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
                             : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
-                    // Phương án vượt trần của nó (Rẻ, Phù hợp: ngân sách; Chất lượng: +15%) quá 3%: báo để trợ lý chọn lại
+                    // Phương án vượt trần của nó (Rẻ, Phù hợp: ngân sách; Chất lượng: +15%): báo để trợ lý chọn lại. Thẻ vượt
+                    // trần không được gửi cho người dùng (respond)
                     Long cap = tierCap(checked.budgetVnd(), tier);
-                    if (turn.advice && cap != null && totalMin > cap * 1.03) {
-                        saved.put("over_budget", "Tổng " + totalMin + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
+                    if (turn.advice && cap != null && totalMax > cap) {
+                        saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
                                 + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier.");
                     }
                     if (!auto.isEmpty()) {
