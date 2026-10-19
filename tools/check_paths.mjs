@@ -115,13 +115,19 @@ try {
     throw null
   }
   const list = await check(machines.length ? machines : undefined)
+  // Máy đã lắp đủ: không vật nào được cắm ngang qua thân linh kiện
+  const r2 = await evaluate(`window.__checkAssembled(${machines.length ? JSON.stringify(machines) : 'undefined'})`)
+  if (r2.exceptionDetails) throw new Error(r2.exceptionDetails.exception?.description ?? 'lỗi trong trang')
+  const overlaps = r2.result.value
   console.log(`Đã kiểm tra ${machines.length ? machines.join(', ') : 'cả 6 máy'} trong ${Math.round((Date.now() - t0) / 1000)} s`)
-  if (!list.length) {
-    console.log('ĐẠT: không linh kiện nào đi xuyên qua vật khác khi lắp.')
+  if (!list.length && !overlaps.length) {
+    console.log('ĐẠT: không linh kiện nào đi xuyên qua vật khác khi lắp, và khi lắp xong không có gì chồng lên nhau.')
     code = 0
   } else {
-    console.log(`VI PHẠM (${list.length}):`)
+    if (list.length) console.log(`VI PHẠM KHI LẮP (${list.length}):`)
     for (const v of list) console.log(`  ${v.machine.padEnd(22)} ${v.path.padEnd(9)} chạm ở ${Math.round(v.at * 100)}% đường đi, ${v.count} tia: ${v.hits}`)
+    if (overlaps.length) console.log(`CHỒNG NHAU KHI ĐÃ LẮP (${overlaps.length}):`)
+    for (const v of overlaps) console.log(`  ${v.machine.padEnd(22)} ${v.block.padEnd(12)} ${v.count} tia: ${v.hits}`)
     code = 1
   }
 } catch (e) {

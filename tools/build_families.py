@@ -1213,11 +1213,12 @@ def case_mini_sff():
     box((-142, yb + T, -67), (135, yb + T + 0.3, 67), M['filt'])
     for f in C['feet']:
         cyl(tuple(f['at']), f['size'][0] / 2, f['size'][1], 'y', M['rubber'], 32)
-    slotted(yt - T, yt, -148, 133, 140, 'roof')
+    # khe nóc phủ cả quạt nóc (dời ra phía trước, trên ngăn nguồn, để không cắt ngang khay giữa)
+    slotted(yt - T, yt, -148, 160, 140, 'roof')
     for sx in (-1, 1):
         for sz in (-1, 1):
             G.phillips((sx * 157, yt + 0.4, sz * 72), 0, 2.4, M['screw'], M['hole'], 'y', h=0.8)
-    fan_mount((-65, 120.0, 12), 120, 'y', M)
+    fan_mount((C['fans'][0]['at'][0], 120.0, C['fans'][0]['at'][2]), 120, 'y', M)
     for x in (xr, xf - 2):
         for z in (zb, zg - 2):
             box((x, yb, z), (x + 2, yt, z + 2), alu)

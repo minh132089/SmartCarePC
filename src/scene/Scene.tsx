@@ -175,7 +175,9 @@ function DevExpose() {
       import('./pathCheck').then((m) => m.checkPaths(scene, () => get().advance(performance.now(), true), machines))
     const findPaths = (machines?: import('./pathCheck').Machine[], parts?: import('../data/assembly').AssemblyKey[]) =>
       import('./pathCheck').then((m) => m.findPaths(scene, () => get().advance(performance.now(), true), machines, parts))
-    Object.assign(window, { __scene: scene, __checkPaths: checkPaths, __findPaths: findPaths })
+    const checkAssembled = (machines?: import('./pathCheck').Machine[]) =>
+      import('./pathCheck').then((m) => m.checkAssembled(scene, () => get().advance(performance.now(), true), machines))
+    Object.assign(window, { __scene: scene, __checkPaths: checkPaths, __findPaths: findPaths, __checkAssembled: checkAssembled })
   }, [scene, get])
   return null
 }

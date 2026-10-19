@@ -79,6 +79,8 @@ Trong app: `src/scene/ToolKit.tsx` bày thảm trên sàn trước máy khi tác
 
 Khi lắp (và tách rời), mọi linh kiện phải đi theo đường mà ngoài đời làm được: **không khối nào đi xuyên qua khối khác**
 (vỏ, tấm che, bo mạch, linh kiện đã lắp). Chỉ được chạm trong 10 mm cuối, là đoạn cắm vào khe / socket / ốp vào chỗ bắt vít.
+Khi **đã lắp xong** cũng không vật nào được cắm ngang qua thân linh kiện (vd khay giữa của Mini từng cắt ngang quạt nóc;
+đã dời quạt ra phía trước, trên ngăn nguồn). `check:paths` kiểm cả hai.
 
 - Đường lắp của từng khối nằm trong `src/data/installPaths.ts` (mã khối `<bước>.<thứ tự>`, vd `fans.2`); Part trong
   `FamilyRig` / `GamingRig` nhận `path` + `explode` qua `xp(...)`.

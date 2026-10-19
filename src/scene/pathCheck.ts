@@ -344,3 +344,98 @@ export async function findPaths(
   useViewer.getState().setGuide(false)
   return res
 }
+
+/** Khối bỏ qua khi soát chồng nhau lúc đã lắp: tấm chống cong (trụ đi xuyên lỗ bo mạch là đúng) */
+const OVERLAP_SKIP = new Set(['cooler.0'])
+
+export interface Overlap {
+  machine: Machine
+  /** Khối bị vật khác cắm ngang qua thân khi máy đã lắp đủ (mã khối hoặc tên linh kiện) */
+  block: string
+  hits: string
+  /** Số tia từ đỉnh về tâm khối đi xuyên trọn một vật khác / tổng số tia */
+  count: string
+}
+
+/**
+ * Máy đã lắp đủ thì cũng không được có vật cắm ngang qua thân linh kiện (vd tấm đỡ bo đi xuyên quạt nóc).
+ * Từ mỗi đỉnh của một khối bắn tia về tâm khối: tia vào rồi ra khỏi một vật khác nghĩa là vật đó nằm chắn ngang trong
+ * thân khối. Cắm đúng (chân RAM trong khe, CPU trong socket) chỉ có tia đi ra khỏi khe nên không tính; phần nhô nhỏ
+ * (vít, chân) được dưới SEAT_SHARE số tia.
+ */
+export async function checkAssembled(scene: Scene, advance: () => void, machines: Machine[] = MACHINES): Promise<Overlap[]> {
+  const h = harness(scene, advance)
+  const out: Overlap[] = []
+  for (const machine of machines) {
+    await h.open(machine)
+    useViewer.setState({ guideFull: true, step: 0 })
+    for (let i = 0; i < 12; i++) {
+      advance()
+      await yieldFrame()
+    }
+    const blocks = new Map<string, Mesh[]>()
+    scene.traverse((o) => {
+      // Chỉ linh kiện gọn có đường lắp. Bo mạch, dây, riser, ống nước trải dài cả vỏ nên tia về tâm cắt qua mọi thứ;
+      // tấm chống cong có trụ xuyên lỗ bo mạch theo thiết kế
+      const key = o.userData.path as string | undefined
+      if (!key || OVERLAP_SKIP.has(key) || !shown(o)) return
+      const list = blocks.get(key) ?? []
+      o.traverse((m) => m instanceof Mesh && shown(m) && list.push(m))
+      if (list.length) blocks.set(key, list)
+    })
+    for (const [block, meshes] of blocks) {
+      const own = new Set(meshes)
+      const statics = staticMeshes(scene, own)
+      const center = boxOf(meshes).getCenter(new Vector3())
+      const v = inside(statics, meshes, center)
+      if (v) out.push({ machine, block, ...v })
+    }
+    useViewer.setState({ guideFull: false })
+  }
+  useViewer.setState({ instantMotion: false })
+  useViewer.getState().setGuide(false)
+  return out
+}
+
+function inside(statics: Mesh[], meshes: Mesh[], center: Vector3): { hits: string; count: string } | null {
+  const sides = new Map<Material, Side>()
+  for (const m of statics) {
+    for (const mat of ([] as Material[]).concat(m.material)) {
+      if (!sides.has(mat)) sides.set(mat, mat.side)
+      mat.side = DoubleSide
+    }
+  }
+  const rc = new Raycaster()
+  const normal = new Vector3()
+  const bad = new Map<string, number>()
+  let rays = 0
+  for (const p of samplePoints(meshes, SAMPLES)) {
+    const dir = center.clone().sub(p)
+    const len = dir.length()
+    if (len < 0.01) continue
+    dir.normalize()
+    rc.set(p, dir)
+    rc.near = 1e-4
+    rc.far = len
+    rays++
+    const entered = new Set<Object3D>()
+    for (const hit of rc.intersectObjects(statics, false)) {
+      if (!hit.face) continue
+      const cos = normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).dot(dir)
+      if (Math.abs(cos) < GRAZE) continue
+      if (cos < 0) entered.add(hit.object)
+      else if (entered.has(hit.object)) {
+        const mount = mountOf(hit.object)
+        const mat = ([] as Material[]).concat((hit.object as Mesh).material)[0]
+        const key = `${mount ? mount.name.slice(6) : '?'}/${mat?.name || hit.object.name}`
+        bad.set(key, (bad.get(key) ?? 0) + 1)
+        break
+      }
+    }
+  }
+  sides.forEach((side, mat) => (mat.side = side))
+  const total = [...bad.values()].reduce((a, b) => a + b, 0)
+  if (total <= rays * SEAT_SHARE) return null
+  const worst = [...bad.entries()].sort((a, b) => b[1] - a[1])
+  return { hits: worst.slice(0, 3).map(([k, n]) => `${k} ×${n}`).join(', '), count: `${total}/${rays}` }
+}
