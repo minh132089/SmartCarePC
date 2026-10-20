@@ -86,9 +86,11 @@ public class ChatService {
             Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
             check_build thêm lần nữa. Phương án nào báo lỗi hoặc over_budget thì sửa đúng chỗ đó rồi gọi lại propose_build với cùng tier. \
             Xem kỹ thông số trong danh mục trước khi chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. \
-            Mỗi linh kiện ghi:
-               - spec: thông số nên mua, viết dễ hiểu (vd "16 GB, 2 thanh 8 GB, DDR4 3200");
-               - reason: một câu vì sao hợp với nhu cầu người dùng (không nói chuyện tìm được hàng hay chưa);
+            Mỗi linh kiện ghi (NGẮN, để trả lời nhanh):
+               - spec: thông số nên mua, tối đa 8 chữ (vd "16 GB, 2 thanh, DDR4 3200");
+               - reason: tối đa 12 chữ, vì sao hợp với nhu cầu (không nói chuyện tìm được hàng hay chưa). Với tier cheap \
+            và quality: món GIỐNG tier balanced (cùng code) thì bỏ trống spec và reason, app tự lấy từ balanced; chỉ ghi \
+            cho món khác;
                - product_id: id của kết quả đã chọn (vd "s3-2"). App tự điền tên, cửa hàng, giá, ảnh và link mua từ id \
             này, nên KHÔNG chép tên hay link. Không tìm được sản phẩm thì bỏ trống, app tự tìm;
                - buy_qty: số sản phẩm đó cần mua, mặc định bằng quantity. Chọn bộ kit nhiều thanh thì buy_qty = 1 \
@@ -219,13 +221,14 @@ public class ChatService {
                                                     "properties", Map.of(
                                                             "code", Map.of("type", "string", "description", "Mã linh kiện trong danh mục"),
                                                             "quantity", Map.of("type", "integer", "minimum", 1),
-                                                            "spec", Map.of("type", "string", "description", "Thông số cụ thể nên mua"),
-                                                            "reason", Map.of("type", "string", "description", "Vì sao chọn, một câu"),
+                                                            "spec", Map.of("type", "string", "description", "Thông số nên mua, tối đa 8 chữ"),
+                                                            "reason", Map.of("type", "string", "description",
+                                                                    "Vì sao chọn, tối đa 12 chữ; tier cheap / quality bỏ trống nếu giống balanced"),
                                                             "price_min_vnd", Map.of("type", "integer"),
                                                             "price_max_vnd", Map.of("type", "integer"),
                                                             "product_id", Map.of("type", "string", "description", "id kết quả search_products đã chọn, vd s3-2"),
                                                             "buy_qty", Map.of("type", "integer", "minimum", 1, "description", "Số sản phẩm cần mua, mặc định = quantity")),
-                                                    "required", List.of("code", "spec", "reason")))),
+                                                    "required", List.of("code")))),
                             "required", List.of("summary", "items"))),
             tool("search_products",
                     "Tìm sản phẩm thật đang bán ở cửa hàng máy tính Việt Nam (đọc thẳng web cửa hàng). Trả về tối đa 8 món: "
@@ -426,6 +429,18 @@ public class ChatService {
             }
             chosen.put(t, kept);
         }
+        // Trợ lý chỉ viết thông số / lý do cho món khác balanced (trả lời nhanh hơn): điền phần trống từ tier khác cùng món
+        Map<String, Map<String, Object>> shared = new LinkedHashMap<>();
+        for (String t : List.of("balanced", "cheap", "quality")) {
+            var c = turn.tiers.get(t);
+            if (c == null) continue;
+            c.details().forEach((code, d) -> {
+                var into = shared.computeIfAbsent(code, k -> new LinkedHashMap<>());
+                if (text(d.get("spec")) != null) into.putIfAbsent("spec", d.get("spec"));
+                if (text(d.get("reason")) != null) into.putIfAbsent("reason", d.get("reason"));
+            });
+        }
+        chosen.replaceAll((t, list) -> list.stream().map(c -> withSharedText(c, shared)).toList());
         // Bảng giá tốt nhất: tìm trước (song song) cùng model ở cửa hàng khác cho mọi món sẽ hiện, rồi mới dựng thẻ
         if (turn.advice && search.enabled()) {
             Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
@@ -593,6 +608,19 @@ public class ChatService {
     private boolean priceChecked(String url) {
         var page = url == null ? null : search.offer(url);
         return page != null && page.priceVnd() != null;
+    }
+
+    /** Điền spec / reason còn trống của từng món từ tier khác có cùng món */
+    private static Checked withSharedText(Checked c, Map<String, Map<String, Object>> shared) {
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((code, d) -> {
+            var filled = new LinkedHashMap<>(d);
+            var from = shared.getOrDefault(code, Map.of());
+            if (text(filled.get("spec")) == null && from.get("spec") != null) filled.put("spec", from.get("spec"));
+            if (text(filled.get("reason")) == null && from.get("reason") != null) filled.put("reason", from.get("reason"));
+            details.put(code, filled);
+        });
+        return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), c.picks(), c.links(), c.siblings());
     }
 
     /** Thay giá Google Shopping bằng giá đọc trên trang cửa hàng của link đã xác minh (nếu đọc được) */

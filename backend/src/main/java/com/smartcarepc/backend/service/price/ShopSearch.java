@@ -2,6 +2,7 @@ package com.smartcarepc.backend.service.price;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,7 +21,7 @@ import org.jsoup.nodes.Element;
 enum ShopSearch {
 
     /** GEARVN: thẻ a.product-card, tên ở ảnh / thẻ p, giá gốc và giá bán là hai số tiền trong thẻ (giá bán thấp hơn) */
-    GEARVN("https://gearvn.com/search?q=") {
+    GEARVN("https://gearvn.com/search?q=", Duration.ofSeconds(4)) {
         @Override
         List<Offer> parse(String html, Instant at) {
             Document doc = Jsoup.parse(html, "https://gearvn.com/");
@@ -41,7 +42,7 @@ enum ShopSearch {
     },
 
     /** An Phát: .p-item, tên .p-name, giá bán .price-container .p-price, giá gốc del.p-old-price. robots.txt: cách 5 giây */
-    ANPHAT("https://www.anphatpc.com.vn/tim?q=") {
+    ANPHAT("https://www.anphatpc.com.vn/tim?q=", Duration.ofSeconds(1)) {
         @Override
         List<Offer> parse(String html, Instant at) {
             Document doc = Jsoup.parse(html, "https://www.anphatpc.com.vn/");
@@ -65,9 +66,15 @@ enum ShopSearch {
     private static final Pattern MONEY = Pattern.compile("(\\d{1,3}(?:[.,]\\d{3}){1,3})\\s*(?:đ|₫|vnđ|vnd)", Pattern.CASE_INSENSITIVE);
 
     final String searchUrl;
+    /**
+     * Chờ tới lượt gọi tối đa bao lâu. An Phát yêu cầu cách 5 giây mỗi lần (robots.txt): nhiều món tìm cùng lúc thì
+     * chỉ món tới lượt ngay mới đọc An Phát, món khác bỏ qua thay vì đứng chờ
+     */
+    final Duration maxWait;
 
-    ShopSearch(String searchUrl) {
+    ShopSearch(String searchUrl, Duration maxWait) {
         this.searchUrl = searchUrl;
+        this.maxWait = maxWait;
     }
 
     String url(String query) {

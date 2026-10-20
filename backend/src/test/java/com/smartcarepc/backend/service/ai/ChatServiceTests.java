@@ -487,6 +487,27 @@ class ChatServiceTests {
     }
 
     @Test
+    void tierReVaChatLuongLayThongSoLyDoTuPhuHopKhiBoTrong() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        String balanced = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB NVMe\",\"reason\":\"Mở game nhanh\"}";
+        String cheap = "{\"code\":\"ssd_m2_2280\"}";
+        var calls = new ArrayList<Map<String, Object>>();
+        calls.add(Map.of("id", "p-c", "type", "function", "function", Map.of("name", "propose_build",
+                "arguments", "{\"tier\":\"cheap\",\"summary\":\"Game\",\"items\":[" + cheap + "]}")));
+        calls.add(Map.of("id", "p-b", "type", "function", "function", Map.of("name", "propose_build",
+                "arguments", "{\"tier\":\"balanced\",\"summary\":\"Game\",\"items\":[" + balanced + "]}")));
+        reply(Map.of("choices", List.of(Map.of("finish_reason", "tool_calls", "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))),
+                answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
+
+        var cheapLine = res.options().stream().filter(o -> "cheap".equals(o.tier())).findFirst().orElseThrow().items().getFirst();
+        assertThat(cheapLine.spec()).isEqualTo("1 TB NVMe");
+        assertThat(cheapLine.reason()).isEqualTo("Mở game nhanh");
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);

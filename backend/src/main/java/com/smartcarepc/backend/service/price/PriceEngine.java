@@ -40,7 +40,7 @@ public class PriceEngine {
      */
     static final Duration CACHE = Duration.ofHours(2);
     /** Chờ tối đa cho một từ khoá; nguồn nào chậm hơn thì bỏ, dùng các nguồn đã xong */
-    static final Duration DEADLINE = Duration.ofSeconds(12);
+    static final Duration DEADLINE = Duration.ofSeconds(8);
     static final int MAX = 8;
     /** Số trang sản phẩm đọc thêm mỗi từ khoá (lấy còn hàng, bảo hành) */
     static final int PAGES = 3;
@@ -222,7 +222,7 @@ public class PriceEngine {
         var shops = Arrays.stream(ShopSearch.values())
                 .map(s -> CompletableFuture.supplyAsync(() -> {
                     // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có
-                    String html = fetcher.get(s.url(shopQuery), Duration.ofSeconds(6));
+                    String html = fetcher.get(s.url(shopQuery), s.maxWait);
                     return html == null ? List.<Offer>of() : s.parse(html, at);
                 }, pool))
                 .toList();
