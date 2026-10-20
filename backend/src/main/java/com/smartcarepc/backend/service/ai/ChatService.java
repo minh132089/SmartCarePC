@@ -954,7 +954,10 @@ public class ChatService {
                         saved.put("over_budget_note", "Vẫn vượt mức tối đa " + cap + " đồng. Không cần chọn lại nữa: "
                                 + "nói rõ trong câu trả lời là phương án này vượt bao nhiêu và vì sao.");
                     } else if (turn.advice && cap != null && totalMax > cap) {
-                        log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại", tier, totalMax, cap);
+                        log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại. Từng món: {}", tier, totalMax, cap,
+                                req.items().stream().map(i -> i.code() + " x" + i.qty() + " = "
+                                        + price(details.getOrDefault(i.code(), Map.of()), picks.get(i.code()), i.qty())[1]
+                                        + (picks.get(i.code()) == null ? " (ước tính)" : " " + picks.get(i.code()).title())).toList());
                         saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
                                 + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier."
                                 + ("cheap".equals(tier) ? " Món đi kèm vỏ đắt (tản nước, card 3 quạt) thì đổi sang vỏ khác rẻ hơn, "
