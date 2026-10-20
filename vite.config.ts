@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, type ProxyOptions } from 'vite'
 
 /**
@@ -13,6 +14,8 @@ const apiProxy: ProxyOptions = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // @/ = src/ (component React Bits cài bằng shadcn nằm ở src/components)
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: {
     // Frontend gọi /api/... sẽ được chuyển sang backend Spring Boot (backend/, cổng 8083)
     proxy: { '/api': apiProxy },

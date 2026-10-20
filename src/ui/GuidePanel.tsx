@@ -8,6 +8,7 @@ import { useViewer } from '../store'
 import { FlowSteps } from './AdvicePage'
 import { useStudy } from './study/study'
 import { StudyBar } from './study/StudyBar'
+import { playTick } from './sound/sfx'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -71,16 +72,19 @@ export function GuidePanel() {
     return () => clearTimeout(t)
   }, [current.id, steps])
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    playTick(!done.has(id))
     setDone((d) => {
       const n = new Set(d)
       if (n.has(id)) n.delete(id)
       else n.add(id)
       return n
     })
+  }
 
   /** "Xong bước này": đánh dấu rồi chuyển tới bước kế tiếp chưa làm */
   const complete = () => {
+    if (!done.has(current.id)) playTick()
     const n = new Set(done).add(current.id)
     setDone(n)
     const next = steps.findIndex((s, i) => i > index && !n.has(s.id))

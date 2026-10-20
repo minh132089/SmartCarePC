@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowCounterClockwise, ArrowRight, CaretRight, X } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, ArrowRight, CaretRight, SpeakerHigh, SpeakerSlash, X } from '@phosphor-icons/react'
+import DecryptedText from '@/components/DecryptedText'
+import DotGrid from '@/components/DotGrid'
 import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
@@ -9,6 +11,8 @@ import { TIER_INFO } from './chat/tiers'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
 import { StudyBar, StudyJoinLink } from './study/StudyBar'
+import { startAmbient, stopAmbient, useSound } from './sound/sfx'
+import { useDark } from '../theme'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -44,6 +48,14 @@ export function AdvicePage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const empty = messages.length === 0 && !busy && !error
+  const dark = useDark()
+  const { muted, toggle: toggleSound } = useSound()
+  // Nhạc nền chỉ ở màn giới thiệu; người dùng bắt đầu chat (hoặc rời trang) thì tắt
+  useEffect(() => {
+    if (!empty) return
+    startAmbient()
+    return stopAmbient
+  }, [empty])
   // Cấu hình đang xem chi tiết: mặc định là cấu hình mới nhất trợ lý đưa ra
   const latest = messages.findLastIndex((m) => m.build)
   // Chọn xem cấu hình cũ; trợ lý đưa cấu hình mới (latest đổi) thì tự quay về cấu hình mới
@@ -111,6 +123,11 @@ export function AdvicePage() {
       <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-2 md:px-10">
         <FlowSteps current={1} />
         <div className="flex items-center gap-2">
+          <IconButton
+            label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
+            onClick={toggleSound}
+            icon={muted ? <SpeakerSlash size={16} aria-hidden /> : <SpeakerHigh size={16} aria-hidden />}
+          />
           {!empty && (
             <IconButton label="Cuộc trò chuyện mới" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           )}
@@ -124,14 +141,43 @@ export function AdvicePage() {
       </div>
 
       {empty ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto grid max-w-[1120px] gap-10 px-5 pt-8 pb-12 md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)] md:items-center md:px-10 md:pt-14">
-            <div>
-              <h1 className="display text-balance">Bạn cần máy tính để làm gì?</h1>
-              <p className="mt-3 max-w-[46ch] text-[16px] leading-[1.5] text-ink-2">
-                Kể nhu cầu bằng lời của bạn. Trợ lý sẽ chọn linh kiện, ước tính giá và kiểm tra chúng có lắp chung được không.
+        <div className="relative min-h-0 flex-1">
+          {/* Nền chấm phản ứng theo con trỏ (React Bits DotGrid). Chỉ có ở màn giới thiệu: người dùng gửi câu đầu tiên là gỡ hẳn. */}
+          <div aria-hidden className="absolute inset-0">
+            <DotGrid
+              dotSize={4}
+              gap={22}
+              baseColor={dark ? '#3a3b43' : '#c6c6ce'}
+              activeColor={dark ? '#2997ff' : '#0071e3'}
+              proximity={130}
+              shockRadius={260}
+              shockStrength={4}
+              glow={0.6}
+              fade={0.9}
+            />
+          </div>
+          <div className="relative h-full overflow-y-auto">
+            <div className="mx-auto flex min-h-full max-w-[720px] flex-col justify-center px-5 pt-8 pb-12 md:px-10">
+              <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-3 uppercase">SmartCare PC · trợ lý build máy</p>
+              <h1 className="mt-3 text-center font-mono text-[clamp(2.25rem,1.4rem+3.6vw,4.25rem)] leading-[1.05] font-semibold tracking-[-0.03em] text-ink">
+                <span className="sr-only">Create your own PC</span>
+                <span aria-hidden>
+                  <DecryptedText
+                    text="Create your own PC"
+                    animateOn="inViewHover"
+                    sequential
+                    revealDirection="start"
+                    speed={45}
+                    maxIterations={14}
+                    characters="01<>/[]{}#$%&*+=ABCDEF"
+                    encryptedClassName="text-accent"
+                  />
+                </span>
+              </h1>
+              <p className="mx-auto mt-4 max-w-[48ch] text-center text-[16px] leading-[1.5] text-ink-2">
+                Kể nhu cầu bằng lời của bạn. Trợ lý sẽ chọn linh kiện, so giá ở các cửa hàng và kiểm tra chúng có lắp chung được không.
               </p>
-              <div className="mt-6">
+              <div className="mt-7">
                 <Composer
                   big
                   value={draft}
@@ -161,24 +207,11 @@ export function AdvicePage() {
                 ))}
               </ul>
 
-              <button onClick={() => setPage('build')} className={`mt-8 px-1 text-[14px] font-medium text-link hover:underline sm:hidden ${focus}`}>
+              <button onClick={() => setPage('build')} className={`mt-8 self-start px-1 text-[14px] font-medium text-link hover:underline sm:hidden ${focus}`}>
                 Bỏ qua, xem mô hình 3D ›
               </button>
               <StudyJoinLink className="mt-8 block px-1 text-left" />
             </div>
-
-            {/* Ảnh chụp chính mô hình 3D của app (máy Showcase), để người dùng thấy trước thứ mình sẽ lắp. Từ màn hình vừa trở lên. */}
-            <picture className="hidden md:block">
-              {/* Chế độ tối dùng ảnh chụp cảnh 3D nền tối để không loá giữa trang tối */}
-              <source srcSet="/hero/advice-showcase-dark.jpg" media="(prefers-color-scheme: dark)" />
-              <img
-                src="/hero/advice-showcase.jpg"
-                alt="Mô hình 3D một chiếc máy tính mặt kính trong app, nhìn thấy card đồ họa, tản nước và quạt bên trong"
-                width={1200}
-                height={919}
-                className="aspect-[1200/919] w-full rounded-[28px] bg-stage object-cover"
-              />
-            </picture>
           </div>
         </div>
       ) : (
