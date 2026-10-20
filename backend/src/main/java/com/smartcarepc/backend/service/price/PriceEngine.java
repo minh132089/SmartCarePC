@@ -144,11 +144,13 @@ public class PriceEngine {
         if (ek != null && pk != null && !ek.equals(pk)) return false;
         Long ec = maxCapacity(e), pc = maxCapacity(p);
         if (ec != null && pc != null && !ec.equals(pc)) return false;
-        List<String> models = Arrays.stream(e.split(" ")).filter(PriceEngine::isModel).distinct().toList();
-        if (!models.isEmpty()) {
-            long hit = models.stream().filter(squashed::contains).count();
-            return hit * 10 >= models.size() * 6;
-        }
+        // Mã có số (h51e, 16gb, ddr4, 3200mhz, snv2s, 12400f) nói lên đúng sản phẩm; chữ mô tả ("vỏ máy cao cấp kính")
+        // mỗi cửa hàng viết một kiểu nên không dùng để so
+        List<String> codes = Arrays.stream(e.split(" ")).filter(w -> w.length() >= 2 && w.matches(".*\\d.*")).distinct().toList();
+        List<String> models = codes.stream().filter(PriceEngine::isModel).toList();
+        if (!models.isEmpty() && models.stream().filter(squashed::contains).count() * 10 < models.size() * 6) return false;
+        if (!codes.isEmpty()) return codes.stream().filter(squashed::contains).count() * 2 >= codes.size();
+        // Không có mã: cần trùng chữ đầu (thường là hãng) và một nửa số chữ còn lại
         List<String> words = Arrays.stream(e.split(" ")).filter(w -> w.length() > 1 && !STOP.contains(w)).distinct().toList();
         Set<String> pw = new HashSet<>(Arrays.asList(p.split(" ")));
         return !words.isEmpty() && words.stream().filter(pw::contains).count() * 2 >= words.size();

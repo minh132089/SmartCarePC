@@ -137,6 +137,11 @@ class PriceEngineTests {
                 "Ổ cứng SSD Kingston NV2 4TB M.2 2280 PCIe Gen4 x4 NVMe (SNV2S/4000G)")).isFalse();
         assertThat(PriceEngine.samePage("Kingston NV2 M.2 2280 PCIe 4.0 x4 NVMe SSD 1TB SNV2S/1000G",
                 "Ổ cứng SSD Kingston NV2 1TB M.2 2280 PCIe Gen4 x4 NVMe (SNV2S/1000G)")).isTrue();
+        // Tên dài kiểu Google Shopping và tên ngắn trên trang: so theo mã có số
+        assertThat(PriceEngine.samePage("NZXT CC-H51E H5 Elite Vỏ máy Mid-Tower Cao Cấp Kính",
+                "Vỏ case NZXT H5 Elite White (CC-H51EW-01)")).isTrue();
+        assertThat(PriceEngine.samePage("Bộ nhớ/ RAM Corsair Dominator Platinum White RGB 16GB DDR4-3200Mhz",
+                "RAM Corsair Dominator Platinum RGB 16GB (2x8GB) DDR4 3200MHz White")).isTrue();
         // Khác loại linh kiện / khác model
         assertThat(PriceEngine.samePage("Card màn hình MSI RTX 4060 Ventus 2X 8G OC", "Bo mạch chủ MSI PRO B760M-E DDR4")).isFalse();
         assertThat(PriceEngine.samePage("CPU Intel Core i5-12400F", "CPU Intel Core i5-14400F")).isFalse();

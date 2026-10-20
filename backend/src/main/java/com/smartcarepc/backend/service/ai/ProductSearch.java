@@ -91,7 +91,7 @@ public class ProductSearch {
 
     /**
      * Tìm trước, song song, đúng tên model của các món đã chọn ở mọi cửa hàng (engine), để compare() có giá cùng
-     * sản phẩm ở cửa hàng khác. Chờ tối đa 20 giây; món tìm chưa xong thì chỉ so trong nhóm tìm kiếm cũ.
+     * sản phẩm ở cửa hàng khác. Chờ tối đa 10 giây; món tìm chưa xong thì chỉ so trong nhóm tìm kiếm cũ.
      */
     public void warmCompare(java.util.Collection<Product> picks) {
         if (!engine.enabled()) return;
@@ -100,7 +100,7 @@ public class ProductSearch {
                 .map(p -> CompletableFuture.runAsync(() -> sameModel.put(p.url(), engine.search(shortTitle(p.title())))))
                 .toArray(CompletableFuture[]::new);
         try {
-            CompletableFuture.allOf(jobs).get(20, java.util.concurrent.TimeUnit.SECONDS);
+            CompletableFuture.allOf(jobs).get(10, java.util.concurrent.TimeUnit.SECONDS);
         } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
             log.debug("Tìm cùng model chưa xong hết: {}", e.getMessage());
         } catch (InterruptedException e) {

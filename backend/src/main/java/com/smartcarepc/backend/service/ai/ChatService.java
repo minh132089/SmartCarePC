@@ -550,25 +550,37 @@ public class ChatService {
      */
     private ProductSearch.Product bestLinked(List<ProductSearch.Product> candidates, String now) {
         int nowRank = rank(now);
+        // Thử song song (mỗi lần thử có thể phải tìm và mở trang cửa hàng), rồi lấy món hạng cao nhất, gần giá nhất
+        var tries = candidates.stream().limit(4)
+                .map(c -> CompletableFuture.supplyAsync(() -> {
+                    String l = search.directLink(c.title(), c.shop(), c.url());
+                    return l == null ? null : new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
+                }))
+                .toList();
         ProductSearch.Product best = null;
         int bestRank = nowRank;
-        for (var c : candidates.stream().limit(4).toList()) {
-            String l = search.directLink(c.title(), c.shop(), c.url());
-            int r = rank(l);
+        for (var t : tries) {
+            var found = t.join();
+            int r = found == null ? 0 : rank(found.url());
             if (r > bestRank) {
-                best = new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
+                best = found;
                 bestRank = r;
-                if (r == 3) break;
             }
         }
         return best;
     }
 
-    /** 3: còn hàng + giá đã kiểm tra; 2: giá đã kiểm tra; 1: trang sản phẩm; 0: không có link / trang chủ */
+    /** 3: còn hàng + giá đã kiểm tra; 2: giá đã kiểm tra; 1: trang sản phẩm; 0: không có link / trang chủ / hết hàng */
     private int rank(String url) {
-        if (url == null || ProductSearch.homePage(url)) return 0;
+        if (url == null || ProductSearch.homePage(url) || soldOut(url)) return 0;
         if (!priceChecked(url)) return 1;
         return inStock(url) ? 3 : 2;
+    }
+
+    /** Trang cửa hàng của link báo hết hàng */
+    private boolean soldOut(String url) {
+        var page = url == null ? null : search.offer(url);
+        return page != null && Boolean.FALSE.equals(page.inStock());
     }
 
     /** Trang cửa hàng của link xác nhận còn hàng */
@@ -712,11 +724,11 @@ public class ChatService {
     private void linkedPicks(BuildCheckRequest req, Map<String, Map<String, Object>> details, Map<String, ProductSearch.Product> picks,
             Map<String, CompletableFuture<String>> links, Map<String, List<ProductSearch.Product>> siblings, String tier, Long cap) {
         Map<String, CompletableFuture<ProductSearch.Product>> fixes = new LinkedHashMap<>();
-        // Món yếu: chưa có link, chỉ có trang chủ, link chưa đọc được giá trên trang (giá Google có thể sai), hoặc
-        // chưa xác nhận còn hàng
+        // Món yếu: chưa có link, chỉ có trang chủ, hoặc link chưa đọc được giá trên trang (giá Google có thể sai).
+        // Trang hết hàng đã bị loại từ bước xác minh link; trang không ghi tình trạng hàng thì giữ (đổi mãi rất chậm)
         var weak = links.entrySet().stream().filter(e -> {
             String l = e.getValue().join();
-            return l == null || ProductSearch.homePage(l) || !priceChecked(l) || !inStock(l);
+            return l == null || ProductSearch.homePage(l) || !priceChecked(l) || soldOut(l);
         }).map(Map.Entry::getKey).toList();
         // Phần còn dư tới trần chia đều cho các món phải đổi, để đổi món lấy link không làm phương án vượt trần
         long allowance = cap == null || weak.isEmpty() ? Long.MAX_VALUE : (cap - total(req, details, picks)) / weak.size();
