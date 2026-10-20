@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.smartcarepc.backend.service.Io;
 import com.smartcarepc.backend.dto.BuildCheckRequest;
 import com.smartcarepc.backend.dto.ChatRequest;
 import com.smartcarepc.backend.dto.ChatResponse;
@@ -371,7 +372,7 @@ public class ChatService {
             if (names.contains("search_products")) progress.accept(STAGE_SEARCH);
             else if (names.contains("propose_build")) progress.accept(STAGE_CHECK);
             var results = calls.stream()
-                    .map(call -> CompletableFuture.supplyAsync(() -> runTool((Map<String, Object>) call.get("function"), turn)))
+                    .map(call -> Io.async(() -> runTool((Map<String, Object>) call.get("function"), turn)))
                     .toList();
             long t1 = System.nanoTime();
             for (int i = 0; i < calls.size(); i++) {
@@ -500,7 +501,7 @@ public class ChatService {
                     .min(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                     .ifPresent(a -> {
                         picks.put(e.getKey(), a);
-                        links.put(e.getKey(), CompletableFuture.supplyAsync(() -> search.directLink(a.title(), a.shop(), a.url())));
+                        links.put(e.getKey(), Io.async(() -> search.directLink(a.title(), a.shop(), a.url())));
                     });
         }
         if (!productIssues(picks).isEmpty() && productIssues(c.picks()).isEmpty()) return withLinkedPicks(c, tier, cap);
@@ -552,7 +553,7 @@ public class ChatService {
             if (!productIssues(picks).isEmpty() && productIssues(c.picks()).isEmpty()) continue;
             Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
             picks.forEach((code, p) -> {
-                if (p != c.picks().get(code)) links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(p.title(), p.shop(), p.url())));
+                if (p != c.picks().get(code)) links.put(code, Io.async(() -> search.directLink(p.title(), p.shop(), p.url())));
             });
             out.add(new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings()));
         }
@@ -567,7 +568,7 @@ public class ChatService {
         int nowRank = rank(now);
         // Thử song song (mỗi lần thử có thể phải tìm và mở trang cửa hàng), rồi lấy món hạng cao nhất, gần giá nhất
         var tries = candidates.stream().limit(4)
-                .map(c -> CompletableFuture.supplyAsync(() -> {
+                .map(c -> Io.async(() -> {
                     String l = search.directLink(c.title(), c.shop(), c.url());
                     return l == null ? null : new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
                 }))
@@ -772,7 +773,7 @@ public class ChatService {
                     .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
                     .toList();
             String spec = text(details.getOrDefault(code, Map.of()).get("spec"));
-            fixes.put(code, CompletableFuture.supplyAsync(() -> {
+            fixes.put(code, Io.async(() -> {
                 // Thứ tự ưu tiên: còn hàng + giá đã kiểm tra trên trang; giá đã kiểm tra; có trang sản phẩm. Món đang
                 // chọn không thua món thay thế thì giữ nguyên
                 var best = bestLinked(candidates, now);
@@ -903,13 +904,13 @@ public class ChatService {
                         picks.put(code, pick);
                         var group = turn.groups.get(id.replaceFirst("-\\d+$", ""));
                         if (group != null) siblings.put(code, group);
-                        links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
+                        links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
                     // Món trợ lý chưa chọn được sản phẩm: app tự tìm, để dòng nào cũng có hàng thật kèm link mua
                     var auto = autoPick(req, details, picks, siblings);
                     auto.forEach((code, pick) -> {
                         picks.put(code, pick);
-                        links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
+                        links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
                     String tier = TIERS.contains(String.valueOf(input.get("tier"))) ? String.valueOf(input.get("tier")) : "balanced";
                     // Ba propose_build của cùng một lượt chạy song song: giữ thẻ trong biến riêng, không đọc lại turn.last
@@ -1095,7 +1096,7 @@ public class ChatService {
                 continue; // mã lạ: kiểm tra tương thích đã báo lỗi
             }
             Long lo = vnd(d.get("price_min_vnd")), hi = vnd(d.get("price_max_vnd"));
-            jobs.put(i.code(), CompletableFuture.supplyAsync(() -> findFor(spec, name, lo, hi, list -> siblings.put(i.code(), list))));
+            jobs.put(i.code(), Io.async(() -> findFor(spec, name, lo, hi, list -> siblings.put(i.code(), list))));
         }
         Map<String, ProductSearch.Product> out = new LinkedHashMap<>();
         jobs.forEach((code, job) -> {

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import com.smartcarepc.backend.service.Io;
 import com.smartcarepc.backend.service.price.Offer;
 import com.smartcarepc.backend.service.price.PriceEngine;
 
@@ -109,7 +110,7 @@ public class ProductSearch {
         if (!engine.enabled()) return;
         var jobs = picks.stream()
                 .filter(p -> p.title() != null && p.url() != null && !sameModel.containsKey(p.url()))
-                .map(p -> CompletableFuture.runAsync(() -> sameModel.put(p.url(), engine.search(shortTitle(p.title())))))
+                .map(p -> Io.run(() -> sameModel.put(p.url(), engine.search(shortTitle(p.title())))))
                 .toArray(CompletableFuture[]::new);
         try {
             CompletableFuture.allOf(jobs).get(6, java.util.concurrent.TimeUnit.SECONDS);
@@ -346,7 +347,7 @@ public class ProductSearch {
                 .filter(i -> https(i.get("link")) != null)
                 .limit(5)
                 .toList();
-        var futures = items.stream().map(i -> CompletableFuture.supplyAsync(() -> {
+        var futures = items.stream().map(i -> Io.async(() -> {
             String url = https(i.get("link"));
             String[] meta = pageMeta(url);
             return new Product(str(i.get("title")), host(url), vnd(meta[1]), url, https(meta[0]));

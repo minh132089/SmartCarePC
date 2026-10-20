@@ -113,6 +113,8 @@ class PriceEngineTests {
         assertThat(PriceEngine.alternatives("Card màn hình RTX 3050 8GB hoặc GTX 1660 Super giá rẻ"))
                 .containsExactly("Card màn hình RTX 3050 8GB", "Card màn hình GTX 1660 Super giá rẻ");
         assertThat(PriceEngine.alternatives("RAM DDR4 16GB 3200")).containsExactly("RAM DDR4 16GB 3200");
+        assertThat(PriceEngine.alternatives("Bộ nhớ trong/ RAM TeamGroup Vulcan Z 16GB")).containsExactly("Bộ nhớ trong/ RAM TeamGroup Vulcan Z 16GB");
+        assertThat(PriceEngine.alternatives("Card màn hình RTX 3050 / GTX 1660")).containsExactly("Card màn hình RTX 3050", "Card màn hình GTX 1660");
         // Ô tìm kiếm của cửa hàng: bỏ "giá rẻ", số đo, socket
         assertThat(PriceEngine.shopQuery("Tản nhiệt khí CPU tháp 155mm 1 quạt giá rẻ LGA1700 AM4")).isEqualTo("Tản nhiệt khí CPU tháp");
         assertThat(PriceEngine.shopQuery("Card màn hình RTX 3050 8GB")).isEqualTo("Card màn hình RTX 3050");

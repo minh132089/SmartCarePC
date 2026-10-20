@@ -14,7 +14,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -22,7 +21,6 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -78,7 +76,8 @@ public class PriceEngine {
     private final PoliteFetcher fetcher;
     private final Searxng searxng;
     private final boolean enabled;
-    private final ExecutorService pool = Executors.newFixedThreadPool(12);
+    /** Luồng ảo: mỗi lượt gọi web một luồng, không xếp hàng chờ nhau (xem service/Io) */
+    private final ExecutorService pool = com.smartcarepc.backend.service.Io.POOL;
     private record Cached(Instant at, List<Offer> offers) { }
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
     /** Mọi offer đã thấy theo link, để thẻ cấu hình hiện được còn hàng, bảo hành, lúc kiểm tra */
@@ -341,7 +340,12 @@ public class PriceEngine {
 
     /** "A hoặc B" / "A hay B" / "A / B": các model thay thế, mỗi cái một lần tìm (tối đa 3) */
     static List<String> alternatives(String query) {
-        String[] parts = query.split("(?i)\\s+(hoặc|hay|or)\\s+|\\s*/\\s*");
+        String[] parts = query.split("(?i)\\s+(hoặc|hay|or)\\s+");
+        // "/" chỉ là "hoặc" khi mọi phía đều có số ("RTX 3050 / GTX 1660"); tên kiểu "Bộ nhớ/ RAM Kingston" thì không tách
+        if (parts.length < 2) {
+            String[] slash = query.split("\\s*/\\s*");
+            parts = slash.length > 1 && java.util.Arrays.stream(slash).allMatch(x -> x.matches(".*\\d.*")) ? slash : parts;
+        }
         if (parts.length < 2) return List.of(query);
         String head = kindPrefix(parts[0]);
         List<String> out = new ArrayList<>();
@@ -438,8 +442,4 @@ public class PriceEngine {
         return url == null ? "" : url.replaceFirst("[?#].*$", "");
     }
 
-    @PreDestroy
-    void stop() {
-        pool.shutdownNow();
-    }
 }
