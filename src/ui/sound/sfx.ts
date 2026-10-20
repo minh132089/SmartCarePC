@@ -84,6 +84,13 @@ export function playSubmit() {
   tone(1760, 0.05, 0.06, 0.025, 'triangle')
 }
 
+/** Nút gợi ý ngẫu nhiên: tiếng xúc xắc lăn, vài tiếng lách cách ngắn rồi một tiếng chốt */
+export function playRandom() {
+  const hits = [0, 0.045, 0.1, 0.17]
+  hits.forEach((at, i) => tone(1500 - i * 140 + Math.random() * 120, at, 0.035, 0.05, 'square'))
+  tone(880, 0.23, 0.12, 0.05, 'triangle', 1320)
+}
+
 /** Đánh dấu xong bước lắp (done = true) hay bỏ đánh dấu */
 export function playTick(done = true) {
   if (done) {

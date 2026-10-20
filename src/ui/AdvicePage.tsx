@@ -14,16 +14,16 @@ import { OptionsCanvas } from './chat/Options'
 import { TIER_INFO } from './chat/tiers'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
-import { useSound } from './sound/sfx'
+import { playRandom, useSound } from './sound/sfx'
 import { useStudy } from './study/study'
-import { StudyBar, StudyJoinLink } from './study/StudyBar'
+import { StudyBar } from './study/StudyBar'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
 /**
- * Lời kể mẫu: bấm gợi ý (hoặc nút ngẫu nhiên cạnh nút gửi) thì chép vào ô nhập để người dùng sửa theo ý mình rồi mới
- * gửi. label là chữ ngắn trên nút gợi ý.
+ * Lời kể mẫu cho nút ngẫu nhiên cạnh nút gửi: chép vào ô nhập để người dùng sửa theo ý mình rồi mới gửi. label là chữ
+ * ngắn dùng trong thanh CardNav.
  */
 const EXAMPLES = [
   { label: 'Sinh viên, 12 triệu', text: 'Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.' },
@@ -308,6 +308,7 @@ function Intro({
   }
   /** Nút ngẫu nhiên: lấy một lời kể mẫu khác với chữ đang có trong ô */
   const random = () => {
+    playRandom()
     const others = EXAMPLES.filter((ex) => ex.text !== draft)
     fill(others[Math.floor(Math.random() * others.length)].text)
   }
@@ -407,27 +408,7 @@ function Intro({
             />
           </div>
 
-          <p className="mt-5 px-1 text-[13px] text-ink-2">Chưa biết kể thế nào? Chọn một gợi ý rồi sửa lại cho đúng ý bạn.</p>
-          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Gợi ý">
-            {EXAMPLES.map((ex) => (
-              <li key={ex.label}>
-                <button
-                  onClick={() => fill(ex.text)}
-                  title={ex.text}
-                  aria-pressed={draft === ex.text}
-                  className={`rounded-full px-3.5 py-1.5 text-[14px] ring-1 backdrop-blur-sm ${press} ${focus} ${
-                    draft === ex.text ? 'bg-accent text-white ring-accent' : 'bg-surface/80 text-ink ring-line hover:ring-ink-3'
-                  }`}
-                >
-                  {ex.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-6 flex items-center justify-between gap-3 px-1">
-            <StudyJoinLink className="text-left" />
-            <span className="xl:hidden">{soundButton}</span>
-          </div>
+          <div className="mt-4 flex justify-end xl:hidden">{soundButton}</div>
         </div>
       </div>
     </div>
