@@ -118,6 +118,26 @@ public class ChatService {
 
     /** Luật chung cho cả hai trang */
     private static final String RULES = """
+            LUẬT LẮP PC: kiểm tra theo TÊN SẢN PHẨM THẬT đã chọn (search_products có trường specs đọc sẵn socket / chipset \
+            / loại RAM), không chỉ theo danh mục. propose_build báo product_errors thì phải chọn lại.
+            - Socket CPU phải trùng socket bo mạch:
+              Intel Core i3/i5/i7/i9 đời 12, 13, 14 -> LGA1700, bo chipset H610, B660, B760, H770, Z690, Z790.
+              Intel Core Ultra 5/7/9 đời 2 (200S, vd Ultra 7 265K) -> LGA1851, bo H810, B860, Z890; CHỈ dùng DDR5.
+              AMD Ryzen 1000 tới 5000 -> AM4, bo A520, B450, B550, X570; CHỈ dùng DDR4 (bo B450 có thể cần cập nhật BIOS cho Ryzen 5000).
+              AMD Ryzen 7000, 8000G, 9000 -> AM5, bo A620, B650, B850, X670, X870; CHỈ dùng DDR5.
+            - RAM phải cùng loại với bo: bo ghi DDR4 hoặc "D4" thì RAM DDR4; bo DDR5 thì RAM DDR5. Bo LGA1700 có cả \
+            bản DDR4 và DDR5, xem kỹ tên. Không dùng RAM laptop (SO-DIMM) cho máy bàn. Nên mua kit 2 thanh để chạy kênh đôi.
+            - Tản nhiệt phải có gá đúng socket: chân gá Intel và AMD khác nhau. Gá LGA1700 dùng được cho LGA1851; gá \
+            AM4 thường dùng được cho AM5. Tản khí phải thấp hơn giới hạn của vỏ; két tản nước phải có chỗ gắn trong vỏ.
+            - CPU không có đồ họa tích hợp (Intel đuôi F, AMD Ryzen 5000 không có chữ G, bản đuôi F) thì bắt buộc có card đồ họa.
+            - CPU bản tray, Intel đuôi K / KF, AMD dòng X và phần lớn Ryzen 9000 không kèm tản: phải mua thêm tản. CPU \
+            đuôi K muốn ép xung cần bo chipset Z (Intel) hoặc X / B (AMD).
+            - Nguồn: công suất khoảng 1,5 lần tổng điện CPU + card (vd card 115 W + CPU 65 W -> nguồn 550 - 650 W), chứng \
+            nhận 80 Plus Bronze trở lên, đủ đầu cấp điện cho card (card cao cấp RTX 40/50 dùng đầu 12VHPWR / 12V-2x6 \
+            hoặc dây chuyển kèm theo).
+            - Kích thước: bo phải vừa vỏ (Mini-ITX < Micro-ATX < ATX); card không dài hơn giới hạn của vỏ; nguồn SFX cho vỏ nhỏ.
+            - SSD M.2 NVMe cần khe M.2 trên bo; PCIe đời mới vẫn chạy được trên khe đời cũ (chỉ chậm hơn).
+
             Cách trả lời:
             - Trả lời bằng ngôn ngữ người dùng đang viết (thường là tiếng Việt). Giọng thân thiện, xưng "mình", gọi "bạn".
             - Ngắn gọn, khoảng 150 chữ trở xuống, trừ khi người dùng xin giải thích kỹ. Không dùng bảng, không dùng tiêu đề.
@@ -378,7 +398,7 @@ public class ChatService {
             for (var alt : turn.variants.getOrDefault(t, List.of())) all.add(withLinks(alt, base));
             // Luật cứng: Rẻ và Phù hợp không vượt ngân sách, Chất lượng không vượt quá 15%. Đo trên thẻ cuối cùng (sau khi
             // đổi món lấy link), cùng cách cộng với giao diện; build nào vượt thì bỏ, số option đánh lại từ 1
-            List<Checked> kept = options(all, cap, altCap);
+            List<Checked> kept = options(all, cap, altCap, c -> productIssues(c.picks()).isEmpty());
             Checked low = null;
             if (kept.isEmpty() && search.enabled()) {
                 // Trợ lý vẫn chọn vượt dù đã được báo: thử bộ rẻ nhất trong cùng các lần tìm kiếm
@@ -417,7 +437,13 @@ public class ChatService {
      * dưới cap thì rỗng.
      */
     static List<Checked> options(List<Checked> all, Long cap, Long altCap) {
+        return options(all, cap, altCap, c -> true);
+    }
+
+    /** Như trên; fits: build có sản phẩm thật lắp chung được. Còn build lắp được thì bỏ build lắp không được */
+    static List<Checked> options(List<Checked> all, Long cap, Long altCap, java.util.function.Predicate<Checked> fits) {
         var unique = withinCap(all, null);
+        if (unique.stream().anyMatch(fits)) unique = unique.stream().filter(fits).toList();
         var first = unique.stream().filter(c -> cap == null || total(c.request(), c.details(), c.picks()) <= cap).findFirst();
         if (first.isEmpty()) return List.of();
         List<Checked> out = new ArrayList<>(List.of(first.get()));
@@ -451,6 +477,7 @@ public class ChatService {
                         links.put(e.getKey(), CompletableFuture.supplyAsync(() -> search.directLink(a.title(), a.shop(), a.url())));
                     });
         }
+        if (!productIssues(picks).isEmpty() && productIssues(c.picks()).isEmpty()) return withLinkedPicks(c, tier, cap);
         return withLinkedPicks(new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings()), tier, cap);
     }
 
@@ -496,6 +523,7 @@ public class ChatService {
             if (cap != null && total(c.request(), c.details(), picks) > cap) picks = variantPicks(c, tier, v, true);
             if (cap != null && total(c.request(), c.details(), picks) > cap) continue;
             if (!seen.add(signature(picks))) continue;
+            if (!productIssues(picks).isEmpty() && productIssues(c.picks()).isEmpty()) continue;
             Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
             picks.forEach((code, p) -> {
                 if (p != c.picks().get(code)) links.put(code, CompletableFuture.supplyAsync(() -> search.directLink(p.title(), p.shop(), p.url())));
@@ -503,6 +531,20 @@ public class ChatService {
             out.add(new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings()));
         }
         return out;
+    }
+
+    /** Lỗi lắp chung giữa các sản phẩm thật đã chọn (theo tên sản phẩm, xem ProductRules) */
+    private List<String> productIssues(Map<String, ProductSearch.Product> picks) {
+        Map<String, String> titles = new LinkedHashMap<>();
+        picks.forEach((code, p) -> {
+            try {
+                var part = componentService.findByCode(code);
+                if (part != null && p != null && p.title() != null) titles.putIfAbsent(part.category(), p.title());
+            } catch (ResourceNotFoundException e) {
+                // mã lạ: kiểm tra tương thích đã báo
+            }
+        });
+        return ProductRules.issues(titles);
     }
 
     /** Rẻ phải rẻ hơn rõ rệt: tối đa 90% ngân sách */
@@ -621,6 +663,9 @@ public class ChatService {
         fixes.forEach((code, f) -> {
             var p = f.join();
             if (p == null) return;
+            var trial = new LinkedHashMap<>(picks);
+            trial.put(code, p);
+            if (!productIssues(trial).isEmpty() && productIssues(picks).isEmpty()) return;
             picks.put(code, p);
             links.put(code, CompletableFuture.completedFuture(p.url()));
         });
@@ -744,10 +789,17 @@ public class ChatService {
                     Map<String, Object> saved = new LinkedHashMap<>();
                     saved.put("saved", true);
                     saved.put("compatibility", result);
+                    var productErrors = productIssues(picks);
+                    if (!productErrors.isEmpty()) {
+                        log.info("propose_build {}: sản phẩm thật lắp không được: {}", tier, productErrors);
+                        saved.put("product_errors", productErrors);
+                    }
                     saved.put("total_min_vnd", totalMin);
                     saved.put("total_max_vnd", totalMax);
-                    saved.put("note", result.compatible() ? "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết."
-                            : "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build.");
+                    saved.put("note", !result.compatible() ? "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build."
+                            : !productErrors.isEmpty() ? "Sản phẩm thật đã chọn lắp không được với nhau (xem product_errors): chọn lại "
+                                    + "sản phẩm cho đúng socket / loại RAM rồi gọi lại propose_build với cùng tier."
+                            : "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết.");
                     // Phương án vượt trần của nó (Rẻ, Phù hợp: ngân sách; Chất lượng: +15%): báo để trợ lý chọn lại. Thẻ vượt
                     // trần không được gửi cho người dùng (respond)
                     Long cap = tierCap(checked.budgetVnd(), tier);
@@ -795,6 +847,8 @@ public class ChatService {
                         m.put("title", p.title());
                         m.put("shop", p.shop());
                         m.put("price_vnd", p.priceVnd());
+                        String specs = ProductRules.describeAny(p.title());
+                        if (!specs.isEmpty()) m.put("specs", specs);
                         // Engine so giá đọc được trang sản phẩm thì báo còn hàng / bảo hành để trợ lý chọn món mua được
                         var offer = search.offer(p.url());
                         if (offer != null && offer.inStock() != null) m.put("in_stock", offer.inStock());
@@ -849,7 +903,12 @@ public class ChatService {
         });
         var r = c.result();
         String note = advice ? modelMatch.check(c.request()).note() : null;
-        return new BuildCard(lines, r.compatible(), forUser(r.errors()), forUser(r.warnings()), c.summary(), c.budgetVnd(), note, tier, variant);
+        // Sản phẩm thật lắp không được với nhau (vd bo DDR5 + RAM DDR4): báo đỏ trên thẻ dù danh mục lắp được
+        var productErrors = productIssues(c.picks());
+        List<Issue> errors = new ArrayList<>(forUser(r.errors()));
+        productErrors.forEach(m -> errors.add(new Issue("product.compat", m)));
+        return new BuildCard(lines, r.compatible() && productErrors.isEmpty(), errors, forUser(r.warnings()), c.summary(),
+                c.budgetVnd(), note, tier, variant);
     }
 
     /** Lời nhắn cho trợ lý có kèm mã linh kiện trong ngoặc vuông; người dùng không cần thấy mã */

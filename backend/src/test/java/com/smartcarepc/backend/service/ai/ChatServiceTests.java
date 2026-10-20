@@ -387,6 +387,34 @@ class ChatServiceTests {
     }
 
     @Test
+    void boDdr5MaRamDdr4ThiBaoLoiVaBatTroLyChonLai() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("mb_atx")).thenReturn(part("mb_atx", "motherboard", "Bo mạch chủ ATX"));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("B760")).thenReturn(List.of(
+                new ProductSearch.Product("Mainboard MSI B760 GAMING PLUS WIFI DDR5", "Hacom", 4_300_000L, "https://hacom.vn/b760", null)));
+        when(search.search("RAM DDR4")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Corsair Vengeance LPX 16GB DDR4 3200", "FPT", 1_600_000L, "https://fptshop.com.vn/ram", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s1", "search_products", "{\"query\":\"B760\"}"),
+                toolCall("s2", "search_products", "{\"query\":\"RAM DDR4\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"mb_atx","spec":"B760","reason":"Bền","product_id":"s1-1"},
+                {"code":"ram_ddr4","spec":"16 GB DDR4","reason":"Đủ","product_id":"s2-1"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
+
+        // Thẻ báo không lắp được dù danh mục (đều DDR4) lắp được
+        assertThat(res.build().compatible()).isFalse();
+        assertThat(res.build().errors()).anySatisfy(i -> assertThat(i.message()).contains("DDR5").contains("DDR4"));
+        // Trợ lý được báo lỗi để chọn lại, và thấy thông số khi tìm
+        String toolResults = sent.getLast().get("messages").toString();
+        assertThat(toolResults).contains("product_errors").contains("chipset B760, DDR5");
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
