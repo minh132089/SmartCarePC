@@ -26,6 +26,7 @@ import com.smartcarepc.backend.dto.CompatibilityResponse;
 import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
 import com.smartcarepc.backend.dto.ComponentResponse;
 import com.smartcarepc.backend.dto.PcBuildResponse;
+import com.smartcarepc.backend.exception.AiUnavailableException;
 import com.smartcarepc.backend.exception.ResourceNotFoundException;
 import com.smartcarepc.backend.service.CompatibilityService;
 import com.smartcarepc.backend.service.ComponentService;
@@ -294,7 +295,15 @@ public class ChatService {
             body.put("tools", tools);
 
             long t0 = System.nanoTime();
-            Map<String, Object> res = client.complete(body);
+            Map<String, Object> res;
+            try {
+                res = client.complete(body);
+            } catch (AiUnavailableException e) {
+                // AI lỗi ở vòng viết câu trả lời nhưng các phương án đã dựng xong: vẫn gửi phương án, không bỏ phí
+                if (turn.tiers.isEmpty() && turn.last == null) throw e;
+                log.warn("Chat vòng {}: AI lỗi sau khi đã có phương án, gửi phương án kèm câu dẫn có sẵn", round + 1);
+                return respond(BUILDS_READY, turn);
+            }
             long aiMs = (System.nanoTime() - t0) / 1_000_000;
             var choices = (List<Map<String, Object>>) res.getOrDefault("choices", List.of());
             if (choices.isEmpty()) break;
@@ -396,6 +405,10 @@ public class ChatService {
         int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
         return details.getOrDefault(code, Map.of()).get("buy_qty") instanceof Number b && b.intValue() < qty;
     }
+
+    /** Câu dẫn khi AI lỗi ở vòng cuối nhưng phương án đã có */
+    static final String BUILDS_READY = "Mình đã chọn xong các phương án bên dưới. Bạn bấm vào từng option để xem chi tiết "
+            + "linh kiện, giá và link mua nhé. Phần giải thích chi tiết đang tạm lỗi, bạn có thể hỏi thêm ở ô bên dưới.";
 
     /** Hàng không nên đưa người mới tham khảo */
     private static final java.util.regex.Pattern JUNK =

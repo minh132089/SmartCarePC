@@ -85,7 +85,8 @@ function createChat(mode: ChatMode) {
           signal: ctrl.signal,
         })
         const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.detail ?? (res.status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.'))
+        // Backend báo lỗi ở detail (ProblemDetail); proxy trên Cloudflare Pages báo ở message
+        if (!res.ok) throw new Error(data?.detail ?? data?.message ?? (res.status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.'))
         set({ messages: [...next, { role: 'assistant', content: data.reply, build: data.build, options: data.options }] })
       } catch (e) {
         if (ctrl.signal.aborted) return

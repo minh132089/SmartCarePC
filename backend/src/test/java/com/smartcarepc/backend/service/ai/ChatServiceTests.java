@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.smartcarepc.backend.exception.AiUnavailableException;
+import org.springframework.http.HttpStatus;
 import com.smartcarepc.backend.dto.BuildCheckRequest;
 import com.smartcarepc.backend.dto.ChatRequest;
 import com.smartcarepc.backend.dto.ChatResponse;
@@ -345,6 +347,31 @@ class ChatServiceTests {
 
         assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD C");
         assertThat(res.build().items().getFirst().sourceUrl()).isEqualTo("https://c.vn/1");
+    }
+
+    @Test
+    void aiLoiOVongCuoiVanGuiPhuongAnDaDung() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A", "A", 1_000_000L, "https://a.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        when(client.complete(any())).thenReturn(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
+                toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
+                """)).thenThrow(new AiUnavailableException(HttpStatus.BAD_GATEWAY, "AI lỗi"));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        assertThat(res.reply()).isEqualTo(ChatService.BUILDS_READY);
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
+    }
+
+    @Test
+    void aiLoiNgayVongDauThiBaoLoi() {
+        when(client.complete(any())).thenThrow(new AiUnavailableException(HttpStatus.BAD_GATEWAY, "AI lỗi"));
+        assertThatThrownBy(() -> service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice")))
+                .isInstanceOf(AiUnavailableException.class);
     }
 
     @Test

@@ -16,8 +16,9 @@ export async function onRequest({ request }) {
       body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
       redirect: 'manual',
     })
-    // Tunnel đã tắt: Cloudflare trả trang lỗi 530 / 1033 thay vì JSON
-    if (res.status === 530 || res.status === 502) return offline()
+    // Tunnel đã tắt: Cloudflare trả trang lỗi HTML 530 / 502 / 1033. Lỗi JSON là của backend (vd dịch vụ AI lỗi): chuyển nguyên
+    const json = (res.headers.get('content-type') ?? '').includes('json')
+    if ((res.status === 530 || res.status === 502) && !json) return offline()
     return new Response(res.body, res)
   } catch {
     return offline()
