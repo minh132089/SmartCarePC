@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react'
-import { ArrowCounterClockwise, ArrowRight, CaretRight, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, CaretRight, DiceFive, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
 import CardNav, { type CardNavItem, type CardNavLink } from '@/components/CardNav'
 import MicroSlats from '@/components/MicroSlats'
 import PixelSwap from '@/components/PixelSwap'
@@ -21,11 +21,17 @@ import { StudyBar, StudyJoinLink } from './study/StudyBar'
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
-/** Lời kể mẫu: bấm vào thì chép vào ô nhập để người dùng sửa theo ý mình rồi mới gửi */
+/**
+ * Lời kể mẫu: bấm gợi ý (hoặc nút ngẫu nhiên cạnh nút gửi) thì chép vào ô nhập để người dùng sửa theo ý mình rồi mới
+ * gửi. label là chữ ngắn trên nút gợi ý.
+ */
 const EXAMPLES = [
-  'Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.',
-  'Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.',
-  'Mình dựng video cho công việc, máy phải chạy ổn định nhiều giờ, ngân sách trên 40 triệu.',
+  { label: 'Sinh viên, 12 triệu', text: 'Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.' },
+  { label: 'Chơi game, 25 triệu', text: 'Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.' },
+  { label: 'Dựng video, 40 triệu', text: 'Mình dựng video cho công việc, máy phải chạy ổn định nhiều giờ, ngân sách khoảng 40 triệu.' },
+  { label: 'Văn phòng, 10 triệu', text: 'Mình cần máy cho văn phòng nhỏ, chạy phần mềm kế toán và in ấn, khoảng 10 triệu, càng êm càng tốt.' },
+  { label: 'Thiết kế, 20 triệu', text: 'Mình học thiết kế đồ họa, dùng Photoshop và Illustrator, có khoảng 20 triệu, muốn máy êm và không quá to.' },
+  { label: 'Lập trình, 18 triệu', text: 'Mình là lập trình viên, hay mở nhiều tab và chạy Docker, có khoảng 18 triệu, cần nhiều RAM để sau này nâng cấp.' },
 ]
 
 /** Mặc định xem build trợ lý chọn của phương án "Phù hợp cho bạn" */
@@ -254,9 +260,7 @@ const NAV_ITEMS: CardNavItem[] = [
     label: 'Tư vấn',
     description: 'Kể nhu cầu, trợ lý chọn linh kiện và so giá ở các cửa hàng.',
     links: [
-      { label: 'Sinh viên, 12 triệu', href: '#' },
-      { label: 'Chơi game, 25 triệu', href: '#' },
-      { label: 'Dựng video, trên 40 triệu', href: '#' },
+      ...EXAMPLES.slice(0, 3).map((ex) => ({ label: ex.label, href: '#' })),
     ],
   },
   {
@@ -302,10 +306,15 @@ function Intro({
     setDraft(text)
     inputRef.current?.focus()
   }
+  /** Nút ngẫu nhiên: lấy một lời kể mẫu khác với chữ đang có trong ô */
+  const random = () => {
+    const others = EXAMPLES.filter((ex) => ex.text !== draft)
+    fill(others[Math.floor(Math.random() * others.length)].text)
+  }
   const onLink = (link: CardNavLink, _item: CardNavItem, event: MouseEvent<HTMLElement>) => {
     event.preventDefault()
-    const example = ['Sinh viên, 12 triệu', 'Chơi game, 25 triệu', 'Dựng video, trên 40 triệu'].indexOf(link.label)
-    if (example >= 0) fill(EXAMPLES[example])
+    const example = EXAMPLES.find((ex) => ex.label === link.label)
+    if (example) fill(example.text)
     else if (link.label === 'Xem mô hình 3D') setPage('build')
     else if (link.label === 'Hướng dẫn lắp máy') {
       setGuide(true)
@@ -375,10 +384,7 @@ function Intro({
               />
             </div>
           </h1>
-          <p className="mx-auto mt-2 max-w-[48ch] text-center text-[16px] leading-[1.5] text-ink-2">
-            Kể nhu cầu bằng lời của bạn. Trợ lý sẽ chọn linh kiện, so giá ở các cửa hàng và kiểm tra chúng có lắp chung được không.
-          </p>
-          <div className="mt-7">
+          <div className="mt-6">
             <Composer
               big
               value={draft}
@@ -387,19 +393,33 @@ function Intro({
               busy={busy}
               inputRef={inputRef}
               placeholder="Ví dụ: mình học thiết kế, có khoảng 20 triệu, muốn máy êm và không quá to"
+              extra={
+                <button
+                  type="button"
+                  onClick={random}
+                  aria-label="Điền một gợi ý ngẫu nhiên"
+                  title="Gợi ý ngẫu nhiên"
+                  className={`grid size-10 shrink-0 place-items-center rounded-full bg-fill text-ink-2 hover:bg-fill-hover hover:text-ink ${press} ${focus}`}
+                >
+                  <DiceFive size={18} aria-hidden />
+                </button>
+              }
             />
           </div>
 
-          <p className="mt-6 px-1 text-[13px] text-ink-2">Chưa biết kể thế nào? Bấm một ví dụ rồi sửa lại cho đúng ý bạn.</p>
-          <ul className="mt-2 space-y-1">
+          <p className="mt-5 px-1 text-[13px] text-ink-2">Chưa biết kể thế nào? Chọn một gợi ý rồi sửa lại cho đúng ý bạn.</p>
+          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Gợi ý">
             {EXAMPLES.map((ex) => (
-              <li key={ex}>
+              <li key={ex.label}>
                 <button
-                  onClick={() => fill(ex)}
-                  className={`group flex w-full items-start gap-2.5 rounded-xl px-1 py-1.5 text-left text-[15px] leading-[1.45] text-ink hover:text-link ${focus}`}
+                  onClick={() => fill(ex.text)}
+                  title={ex.text}
+                  aria-pressed={draft === ex.text}
+                  className={`rounded-full px-3.5 py-1.5 text-[14px] ring-1 backdrop-blur-sm ${press} ${focus} ${
+                    draft === ex.text ? 'bg-accent text-white ring-accent' : 'bg-surface/80 text-ink ring-line hover:ring-ink-3'
+                  }`}
                 >
-                  <ArrowRight size={14} aria-hidden className="mt-[5px] shrink-0 text-ink-3 group-hover:text-link" />
-                  {ex}
+                  {ex.label}
                 </button>
               </li>
             ))}

@@ -163,6 +163,7 @@ export function Composer({
   placeholder,
   big,
   inputRef,
+  extra,
 }: {
   value: string
   onChange: (v: string) => void
@@ -172,6 +173,8 @@ export function Composer({
   /** Ô lớn nhiều dòng cho trang tư vấn */
   big?: boolean
   inputRef?: Ref<HTMLTextAreaElement>
+  /** Nút thêm đặt ngay trước nút gửi (vd gợi ý ngẫu nhiên) */
+  extra?: ReactNode
 }) {
   return (
     <form
@@ -200,6 +203,7 @@ export function Composer({
           big ? 'max-h-48 min-h-[76px] text-[16px]' : 'max-h-28 min-h-[30px] text-[15px]'
         }`}
       />
+      {extra}
       <button
         type="submit"
         disabled={!value.trim() || busy}
