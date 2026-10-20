@@ -105,19 +105,27 @@ public class PriceEngine {
      * null nếu không xác minh được. Kết quả được nhớ theo link, thẻ cấu hình dùng giá này thay giá Google Shopping.
      */
     public Offer readPage(String url, String expectTitle) {
-        if (url == null || !Shops.productLike(url)) return null;
+        if (url == null || !Shops.productLike(url) || rejected.contains(url) || rejected.contains(url + "|" + expectTitle)) return null;
         var known = byUrl.get(url);
         if (known != null) {
             return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
                     ? known : null;
         }
-        var fetched = fetcher.page(url, Duration.ofSeconds(4));
+        var fetched = fetcher.page(url, Duration.ofSeconds(8));
+        if (fetched == null) return null; // tải không được (chậm, robots.txt): lần sau thử lại
         // Sản phẩm ngừng bán hay bị web chuyển sang trang danh mục / trang chủ: không phải trang sản phẩm nữa
-        if (fetched == null || !Shops.productLike(fetched.finalUrl())) return null;
-        Offer page = ProductPage.parseLoose(fetched.html(), url, Instant.now());
-        if (page == null || !samePage(expectTitle, page.title())) return null;
-        // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận
-        if (Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())) return null;
+        Offer page = Shops.productLike(fetched.finalUrl()) ? ProductPage.parseLoose(fetched.html(), url, Instant.now()) : null;
+        // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận.
+        // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option)
+        if (page == null || Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())) {
+            remember(url);
+            return null;
+        }
+        if (!samePage(expectTitle, page.title())) {
+            byUrl.put(url, page);
+            remember(url + "|" + expectTitle);
+            return null;
+        }
         if (byUrl.size() > 5000) byUrl.clear();
         byUrl.put(url, page);
         return page;
@@ -129,6 +137,14 @@ public class PriceEngine {
     /** Hàng cũ / 2nd / thanh lý / trưng bày, theo tên trên trang hoặc đường dẫn */
     static boolean usedGoods(String title, String url) {
         return title != null && JUNK.matcher(title).find() || url != null && USED_PATH.matcher(url.replaceFirst("[?#].*$", "")).find();
+    }
+
+    /** Link (hoặc link|tên mong đợi) đã bị loại khi xác minh, giữ tới khi quá nhiều thì xoá */
+    private final Set<String> rejected = ConcurrentHashMap.newKeySet();
+
+    private void remember(String key) {
+        if (rejected.size() > 5000) rejected.clear();
+        rejected.add(key);
     }
 
     private static final Pattern CAPACITY = Pattern.compile("(\\d+)\\s?(gb|tb)\\b");

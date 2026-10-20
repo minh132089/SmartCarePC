@@ -218,12 +218,11 @@ public class ProductSearch {
         if (!enabled() || title == null) return null;
         String key = title + "|" + shop;
         String hit = linkCache.get(key);
-        if (hit != null) return hit;
+        if (hit != null) return hit.isEmpty() ? null : hit;
         String found = resolve(title, shop);
-        if (found != null) {
-            if (linkCache.size() > 2000) linkCache.clear();
-            linkCache.put(key, found);
-        }
+        // Nhớ cả lần không tìm ra (chuỗi rỗng): cùng sản phẩm hay xuất hiện ở nhiều option, khỏi tìm và mở trang lại
+        if (linkCache.size() > 2000) linkCache.clear();
+        linkCache.put(key, found == null ? "" : found);
         return found;
     }
 

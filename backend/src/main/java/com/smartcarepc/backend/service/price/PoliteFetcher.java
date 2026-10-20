@@ -25,7 +25,7 @@ public class PoliteFetcher {
 
     static final String USER_AGENT = "SmartCarePC/1.0 (+https://smartcarepc.pages.dev; student project price checker)";
     /** Khoảng cách tối thiểu giữa hai lần gọi cùng một trang khi robots.txt không quy định */
-    static final Duration DEFAULT_GAP = Duration.ofMillis(500);
+    static final Duration DEFAULT_GAP = Duration.ofMillis(250);
     static final Duration ROBOTS_TTL = Duration.ofHours(6);
 
     private final HttpClient http = HttpClient.newBuilder()
