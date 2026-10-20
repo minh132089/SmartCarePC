@@ -108,6 +108,25 @@ class PriceEngineTests {
     }
 
     @Test
+    void tuKhoaDaiVaNhieuModel() {
+        // "A hoặc B": tìm từng model, phần sau mượn tên loại của phần đầu
+        assertThat(PriceEngine.alternatives("Card màn hình RTX 3050 8GB hoặc GTX 1660 Super giá rẻ"))
+                .containsExactly("Card màn hình RTX 3050 8GB", "Card màn hình GTX 1660 Super giá rẻ");
+        assertThat(PriceEngine.alternatives("RAM DDR4 16GB 3200")).containsExactly("RAM DDR4 16GB 3200");
+        // Ô tìm kiếm của cửa hàng: bỏ "giá rẻ", số đo, socket
+        assertThat(PriceEngine.shopQuery("Tản nhiệt khí CPU tháp 155mm 1 quạt giá rẻ LGA1700 AM4")).isEqualTo("Tản nhiệt khí CPU tháp");
+        assertThat(PriceEngine.shopQuery("Card màn hình RTX 3050 8GB")).isEqualTo("Card màn hình RTX 3050");
+        // Thông số không bắt buộc khớp, mã model thì bắt buộc
+        assertThat(PriceEngine.relevance("Tản nhiệt khí CPU tháp 155mm LGA1700", "Tản nhiệt khí Thermalright Peerless Assassin 120")).isPositive();
+        assertThat(PriceEngine.relevance("Card màn hình RTX 3050 8GB", "Card màn hình MSI GeForce RTX 3060 12G")).isZero();
+        assertThat(PriceEngine.isModel("3050")).isTrue();
+        assertThat(PriceEngine.isModel("12400f")).isTrue();
+        assertThat(PriceEngine.isModel("155mm")).isFalse();
+        assertThat(PriceEngine.isModel("lga1700")).isFalse();
+        assertThat(PriceEngine.isModel("650w")).isFalse();
+    }
+
+    @Test
     void cungModelOCuaHangKhac() {
         assertThat(PriceEngine.sameModel("Card màn hình ASUS Dual GeForce RTX 4060 EVO OC Edition 8GB GDDR6",
                 "VGA ASUS Dual RTX 4060 EVO OC 8GB")).isTrue();

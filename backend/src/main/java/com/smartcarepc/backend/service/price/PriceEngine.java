@@ -101,6 +101,17 @@ public class PriceEngine {
 
     /** Sản phẩm đang bán khớp từ khoá, tốt nhất trước (tối đa MAX) */
     public List<Offer> search(String query) {
+        // "RTX 3050 hoặc GTX 1660": tìm từng model rồi gộp, vì không sản phẩm nào có cả hai mã
+        var parts = alternatives(query);
+        if (parts.size() > 1) {
+            Map<String, Offer> merged = new LinkedHashMap<>();
+            parts.stream().map(part -> CompletableFuture.supplyAsync(() -> search(part), pool)).toList()
+                    .forEach(f -> join(f).forEach(o -> merged.putIfAbsent(clean(o.url()), o)));
+            return merged.values().stream()
+                    .sorted(Comparator.comparingInt((Offer o) -> o.inStock() == null ? 1 : o.inStock() ? 0 : 2)
+                            .thenComparingLong(Offer::priceVnd))
+                    .limit(MAX).toList();
+        }
         String key = query.strip().toLowerCase();
         var hit = cache.get(key);
         if (hit != null && hit.at().isAfter(Instant.now().minus(CACHE))) return hit.offers();
@@ -116,10 +127,12 @@ public class PriceEngine {
 
     private List<Offer> fresh(String query) {
         Instant at = Instant.now();
+        // Ô tìm kiếm của cửa hàng tìm theo mọi chữ: bỏ chữ thừa ("giá rẻ", số đo) để không ra rỗng
+        String shopQuery = shopQuery(query);
         var shops = Arrays.stream(ShopSearch.values())
                 .map(s -> CompletableFuture.supplyAsync(() -> {
                     // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có
-                    String html = fetcher.get(s.url(query), Duration.ofSeconds(6));
+                    String html = fetcher.get(s.url(shopQuery), Duration.ofSeconds(6));
                     return html == null ? List.<Offer>of() : s.parse(html, at);
                 }, pool))
                 .toList();
@@ -204,12 +217,18 @@ public class PriceEngine {
             if (w.isBlank() || STOP.contains(w)) continue;
             (w.matches(".*\\d.*") ? codes : words).add(w);
         }
-        int hitCodes = 0;
+        int hitCodes = 0, models = 0, hitModels = 0;
         for (String c : codes) {
-            if (squashed.contains(c)) hitCodes++;
-            else if (c.matches(".*\\d{3,}.*")) return 0;
+            boolean hit = squashed.contains(c);
+            if (hit) hitCodes++;
+            if (isModel(c)) {
+                models++;
+                if (hit) hitModels++;
+            }
         }
-        if (!codes.isEmpty() && hitCodes * 2 < codes.size()) return 0;
+        // Có mã model (3050, 12400f, b760m) thì phải trúng ít nhất một; thông số (155mm, 650w, lga1700) chỉ cộng điểm
+        if (models > 0 && hitModels == 0) return 0;
+        if (models == 0 && !codes.isEmpty() && hitCodes == 0 && !(qKind != null && qKind.equals(tKind))) return 0;
         Set<String> titleWords = new HashSet<>(Arrays.asList(t.split(" ")));
         long hitWords = words.stream().filter(titleWords::contains).count();
         double wordScore = words.isEmpty() ? 1 : (double) hitWords / words.size();
@@ -219,6 +238,53 @@ public class PriceEngine {
             return wordScore >= 0.5 ? wordScore : 0;
         }
         return 0.7 * hitCodes / codes.size() + 0.3 * wordScore;
+    }
+
+    /** Thông số có đơn vị hoặc socket, không phải mã model */
+    private static final Pattern SPEC = Pattern.compile(
+            "\\d+(mm|cm|w|gb|tb|mb|mhz|ghz|hz|inch|in|v|a|rpm|k|p|bit|x|nm|l|m|mt|mts|cl\\d*)|(lga|am|ddr|pcie|gen|usb|cl|m)\\d+[a-z]*");
+
+    /** Mã model: có số, dài từ 3 ký tự, không phải thông số (4060, 12400f, b760m, a650bn) */
+    static boolean isModel(String token) {
+        return token.matches(".*\\d{3,}.*") && !SPEC.matcher(token).matches();
+    }
+
+    /** "A hoặc B" / "A hay B" / "A / B": các model thay thế, mỗi cái một lần tìm (tối đa 3) */
+    static List<String> alternatives(String query) {
+        String[] parts = query.split("(?i)\\s+(hoặc|hay|or)\\s+|\\s*/\\s*");
+        if (parts.length < 2) return List.of(query);
+        String head = kindPrefix(parts[0]);
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < parts.length && out.size() < 3; i++) {
+            String p = parts[i].strip();
+            if (p.isEmpty()) continue;
+            // "Card RTX 3050 hoặc GTX 1660": phần sau thiếu tên loại thì mượn của phần đầu
+            out.add(i > 0 && kind(norm(p)) == null && head != null ? head + " " + p : p);
+        }
+        return out.size() < 2 ? List.of(query) : out;
+    }
+
+    /** Chữ chỉ loại linh kiện ở đầu từ khoá ("Card màn hình", "Tản nhiệt"), null nếu không có */
+    private static String kindPrefix(String part) {
+        String[] w = part.strip().split("\\s+");
+        for (int n = Math.min(3, w.length); n >= 1; n--) {
+            String head = String.join(" ", java.util.Arrays.copyOf(w, n));
+            if (kind(norm(head)) != null) return head;
+        }
+        return null;
+    }
+
+    /** Từ khoá gửi ô tìm kiếm của cửa hàng: bỏ chữ thừa và thông số, giữ loại + mã model, tối đa 5 chữ */
+    static String shopQuery(String query) {
+        List<String> keep = new ArrayList<>();
+        for (String w : query.replaceAll("(?i)giá (rẻ|tốt)|chính hãng|loại tốt|có đèn|đèn", " ").split("\\s+")) {
+            String n = norm(w);
+            if (n.isBlank() || STOP.contains(n)) continue;
+            if (n.matches(".*\\d.*") && !isModel(n.replace(" ", "")) && !n.matches("(rtx|gtx|rx|i[3579]|ryzen|ddr[345]|\\d+gb|\\d+tb|\\d+w)")) continue;
+            keep.add(w);
+            if (keep.size() >= 5) break;
+        }
+        return keep.isEmpty() ? query : String.join(" ", keep);
     }
 
     /** Loại linh kiện khớp sớm nhất trong chuỗi đã bỏ dấu, null nếu không nhận ra */

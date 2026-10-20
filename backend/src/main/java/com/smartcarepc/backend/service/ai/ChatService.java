@@ -66,8 +66,8 @@ public class ChatService {
             Vì vậy chọn vỏ trước theo nhu cầu (kích thước, kính, tản khí hay tản nước, card dài hay ngắn), rồi dùng đúng \
             bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do.
             4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
-            check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá tiếng Việt theo thông số, vd \
-            "RAM DDR4 16GB 3200". Mỗi kết quả có một id ngắn (vd "s3-2"). Kết quả có nhiều mức giá: dùng chúng cho cả \
+            check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá ngắn, mỗi lần một loại hoặc một model, vd \
+            "RAM DDR4 16GB 3200", "RTX 3050 8GB"; muốn so hai model thì gọi hai lần. Mỗi kết quả có một id ngắn (vd "s3-2"). Kết quả có nhiều mức giá: dùng chúng cho cả \
             ba phương án ở bước 5, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
             cũ, "like new", hàng trưng bày, phụ kiện bán kèm, và giá rẻ bất thường (thấp hơn nhiều so với các kết quả \
             khác cùng loại), vì người mới dễ mua phải hàng kém.
@@ -194,11 +194,13 @@ public class ChatService {
                                                     "required", List.of("code", "spec", "reason")))),
                             "required", List.of("summary", "items"))),
             tool("search_products",
-                    "Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam (kết quả Google). Trả về tối đa 6 món: id, title, shop, "
-                            + "price_vnd (có thể null). Dùng id trong propose_build.",
+                    "Tìm sản phẩm thật đang bán ở cửa hàng máy tính Việt Nam (đọc thẳng web cửa hàng). Trả về tối đa 8 món: "
+                            + "id, title, shop, price_vnd, in_stock và warranty_months nếu biết. Dùng id trong propose_build. "
+                            + "Ưu tiên món in_stock = true.",
                     Map.of("type", "object",
                             "properties", Map.of("query", Map.of("type", "string",
-                                    "description", "Từ khoá tiếng Việt theo thông số, vd 'SSD NVMe 512GB giá rẻ'")),
+                                    "description", "Từ khoá NGẮN 2-5 chữ, MỘT loại / model mỗi lần (không dùng 'hoặc'), "
+                                            + "vd 'RTX 3050 8GB', 'SSD NVMe 512GB', 'tản nhiệt khí CPU'. Không thêm 'giá rẻ', số đo hay socket")),
                             "required", List.of("query"))));
 
     private final LlmClient client;
@@ -367,14 +369,19 @@ public class ChatService {
             // Luật cứng: Rẻ và Phù hợp không vượt ngân sách, Chất lượng không vượt quá 15%. Đo trên thẻ cuối cùng (sau khi
             // đổi món lấy link), cùng cách cộng với giao diện; build nào vượt thì bỏ, số option đánh lại từ 1
             List<Checked> kept = withinCap(all, cap);
+            Checked low = null;
             if (kept.isEmpty() && search.enabled()) {
                 // Trợ lý vẫn chọn vượt dù đã được báo: thử bộ rẻ nhất trong cùng các lần tìm kiếm
-                var low = cheapest(base, t, cap);
+                low = cheapest(base, t, cap);
                 if (total(low.request(), low.details(), low.picks()) <= cap) kept = List.of(low);
             }
             if (kept.isEmpty()) {
-                kept = List.of(all.stream().min(Comparator.comparingLong(c -> total(c.request(), c.details(), c.picks()))).orElseThrow());
-                log.warn("Phương án {} vượt trần {} dù đã thử bộ rẻ nhất", t, cap);
+                // Giá thật làm mọi bộ vượt trần: vẫn cho tham khảo tối đa 3 bộ, rẻ nhất trước (thẻ ghi rõ vượt bao nhiêu)
+                List<Checked> pool = new ArrayList<>(all);
+                if (low != null) pool.add(low);
+                pool.sort(Comparator.comparingLong(c -> total(c.request(), c.details(), c.picks())));
+                kept = withinCap(pool, null).stream().limit(3).toList();
+                log.warn("Phương án {} vượt trần {} dù đã thử bộ rẻ nhất, gửi {} bộ rẻ nhất", t, cap, kept.size());
             }
             chosen.put(t, kept);
         }
