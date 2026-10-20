@@ -202,6 +202,8 @@ export function AdvicePage() {
         duration={520}
         pixelDuration={380}
         randomness={0.35}
+        // Không chạy hiệu ứng hiện dần lúc mở trang: máy yếu chạy chậm làm tiêu đề mấy giây sau mới thấy
+        intro={false}
         onComplete={(toChat) => {
           setIntroGone(toChat)
           if (toChat) chatInputRef.current?.focus()
@@ -379,8 +381,7 @@ function Intro({
                 letterSpacing={-0.04}
                 color="currentColor"
                 accentColor={dark ? '#2997ff' : '#0071e3'}
-                intro="assemble"
-                introDuration={1.6}
+                intro="none"
                 draggable={false}
               />
             </div>
