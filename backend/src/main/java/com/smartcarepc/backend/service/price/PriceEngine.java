@@ -47,7 +47,8 @@ public class PriceEngine {
             "like ?new|\\bcũ\\b|đã qua sử dụng|\\b2nd\\b|trưng bày|thanh lý|\\btray\\b|bóc máy",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Tên bắt đầu bằng các loại này mà từ khoá không nhắc tới thì là hàng khác loại (laptop, PC lắp sẵn, màn hình) */
-    private static final List<String> OTHER_KINDS = List.of("laptop", "pc ", "may tinh", "bo may", "bo pc", "combo", "man hinh", "may bo");
+    private static final List<String> OTHER_KINDS = List.of("laptop", "pc ", "may tinh", "bo may", "bo pc", "combo", "man hinh", "may bo",
+            "macbook", "imac", "mac mini", "mac studio");
     /** Hàng cho laptop (RAM SO-DIMM, SSD laptop): không lắp vào máy bàn */
     private static final Pattern LAPTOP_PART = Pattern.compile("\\b(laptop|notebook|so ?dimm)\\b");
     /** Chữ không mang nghĩa khi so từ khoá với tên */
@@ -64,8 +65,9 @@ public class PriceEngine {
             Map.entry("gpu", Pattern.compile("\\bcard man hinh\\b|\\bcard do hoa\\b|\\bvga\\b")),
             Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b")),
             Map.entry("ssd", Pattern.compile("\\bo cung\\b|\\bssd\\b")),
-            Map.entry("ram", Pattern.compile("^ram\\b|\\bbo nho\\b|^ram ")),
-            Map.entry("cpu", Pattern.compile("\\bcpu\\b|\\bvi xu ly\\b")),
+            // "bộ nhớ cache / đệm" trong tên CPU không phải RAM
+            Map.entry("ram", Pattern.compile("^ram\\b|\\bbo nho\\b(?! (cache|dem|l[23]))|^ram ")),
+            Map.entry("cpu", Pattern.compile("\\bcpu\\b|\\bvi xu ly\\b|\\bbo xu ly\\b|\\bprocessor\\b")),
             // Quạt case: "Bộ 3 quạt ...", "Fan case ...". Tản / vỏ / nguồn có chữ "quạt" thì chữ loại kia đứng trước nên vẫn đúng loại
             Map.entry("fans", Pattern.compile("\\bquat\\b|\\bfan\\b")));
     /** Chữ phân biệt phiên bản: phải trùng nhau mới là cùng model (RTX 4060 khác 4060 Ti, B760M khác B760M WiFi) */
@@ -319,6 +321,8 @@ public class PriceEngine {
         }
         // Có mã model (3050, 12400f, b760m) thì phải trúng ít nhất một; thông số (155mm, 650w, lga1700) chỉ cộng điểm
         if (models > 0 && hitModels == 0) return 0;
+        // CPU "i3 12100" khác "i3-12100F": đuôi F / KF là bản không có đồ họa tích hợp, phải mua thêm card rời
+        if (noIgpuVariant(codes, t)) return 0;
         if (models == 0 && !codes.isEmpty() && hitCodes == 0 && !(qKind != null && qKind.equals(tKind))) return 0;
         Set<String> titleWords = new HashSet<>(Arrays.asList(t.split(" ")));
         long hitWords = words.stream().filter(titleWords::contains).count();
@@ -329,6 +333,13 @@ public class PriceEngine {
             return wordScore >= 0.5 ? wordScore : 0;
         }
         return 0.7 * hitCodes / codes.size() + 0.3 * wordScore;
+    }
+
+    /** Tên sản phẩm chỉ có bản đuôi F / KF của mã CPU trong từ khoá (từ khoá không ghi đuôi đó) */
+    static boolean noIgpuVariant(List<String> codes, String normalizedTitle) {
+        Set<String> words = new HashSet<>(Arrays.asList(normalizedTitle.split(" ")));
+        return codes.stream().filter(PriceEngine::isModel).filter(c -> !words.contains(c))
+                .anyMatch(c -> words.contains(c + "f") || words.contains(c + "kf"));
     }
 
     /** Thông số có đơn vị hoặc socket, không phải mã model */

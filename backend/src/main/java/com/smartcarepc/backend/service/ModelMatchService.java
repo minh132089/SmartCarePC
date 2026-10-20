@@ -64,9 +64,16 @@ public class ModelMatchService {
             ComponentResponse want = fixed.get(category);
             ComponentResponse have = chosen.get(category);
             if (want == null || (have != null && have.code().equals(want.code()))) continue;
+            // Không có card rời: máy dùng đồ họa tích hợp (kiểm tra tương thích báo lỗi nếu CPU không có), bỏ bước lắp card
+            if (have == null && "gpu".equals(category)) continue;
             errors.add(new Issue("model." + category, mismatch(pcCase, category, want, have)));
         }
-        return new Result(errors, note(model.get(), chosenQty));
+        String note = note(model.get(), chosenQty);
+        if (fixed.containsKey("gpu") && !chosen.containsKey("gpu")) {
+            String noGpu = "Máy mẫu 3D có card đồ họa rời; cấu hình này dùng đồ họa tích hợp của CPU nên bạn bỏ qua bước lắp card.";
+            note = note == null ? noGpu : note + " " + noGpu;
+        }
+        return new Result(errors, note);
     }
 
     /** Gộp lỗi lệch máy mẫu vào kết quả kiểm tra tương thích */

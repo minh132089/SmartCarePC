@@ -65,7 +65,9 @@ public class ChatService {
             vỏ đó để hướng dẫn người dùng tự lắp từng bước. Mỗi vỏ có máy mẫu dựng sẵn với bo mạch, tản nhiệt, card đồ \
             họa và nguồn cố định (xem "Món đi kèm từng vỏ" ở cuối lời dặn), và hướng dẫn lắp dạy theo đúng các món đó. \
             Vì vậy chọn vỏ trước theo nhu cầu (kích thước, kính, tản khí hay tản nước, card dài hay ngắn), rồi dùng đúng \
-            bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do.
+            bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do. \
+            Riêng card đồ họa: máy không cần card rời (học, văn phòng) và CPU có đồ họa tích hợp thì BỎ HẲN dòng card, \
+            app tự ghi chú để người dùng bỏ qua bước lắp card.
             4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
             check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá ngắn, mỗi lần một loại hoặc một model, vd \
             "RAM DDR4 16GB 3200", "RTX 3050 8GB"; muốn so hai model thì gọi hai lần. Mỗi kết quả có một id ngắn (vd "s3-2"). Kết quả có nhiều mức giá: dùng chúng cho cả \
@@ -159,7 +161,8 @@ public class ChatService {
             (RECOMMENDATION); tốc độ XMP / EXPO không được đảm bảo.
             - Máy học / văn phòng không chơi game nặng: chọn CPU CÓ đồ họa tích hợp (vd Intel Core i3 / i5 đời 12 - 14 \
             KHÔNG đuôi F, Ryzen bản G) và KHÔNG thêm card rời để tiết kiệm; app tự bỏ lỗi "thiếu card" khi CPU thật có \
-            đồ họa tích hợp. Chơi game thì mới cần card rời.
+            đồ họa tích hợp. Chơi game thì mới cần card rời. Khi tìm, ghi đúng mã không đuôi F (vd "Core i3 12100"), \
+            không chọn bản F rồi thêm card: card rời đắt hơn khoản chênh nhiều lần và làm vượt ngân sách.
             - Đồ họa: KHÔNG suy ra từ hậu tố. Intel đuôi F thường không có đồ họa tích hợp; Ryzen 7000 / 9000 thường có \
             đồ họa cơ bản nhưng có ngoại lệ (vd 7500F). Không chắc CPU có đồ họa thì chọn thêm card đồ họa.
             - Tản nhiệt: phải có gá đúng socket (ERROR); gá Intel và AMD khác nhau. Gá LGA1700 thường dùng cho LGA1851, gá \
@@ -661,6 +664,26 @@ public class ChatService {
         return new CompatibilityResponse(errors.isEmpty(), errors, warnings);
     }
 
+    /**
+     * Gợi ý khi vượt ngân sách vì CPU không có đồ họa tích hợp (vd i3-12100F) kéo theo card rời: máy học / văn phòng
+     * đổi sang bản cùng đời có đồ họa tích hợp rồi bỏ card là rẻ hơn vài triệu. Không phải trường hợp đó thì chuỗi rỗng.
+     */
+    private String igpuHint(Map<String, ProductSearch.Product> picks, BuildCheckRequest req) {
+        String cpu = productTitles(picks).get("cpu");
+        if (!Boolean.FALSE.equals(ProductRules.hasIgpu(cpu))) return "";
+        boolean hasGpu = req.items().stream().anyMatch(i -> {
+            try {
+                return "gpu".equals(componentService.findByCode(i.code()).category());
+            } catch (ResourceNotFoundException e) {
+                return false;
+            }
+        });
+        if (!hasGpu) return "";
+        return " CPU \"" + cpu + "\" không có đồ họa tích hợp nên phải mua card rời. Nếu người dùng không chơi game hay làm "
+                + "đồ họa nặng (học, văn phòng, xem phim): tìm CPU cùng đời CÓ đồ họa tích hợp (vd \"Core i3 12100\", "
+                + "\"Core i5 12400\" không đuôi F, Ryzen 5 5600G / 8600G), bỏ dòng card đồ họa, rồi gọi lại propose_build.";
+    }
+
     /** Loại linh kiện trong danh mục -> loại PriceEngine.kind nhận ra từ tên sản phẩm */
     private static final Map<String, String> KIND_OF = Map.of("cooler", "cooler", "case", "case", "motherboard", "mainboard",
             "gpu", "gpu", "psu", "psu", "ssd", "ssd", "ram", "ram", "cpu", "cpu", "fans", "fans");
@@ -671,9 +694,15 @@ public class ChatService {
         try {
             var part = componentService.findByCode(code);
             String want = part == null ? null : KIND_OF.get(part.category());
-            String got = com.smartcarepc.backend.service.price.PriceEngine.kind(
-                    com.smartcarepc.backend.service.price.PriceEngine.norm(p.title()));
-            return want != null && got != null && !want.equals(got);
+            String title = com.smartcarepc.backend.service.price.PriceEngine.norm(p.title());
+            String got = com.smartcarepc.backend.service.price.PriceEngine.kind(title);
+            if (want != null && got != null && !want.equals(got)) return true;
+            // Dòng tản khí mà gắn tản nước (AIO đắt gấp nhiều lần) hay ngược lại cũng là sai hàng
+            if ("cooler".equals(want)) {
+                boolean liquid = title.matches(".*\\b(aio|tan nuoc|tan nhiet nuoc|liquid)\\b.*");
+                return code.startsWith("aio") != liquid;
+            }
+            return false;
         } catch (ResourceNotFoundException e) {
             return false;
         }
@@ -983,7 +1012,8 @@ public class ChatService {
                         saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
                                 + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier."
                                 + ("cheap".equals(tier) ? " Món đi kèm vỏ đắt (tản nước, card 3 quạt) thì đổi sang vỏ khác rẻ hơn, "
-                                        + "kể cả khi phải bỏ mặt kính, và nói rõ điều đó với người dùng." : ""));
+                                        + "kể cả khi phải bỏ mặt kính, và nói rõ điều đó với người dùng." : "")
+                                + igpuHint(picks, req));
                     }
                     if (!auto.isEmpty()) {
                         saved.put("auto_filled", auto.entrySet().stream().map(e -> {

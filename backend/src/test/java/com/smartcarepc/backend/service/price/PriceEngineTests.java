@@ -252,6 +252,25 @@ class PriceEngineTests {
                 "https://phongvu.vn/card-msi-rtx-4060--s123", "https://www.anphatpc.com.vn/vga-asus-4060.html");
     }
 
+    @Test
+    void cpuKhongDuoiFThiKhongLayBanF() {
+        // Bản F không có đồ họa tích hợp: máy học / văn phòng chọn nó là phải mua thêm card rời
+        assertThat(PriceEngine.relevance("CPU Intel Core i3 12100", "Bộ vi xử lý Intel Core i3-12100F")).isZero();
+        assertThat(PriceEngine.relevance("Core i5 12400", "CPU Intel Core i5 12400KF")).isZero();
+        assertThat(PriceEngine.relevance("CPU Intel Core i3 12100", "Bộ vi xử lý Intel Core i3-12100 / 3.3GHz")).isPositive();
+        assertThat(PriceEngine.relevance("Core i3 12100F", "Bộ vi xử lý Intel Core i3-12100F")).isPositive();
+    }
+
+    @Test
+    void nhanDungLoaiTenCpuVaBoMacBook() {
+        // "bộ nhớ cache" trong tên CPU không phải RAM
+        assertThat(PriceEngine.kind(PriceEngine.norm(
+                "bộ xử lý máy tính để bàn Core i3-12100 bốn nhân 12 MB bộ nhớ cache L3 Socket LGA-1700"))).isEqualTo("cpu");
+        assertThat(PriceEngine.kind(PriceEngine.norm("Bộ nhớ/ RAM Corsair DDR4 16GB"))).isEqualTo("ram");
+        // Tìm "CPU" chung chung không được ra máy MacBook nguyên chiếc
+        assertThat(PriceEngine.relevance("CPU", "Macbook Pro Apple M5 chip with 10-core CPU and 10-core GPU, 16GB")).isZero();
+    }
+
     private static Offer offer(String title, long price, Boolean inStock) {
         return new Offer(title, "Shop", price, null, "https://gearvn.com/products/" + title.hashCode(), null, inStock, null, AT);
     }

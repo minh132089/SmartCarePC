@@ -76,11 +76,20 @@ class ModelMatchServiceTests {
     }
 
     @Test
-    void thieuCardDoHoaThiBaoThem() {
+    void khongCoCardRoiThiChiGhiChuBoQuaBuocLapCard() {
+        // Máy học / văn phòng dùng đồ họa tích hợp: không bắt thêm card của máy mẫu (CPU không có đồ họa thì
+        // kiểm tra tương thích báo lỗi riêng)
         var r = service.check(request("case_standard_tower", "mb_atx", "cpu_std", "tower_air_155", "psu_atx",
                 "2:ram_ddr4", "ssd_m2_2280", "3:fan120"));
+        assertThat(r.errors()).isEmpty();
+        assertThat(r.note()).contains("đồ họa tích hợp").contains("bỏ qua bước lắp card");
+    }
+
+    @Test
+    void cardKhacMayMauVanBaoLoi() {
+        var r = service.check(request("case_standard_tower", "mb_atx", "cpu_std", "tower_air_155", "gpu_240", "psu_atx",
+                "2:ram_ddr4", "ssd_m2_2280", "3:fan120"));
         assertThat(r.errors()).extracting(Issue::rule).containsExactly("model.gpu");
-        assertThat(r.errors().getFirst().message()).contains("Hãy thêm");
     }
 
     @Test
