@@ -375,6 +375,13 @@ class ChatServiceTests {
     }
 
     @Test
+    void serperHetLuotThiTamTatTimKiem() {
+        assertThat(ProductSearch.accountProblem(400, "{\"message\":\"Not enough credits\",\"statusCode\":400}")).isTrue();
+        assertThat(ProductSearch.accountProblem(403, "")).isTrue();
+        assertThat(ProductSearch.accountProblem(400, "{\"message\":\"bad query\"}")).isFalse();
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         assertThat(ChatService.tierCap(12_000_000L, "cheap")).isEqualTo(12_000_000L);
         assertThat(ChatService.tierCap(12_000_000L, "balanced")).isEqualTo(12_000_000L);

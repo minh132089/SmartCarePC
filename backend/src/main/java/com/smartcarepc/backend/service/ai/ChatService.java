@@ -265,6 +265,12 @@ public class ChatService {
 
     @SuppressWarnings("unchecked")
     public ChatResponse reply(ChatRequest request) {
+        return reply(request, stage -> { });
+    }
+
+    /** progress nhận câu báo bước đang làm (hiện cho người dùng trong lúc chờ, xem ChatJobs) */
+    public ChatResponse reply(ChatRequest request, java.util.function.Consumer<String> progress) {
+        progress.accept(STAGE_READ);
         List<Map<String, Object>> messages = new ArrayList<>();
         String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
                 : "\nNgười dùng đang làm theo hướng dẫn lắp, hiện ở: " + request.guideStep().strip() + ".\n";
@@ -312,6 +318,7 @@ public class ChatService {
             if (calls == null || calls.isEmpty()) {
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
+                if (!turn.tiers.isEmpty()) progress.accept(STAGE_LINKS);
                 var done = respond(clean(message.get("content")), turn);
                 log.info("Chat: dựng thẻ (đổi link cửa hàng) {} ms", (System.nanoTime() - tc) / 1_000_000);
                 return done;
@@ -319,6 +326,9 @@ public class ChatService {
             // Gửi lại nguyên tin của model (kể cả reasoning_content của model suy luận) rồi tới kết quả từng công cụ
             messages.add(message);
             // Chạy song song các công cụ của cùng một lượt (thường là nhiều search_products), rồi trả kết quả theo đúng thứ tự
+            var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
+            if (names.contains("search_products")) progress.accept(STAGE_SEARCH);
+            else if (names.contains("propose_build")) progress.accept(STAGE_CHECK);
             var results = calls.stream()
                     .map(call -> CompletableFuture.supplyAsync(() -> runTool((Map<String, Object>) call.get("function"), turn)))
                     .toList();
@@ -327,6 +337,7 @@ public class ChatService {
                 messages.add(Map.of("role", "tool", "tool_call_id", String.valueOf(calls.get(i).get("id")),
                         "content", results.get(i).join()));
             }
+            progress.accept(!turn.tiers.isEmpty() ? STAGE_WRITE : names.contains("search_products") ? STAGE_PICK : STAGE_READ);
             log.info("Chat vòng {}: AI {} ms, {} công cụ {} chạy {} ms", round + 1, aiMs, calls.size(),
                     calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
                     (System.nanoTime() - t1) / 1_000_000);
@@ -405,6 +416,14 @@ public class ChatService {
         int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
         return details.getOrDefault(code, Map.of()).get("buy_qty") instanceof Number b && b.intValue() < qty;
     }
+
+    /** Các bước báo cho người dùng trong lúc chờ (trang tư vấn mất cả phút) */
+    static final String STAGE_READ = "Đang đọc nhu cầu của bạn…";
+    static final String STAGE_SEARCH = "Đang tìm giá ở các cửa hàng…";
+    static final String STAGE_PICK = "Đang chọn linh kiện cho ba phương án Rẻ, Phù hợp, Chất lượng…";
+    static final String STAGE_CHECK = "Đang kiểm tra các linh kiện lắp chung được không…";
+    static final String STAGE_WRITE = "Đã có phương án, đang viết lời giải thích…";
+    static final String STAGE_LINKS = "Sắp xong, đang lấy link mua ở cửa hàng…";
 
     /** Câu dẫn khi AI lỗi ở vòng cuối nhưng phương án đã có */
     static final String BUILDS_READY = "Mình đã chọn xong các phương án bên dưới. Bạn bấm vào từng option để xem chi tiết "

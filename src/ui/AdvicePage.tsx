@@ -37,7 +37,7 @@ const BUSY_HINTS = [
  * Trang này không vẽ cảnh 3D nên không làm nóng máy người dùng.
  */
 export function AdvicePage() {
-  const { messages, busy, error, send, retry, reset } = useAdviceChat()
+  const { messages, busy, stage, error, send, retry, reset } = useAdviceChat()
   const setPage = useViewer((s) => s.setPage)
   const open = useOpenMachine()
   const [draft, setDraft] = useState('')
@@ -189,6 +189,7 @@ export function AdvicePage() {
                 <Thread
                   messages={messages}
                   busy={busy}
+                  stage={stage}
                   error={error}
                   onRetry={() => retry({})}
                   cardAction={cardAction}

@@ -64,7 +64,16 @@ public class ProductSearch {
     }
 
     public boolean enabled() {
-        return !apiKey.isEmpty();
+        return !apiKey.isEmpty() && java.time.Instant.now().isAfter(pausedUntil);
+    }
+
+    /** Serper hết lượt / khoá bị từ chối: tạm coi như tắt tìm kiếm, để trợ lý trả lời bằng giá ước tính thay vì gọi mãi */
+    private volatile java.time.Instant pausedUntil = java.time.Instant.EPOCH;
+    static final Duration PAUSE = Duration.ofMinutes(10);
+
+    /** Lỗi do tài khoản (hết lượt, khoá sai), thử lại cũng vô ích */
+    static boolean accountProblem(int status, String body) {
+        return status == 401 || status == 402 || status == 403 || body != null && body.toLowerCase().contains("credits");
     }
 
     /** Kết quả đã tìm trong 30 phút gần đây, theo từ khoá: câu hỏi lặp lại trả lời nhanh và không tốn lượt Serper */
@@ -289,6 +298,17 @@ public class ProductSearch {
                 return res == null ? Map.of() : res;
             } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
                 log.info("Serper {} quá giới hạn, thử lại", path); // vòng sau throttle() tự chờ
+            } catch (org.springframework.web.client.HttpClientErrorException e) {
+                if (accountProblem(e.getStatusCode().value(), e.getResponseBodyAsString())) {
+                    if (java.time.Instant.now().isAfter(pausedUntil)) {
+                        log.warn("Serper từ chối ({}): {}. Tạm tắt tìm sản phẩm {} phút, nạp thêm lượt hoặc đổi SERPER_API_KEY",
+                                e.getStatusCode().value(), e.getResponseBodyAsString(), PAUSE.toMinutes());
+                    }
+                    pausedUntil = java.time.Instant.now().plus(PAUSE);
+                } else {
+                    log.warn("Serper {} lỗi: {}", path, e.getMessage());
+                }
+                return Map.of();
             } catch (RestClientException e) {
                 // Mạng chập chờn / trả chậm bị cắt: thử lại; lỗi khác (khoá sai, 4xx) thì thôi
                 boolean transientError = e instanceof org.springframework.web.client.ResourceAccessException

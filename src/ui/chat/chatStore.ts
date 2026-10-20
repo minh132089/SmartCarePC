@@ -49,10 +49,61 @@ export type ChatContext = { buildCode?: string | null; guideStep?: string | null
 /** Gửi tối đa từng này tin gần nhất, đủ để trợ lý nhớ mạch chuyện mà không quá dài */
 const HISTORY = 20
 const OFFLINE = 'Chưa kết nối được máy chủ. Hãy bật backend (cổng 8083) rồi thử lại.'
+/** Hỏi lại kết quả vài giây một lần; mạng chập chờn thì bỏ qua tới từng này lần hỏi hỏng liên tiếp (~15 giây) */
+const POLL_MS = 1500
+const MAX_MISSES = 10
+
+type ChatReply = { reply: string; build?: BuildCard | null; options?: BuildCard[] | null }
+type JobView = { id: string; status: 'running' | 'done' | 'error'; stage?: string | null; result?: ChatReply | null; error?: string | null }
+
+/** Backend báo lỗi ở detail (ProblemDetail); proxy trên Cloudflare Pages báo ở message */
+function errorText(data: { detail?: string; message?: string } | null, status: number) {
+  return data?.detail ?? data?.message ?? (status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.')
+}
+
+function sleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms)
+    signal.addEventListener('abort', () => (clearTimeout(t), reject(new DOMException('aborted', 'AbortError'))), { once: true })
+  })
+}
+
+/**
+ * Câu hỏi chạy nền ở backend: gửi lấy mã việc, rồi hỏi lại tới khi xong. Không yêu cầu nào kéo dài cả phút nên không
+ * bị cắt giữa chừng (link demo qua Cloudflare cắt ở 100 giây). onStage nhận bước backend đang làm.
+ */
+async function ask(body: unknown, signal: AbortSignal, onStage: (stage: string | null) => void): Promise<ChatReply> {
+  const res = await fetch('/api/chat/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+  const job = await res.json().catch(() => null)
+  if (!res.ok) throw new Error(errorText(job, res.status))
+  let misses = 0
+  for (;;) {
+    await sleep(POLL_MS, signal)
+    let r: Response
+    try {
+      r = await fetch(`/api/chat/jobs/${job.id}`, { signal })
+    } catch (e) {
+      if (signal.aborted || ++misses > MAX_MISSES) throw e
+      continue
+    }
+    const data: JobView | null = await r.json().catch(() => null)
+    if (!r.ok || !data) {
+      // Lỗi mạng / tunnel thoáng qua: hỏi lại; 404 (việc không còn) hay lỗi kéo dài thì báo
+      if (r.status >= 500 && ++misses <= MAX_MISSES) continue
+      throw new Error(errorText(data as never, r.status))
+    }
+    misses = 0
+    if (data.status === 'done' && data.result) return data.result
+    if (data.status === 'error') throw new Error(data.error ?? 'Trợ lý chưa trả lời được, bạn thử lại nhé.')
+    onStage(data.stage ?? null)
+  }
+}
 
 interface ChatState {
   messages: Msg[]
   busy: boolean
+  /** Bước backend đang làm khi chờ trả lời (vd "Đang tìm giá ở các cửa hàng…") */
+  stage: string | null
   error: string | null
   /** Gửi một câu; history mặc định là hội thoại hiện tại (retry truyền hội thoại đã bỏ câu lỗi) */
   send: (text: string, ctx: ChatContext, history?: Msg[]) => Promise<void>
@@ -62,31 +113,25 @@ interface ChatState {
 
 /**
  * Mỗi chế độ chat có một kho riêng, nằm ngoài component nên chuyển trang qua lại hội thoại vẫn còn.
- * Gọi /api/chat của backend (Vite chuyển tiếp sang cổng 8083); khoá AI chỉ nằm ở backend.
+ * Gọi /api/chat/jobs của backend (Vite chuyển tiếp sang cổng 8083); khoá AI chỉ nằm ở backend.
  */
 function createChat(mode: ChatMode) {
   let abort: AbortController | null = null
   return create<ChatState>((set, get) => ({
     messages: [],
     busy: false,
+    stage: null,
     error: null,
     send: async (text, ctx, history) => {
       const content = text.trim()
       if (!content || get().busy) return
       const next: Msg[] = [...(history ?? get().messages), { role: 'user', content }]
-      set({ messages: next, busy: true, error: null })
+      set({ messages: next, busy: true, stage: null, error: null })
       const ctrl = new AbortController()
       abort = ctrl
       try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, ...ctx, messages: next.slice(-HISTORY).map(toWire) }),
-          signal: ctrl.signal,
-        })
-        const data = await res.json().catch(() => null)
-        // Backend báo lỗi ở detail (ProblemDetail); proxy trên Cloudflare Pages báo ở message
-        if (!res.ok) throw new Error(data?.detail ?? data?.message ?? (res.status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.'))
+        const body = { mode, ...ctx, messages: next.slice(-HISTORY).map(toWire) }
+        const data = await ask(body, ctrl.signal, (stage) => abort === ctrl && set({ stage }))
         set({ messages: [...next, { role: 'assistant', content: data.reply, build: data.build, options: data.options }] })
       } catch (e) {
         if (ctrl.signal.aborted) return
@@ -94,7 +139,7 @@ function createChat(mode: ChatMode) {
       } finally {
         if (abort === ctrl) {
           abort = null
-          set({ busy: false })
+          set({ busy: false, stage: null })
         }
       }
     },
@@ -107,7 +152,7 @@ function createChat(mode: ChatMode) {
     reset: () => {
       abort?.abort()
       abort = null
-      set({ messages: [], busy: false, error: null })
+      set({ messages: [], busy: false, stage: null, error: null })
     },
   }))
 }

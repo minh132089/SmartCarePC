@@ -16,6 +16,7 @@ export function Bubble({ role, children }: { role: Msg['role']; children: ReactN
 export function Thread({
   messages,
   busy,
+  stage,
   error,
   onRetry,
   cardAction,
@@ -25,6 +26,8 @@ export function Thread({
 }: {
   messages: Msg[]
   busy: boolean
+  /** Bước backend báo đang làm; có thì hiện thay cho busyHints */
+  stage?: string | null
   error: string | null
   onRetry: () => void
   /** Nút gắn dưới thẻ cấu hình, vd "Xem và lắp máy này" ở trang tư vấn (index là vị trí tin trong hội thoại) */
@@ -50,7 +53,7 @@ export function Thread({
             )))}
         </div>
       ))}
-      {busy && <BusyBubble hints={busyHints} />}
+      {busy && <BusyBubble hints={busyHints} stage={stage} />}
       {error && (
         <div className="rounded-2xl bg-warn-bg px-3.5 py-3 text-[13px] leading-snug text-warn ring-1 ring-warn-line">
           {error}
@@ -67,14 +70,14 @@ export function Thread({
 const HINT_AT = [0, 6, 20, 50]
 
 /** Ba chấm "đang trả lời", kèm dòng trạng thái đổi theo thời gian chờ nếu có */
-function BusyBubble({ hints }: { hints?: string[] }) {
+function BusyBubble({ hints, stage }: { hints?: string[]; stage?: string | null }) {
   const [step, setStep] = useState(0)
   useEffect(() => {
     if (!hints?.length) return
     const timers = HINT_AT.slice(1, hints.length).map((s, i) => setTimeout(() => setStep(i + 1), s * 1000))
     return () => timers.forEach(clearTimeout)
   }, [hints])
-  const hint = hints?.[Math.min(step, hints.length - 1)]
+  const hint = stage ?? hints?.[Math.min(step, hints.length - 1)]
   return (
     <div className="flex w-fit items-center gap-2.5 rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 ring-1 ring-line" role="status" aria-label={hint ?? 'Trợ lý đang trả lời'}>
       <span className="flex gap-1" aria-hidden>

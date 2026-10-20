@@ -34,7 +34,7 @@ export function ChatPanel() {
   const suggestions = step ? [`Bước "${step.title}" mình cần chú ý gì?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
   const ctx = { buildCode: familyId ?? buildId, guideStep: stepText }
 
-  const { messages, busy, error, send, retry, reset } = useAssemblyChat()
+  const { messages, busy, stage, error, send, retry, reset } = useAssemblyChat()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -105,7 +105,7 @@ export function ChatPanel() {
             ))}
           </div>
         )}
-        <Thread messages={messages} busy={busy} error={error} onRetry={() => retry(ctx)} />
+        <Thread messages={messages} busy={busy} stage={stage} error={error} onRetry={() => retry(ctx)} />
       </div>
 
       <div className="border-t border-line bg-surface px-3 pt-3 pb-2">
