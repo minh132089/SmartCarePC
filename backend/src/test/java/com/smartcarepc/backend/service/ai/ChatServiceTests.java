@@ -322,9 +322,14 @@ class ChatServiceTests {
 
         // Build vượt ngân sách bị bỏ, option đánh số lại từ 1
         var cheap = res.options().stream().filter(o -> "cheap".equals(o.tier())).toList();
-        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD B", "SSD C");
-        assertThat(cheap).extracting(ChatResponse.BuildCard::variant).containsExactly(1, 2);
-        assertThat(res.options()).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_000_000L));
+        // Rẻ tối đa 90% ngân sách (900 nghìn): chỉ SSD C còn hợp lệ
+        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C");
+        assertThat(cheap).extracting(ChatResponse.BuildCard::variant).containsExactly(1);
+        assertThat(cheap).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(900_000L));
+        // Phù hợp: option 1 không vượt ngân sách, option sau được đắt hơn tối đa 2 triệu
+        var balanced = res.options().stream().filter(o -> "balanced".equals(o.tier())).toList();
+        assertThat(balanced.getFirst().items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_000_000L);
+        assertThat(balanced).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(3_000_000L));
     }
 
     @Test
@@ -383,9 +388,13 @@ class ChatServiceTests {
 
     @Test
     void tranGiaTheoPhuongAn() {
-        assertThat(ChatService.tierCap(12_000_000L, "cheap")).isEqualTo(12_000_000L);
-        assertThat(ChatService.tierCap(12_000_000L, "balanced")).isEqualTo(12_000_000L);
-        assertThat(ChatService.tierCap(12_000_000L, "quality")).isEqualTo(13_800_000L);
+        // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
+        assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
+        assertThat(ChatService.altCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
+        assertThat(ChatService.tierCap(25_000_000L, "balanced")).isEqualTo(25_000_000L);
+        assertThat(ChatService.altCap(25_000_000L, "balanced")).isEqualTo(27_000_000L);
+        assertThat(ChatService.tierCap(25_000_000L, "quality")).isEqualTo(28_000_000L);
+        assertThat(ChatService.altCap(25_000_000L, "quality")).isEqualTo(28_000_000L);
         assertThat(ChatService.tierCap(null, "quality")).isNull();
     }
 
@@ -419,9 +428,8 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        // Build 1 do trợ lý chọn; build 2 là món rẻ hơn (món đắt hơn làm vượt ngân sách); build 3 không có cách nào
-        // khác mà vẫn trong ngân sách nên bị bỏ
-        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD A", "SSD Re");
+        // Option 1 do trợ lý chọn, không vượt ngân sách; option 2, 3 của Phù hợp được đắt hơn ngân sách tối đa 2 triệu
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD A", "SSD Re", "SSD Dat");
         assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
     }
 

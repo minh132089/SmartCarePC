@@ -75,9 +75,10 @@ public class ChatService {
             không có thì để trống product_id: app sẽ tự tìm và gắn sản phẩm thật cho món đó (xem auto_filled).
             5. Sau lượt tìm kiếm, đưa BA PHƯƠNG ÁN để người dùng so sánh: gọi propose_build ba lần TRONG CÙNG MỘT LƯỢT \
             (song song), mỗi lần một tier:
-               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, tổng TUYỆT ĐỐI không vượt ngân sách;
-               - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng TUYỆT ĐỐI không vượt ngân sách; đây là gợi ý chính;
-               - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, được vượt ngân sách tối đa khoảng 15%.
+               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, phải rẻ hơn rõ rệt: tổng TỐI ĐA 90% ngân sách;
+               - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng sát ngân sách nhưng TUYỆT ĐỐI không \
+            vượt; đây là gợi ý chính (app tự thêm option tham khảo đắt hơn tối đa 2 triệu);
+               - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, chỉ vượt ngân sách một chút: TỐI ĐA 3 triệu.
             LUÔN gọi đủ ba propose_build rồi mới trả lời, kể cả khi không vừa ngân sách: khi đó chốt bộ rẻ nhất có thể \
             cho tier đó và nói rõ trong câu trả lời là vượt bao nhiêu, vì sao. Không được trả lời mà chưa chốt phương án. \
             Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
@@ -368,13 +369,14 @@ public class ChatService {
             // không có link thì thay bằng sản phẩm cùng nhóm có link (hiếm, vài giây)
             Checked base = turn.tiers.get(t);
             Long cap = turn.advice ? tierCap(base.budgetVnd(), t) : null;
+            Long altCap = turn.advice ? altCap(base.budgetVnd(), t) : null;
             if (turn.advice && search.enabled()) base = withLinkedPicks(base, t, cap);
             List<Checked> all = new ArrayList<>();
             all.add(base);
             for (var alt : turn.variants.getOrDefault(t, List.of())) all.add(withLinks(alt, base));
             // Luật cứng: Rẻ và Phù hợp không vượt ngân sách, Chất lượng không vượt quá 15%. Đo trên thẻ cuối cùng (sau khi
             // đổi món lấy link), cùng cách cộng với giao diện; build nào vượt thì bỏ, số option đánh lại từ 1
-            List<Checked> kept = withinCap(all, cap);
+            List<Checked> kept = options(all, cap, altCap);
             Checked low = null;
             if (kept.isEmpty() && search.enabled()) {
                 // Trợ lý vẫn chọn vượt dù đã được báo: thử bộ rẻ nhất trong cùng các lần tìm kiếm
@@ -405,6 +407,22 @@ public class ChatService {
         BuildCard build = options.stream().filter(o -> "balanced".equals(o.tier()) && o.variant() == 1).findFirst()
                 .orElseGet(() -> turn.last == null ? null : card(turn.last, turn.advice, null, 1));
         return new ChatResponse(reply, build, options.size() > 1 ? options : null);
+    }
+
+    /**
+     * Option hiện cho người dùng: option 1 là build đầu tiên không vượt cap (thường là build trợ lý chọn), option 2, 3 là
+     * các build còn lại không vượt altCap (Phù hợp cho bạn: được đắt hơn ngân sách tối đa 2 triệu). Không có build nào
+     * dưới cap thì rỗng.
+     */
+    static List<Checked> options(List<Checked> all, Long cap, Long altCap) {
+        var unique = withinCap(all, null);
+        var first = unique.stream().filter(c -> cap == null || total(c.request(), c.details(), c.picks()) <= cap).findFirst();
+        if (first.isEmpty()) return List.of();
+        List<Checked> out = new ArrayList<>(List.of(first.get()));
+        unique.stream().filter(c -> c != first.get())
+                .filter(c -> altCap == null || total(c.request(), c.details(), c.picks()) <= altCap)
+                .limit(2).forEach(out::add);
+        return out;
     }
 
     /** Các build không vượt trần (cap null: không giới hạn), bỏ build trùng hệt nhau sau khi đổi món lấy link */
@@ -469,7 +487,7 @@ public class ChatService {
         List<Checked> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         seen.add(signature(c.picks()));
-        Long cap = tierCap(c.budgetVnd(), tier);
+        Long cap = altCap(c.budgetVnd(), tier);
         for (int v = 0; v < 2; v++) {
             var picks = variantPicks(c, tier, v, false);
             // Vượt trần thì chỉ đổi sang món không đắt hơn món trợ lý chọn; vẫn vượt thì bỏ build này
@@ -485,9 +503,27 @@ public class ChatService {
         return out;
     }
 
-    /** Trần giá theo phương án: Rẻ và Phù hợp không vượt ngân sách, Chất lượng vượt tối đa 15% */
+    /** Rẻ phải rẻ hơn rõ rệt: tối đa 90% ngân sách */
+    static final double CHEAP_SHARE = 0.9;
+    /** Option 2, 3 của Phù hợp cho bạn được đắt hơn ngân sách tối đa từng này */
+    static final long BALANCED_OVER = 2_000_000;
+    /** Chất lượng chỉ vượt ngân sách một chút: tối đa từng này */
+    static final long QUALITY_OVER = 3_000_000;
+
+    /** Trần của option 1 (build trợ lý chọn): Rẻ 90% ngân sách, Phù hợp đúng ngân sách, Chất lượng + 3 triệu */
     static Long tierCap(Long budgetVnd, String tier) {
-        return budgetVnd == null ? null : Math.round(budgetVnd * ("quality".equals(tier) ? 1.15 : 1.0));
+        if (budgetVnd == null) return null;
+        return switch (tier == null ? "" : tier) {
+            case "cheap" -> Math.round(budgetVnd * CHEAP_SHARE);
+            case "quality" -> budgetVnd + QUALITY_OVER;
+            default -> budgetVnd;
+        };
+    }
+
+    /** Trần của option 2, 3: như option 1, riêng Phù hợp cho bạn được vượt ngân sách tối đa 2 triệu */
+    static Long altCap(Long budgetVnd, String tier) {
+        if (budgetVnd != null && "balanced".equals(tier)) return budgetVnd + BALANCED_OVER;
+        return tierCap(budgetVnd, tier);
     }
 
     /** Món của build thay thế thứ v (0 = gần giá nhất, 1 = gần thứ nhì); notPricier: chỉ món không đắt hơn món gốc */
