@@ -304,6 +304,25 @@ function Intro({
   const setPage = useViewer((s) => s.setPage)
   const setGuide = useViewer((s) => s.setGuide)
   const openStudy = useStudy((s) => s.open)
+  // Dự phòng: sau 1,5 giây mà khung TechText chưa vẽ được nét nào (trình duyệt / card đồ họa không hỗ trợ, máy quá chậm)
+  // thì hiện tiêu đề bằng chữ thường, để màn giới thiệu không bao giờ thiếu tiêu đề
+  const titleRef = useRef<HTMLDivElement>(null)
+  const [plainTitle, setPlainTitle] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const canvas = titleRef.current?.querySelector('canvas')
+      try {
+        const ctx = canvas?.getContext('2d')
+        if (!canvas || !ctx || canvas.width < 2) return setPlainTitle(true)
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+        for (let i = 3; i < data.length; i += 16) if (data[i] > 0) return
+        setPlainTitle(true)
+      } catch {
+        setPlainTitle(true)
+      }
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [])
   const fill = (text: string) => {
     setDraft(text)
     inputRef.current?.focus()
@@ -372,18 +391,24 @@ function Intro({
           <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">SmartCare PC · trợ lý build máy</p>
           <h1 className="mt-2 text-ink">
             <span className="sr-only">Create your own PC</span>
-            <div aria-hidden className="h-[clamp(84px,13vw,150px)] w-full">
-              <TechText
-                text="Create your own PC"
-                fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
-                fontWeight={700}
-                fontSize={120}
-                letterSpacing={-0.04}
-                color="currentColor"
-                accentColor={dark ? '#2997ff' : '#0071e3'}
-                intro="none"
-                draggable={false}
-              />
+            <div ref={titleRef} aria-hidden className="relative h-[clamp(84px,13vw,150px)] w-full">
+              {plainTitle ? (
+                <span className="absolute inset-0 grid place-items-center text-[clamp(2.4rem,1.2rem+5vw,5.2rem)] leading-none font-bold tracking-[-0.04em] whitespace-nowrap">
+                  Create your own PC
+                </span>
+              ) : (
+                <TechText
+                  text="Create your own PC"
+                  fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif"
+                  fontWeight={700}
+                  fontSize={120}
+                  letterSpacing={-0.04}
+                  color="currentColor"
+                  accentColor={dark ? '#2997ff' : '#0071e3'}
+                  intro="none"
+                  draggable={false}
+                />
+              )}
             </div>
           </h1>
           <div className="mt-6">
