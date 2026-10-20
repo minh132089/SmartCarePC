@@ -318,7 +318,7 @@ public class ChatService {
             if (calls == null || calls.isEmpty()) {
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
-                if (!turn.tiers.isEmpty()) progress.accept(STAGE_LINKS);
+                if (!turn.tiers.isEmpty() && search.enabled()) progress.accept(STAGE_LINKS);
                 var done = respond(clean(message.get("content")), turn);
                 log.info("Chat: dựng thẻ (đổi link cửa hàng) {} ms", (System.nanoTime() - tc) / 1_000_000);
                 return done;
