@@ -446,6 +446,47 @@ class ChatServiceTests {
     }
 
     @Test
+    void chiChotMonConHangVaTuTimThemKhiNhomKhongCoLink() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(components.findByCode("case_gaming")).thenReturn(part("case_gaming", "case", "Vỏ"));
+        when(search.enabled()).thenReturn(true);
+        var at = java.time.Instant.parse("2026-10-20T10:00:00Z");
+        // SSD: món trợ lý chọn đã hết hàng, món cùng nhóm còn hàng -> đổi
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A 1TB", "A", 1_500_000L, "https://a.vn/ssd-a", null),
+                new ProductSearch.Product("SSD B 1TB", "B", 1_520_000L, "https://b.vn/ssd-b", null)));
+        when(search.offer("https://a.vn/ssd-a")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "SSD A 1TB", "A", 1_500_000L, null, "https://a.vn/ssd-a", null, false, null, at));
+        when(search.offer("https://b.vn/ssd-b")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "SSD B 1TB", "B", 1_520_000L, null, "https://b.vn/ssd-b", null, true, null, at));
+        // Vỏ: cả nhóm không có trang bán -> tìm thêm theo thông số và lấy món có link
+        when(search.search("Vỏ kính")).thenReturn(List.of(new ProductSearch.Product("Vỏ Jonsbo D32", "X", 1_300_000L, "https://www.google.com/x", null)));
+        when(search.search("Vỏ mid tower mặt kính")).thenReturn(List.of(
+                new ProductSearch.Product("Vỏ Montech Air 100", "C", 1_350_000L, "https://c.vn/vo", null)));
+        when(search.offer("https://c.vn/vo")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "Vỏ Montech Air 100", "C", 1_350_000L, null, "https://c.vn/vo", null, true, null, at));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> {
+            String url = inv.getArgument(2);
+            return url.contains("google") ? null : url;
+        });
+        reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"Vỏ kính\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Nhanh","product_id":"s1-1"},
+                {"code":"case_gaming","spec":"Vỏ mid tower mặt kính","reason":"Đẹp","product_id":"s2-1"}]}
+                """), answer("Xong."));
+
+        var items = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items();
+
+        var ssd = items.stream().filter(i -> i.category().equals("ssd")).findFirst().orElseThrow();
+        assertThat(ssd.productName()).isEqualTo("SSD B 1TB");
+        assertThat(ssd.inStock()).isTrue();
+        var pcCase = items.stream().filter(i -> i.category().equals("case")).findFirst().orElseThrow();
+        assertThat(pcCase.productName()).isEqualTo("Vỏ Montech Air 100");
+        assertThat(pcCase.sourceUrl()).isEqualTo("https://c.vn/vo");
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);

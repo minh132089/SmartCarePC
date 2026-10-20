@@ -1,4 +1,4 @@
-import { ArrowSquareOut, ImageSquare, MagnifyingGlass } from '@phosphor-icons/react'
+import { ArrowSquareOut, ImageSquare } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
 import { compatText, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue } from './chatStore'
@@ -138,19 +138,8 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
           </a>
         )}
-        {/* Chưa có sản phẩm thật (hiếm, backend đã tự tìm): mở trang tìm theo thông số trên web cửa hàng, không phải link sản phẩm */}
-        {!line.sourceUrl && (line.spec || part) && (
-          <a
-            href={shoppingSearch(line.spec || part!.name)}
-            target="_blank"
-            rel="noreferrer noopener"
-            className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-fill-hover ${focus}`}
-          >
-            <MagnifyingGlass size={14} aria-hidden className="shrink-0" />
-            <span className="truncate">Tìm mua theo thông số này</span>
-            <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
-          </a>
-        )}
+        {/* App tự tìm sản phẩm, không bắt người dùng tự tìm: không có trang bán còn hàng thì nói rõ, không đưa trang tìm kiếm */}
+        {!line.sourceUrl && <p className="mt-2 text-[13px] text-ink-3">Chưa tìm được trang bán còn hàng cho món này.</p>}
         {part && (
           <>
             <button
@@ -273,9 +262,6 @@ function checkedText(iso?: string | null) {
   return d.toDateString() === new Date().toDateString() ? `lúc ${time}` : `lúc ${time} ngày ${d.getDate()}/${d.getMonth() + 1}`
 }
 
-function shoppingSearch(query: string) {
-  return `https://gearvn.com/search?q=${encodeURIComponent(query)}`
-}
 
 function hostOf(url: string) {
   try {

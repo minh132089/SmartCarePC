@@ -162,6 +162,16 @@ class PriceEngineTests {
     }
 
     @Test
+    void docTinhTrangHang() {
+        assertThat(ProductPage.stock(org.jsoup.Jsoup.parse("<html><body><h1>SSD</h1><button>Mua ngay</button></body></html>"))).isTrue();
+        assertThat(ProductPage.stock(org.jsoup.Jsoup.parse("<html><body><h1>SSD</h1><span>Tạm hết hàng</span></body></html>"))).isFalse();
+        assertThat(ProductPage.stock(org.jsoup.Jsoup.parse(
+                "<html><head><meta property=\"product:availability\" content=\"out of stock\"/></head><body><button>Mua ngay</button></body></html>")))
+                .isFalse();
+        assertThat(ProductPage.stock(org.jsoup.Jsoup.parse("<html><body><button disabled>Mua ngay</button></body></html>"))).isNull();
+    }
+
+    @Test
     void docTrangKhongCoJsonLdNhungCoMetaGia() {
         var html = """
                 <html><head><meta property="og:type" content="product"/>

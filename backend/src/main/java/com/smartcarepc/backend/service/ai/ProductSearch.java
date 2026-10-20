@@ -214,10 +214,7 @@ public class ProductSearch {
 
     public String directLink(String title, String shop, String link) {
         // Link thẳng (engine, kết quả Google thường): engine đã đọc trang thì dùng; không thì phải xác minh trang
-        if (link != null && !isGoogle(link)) {
-            if (engine.offer(link) != null) return link;
-            return engine.readPage(link, title) != null ? link : null;
-        }
+        if (link != null && !isGoogle(link)) return engine.readPage(link, title) != null ? link : null;
         if (!enabled() || title == null) return null;
         String key = title + "|" + shop;
         String hit = linkCache.get(key);

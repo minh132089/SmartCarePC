@@ -120,6 +120,8 @@ public class ChatService {
     private static final String RULES = """
             LUẬT LẮP PC (theo bộ luật chuẩn của app, docs/pc_compatibility_rules.md). Kiểm tra theo TÊN SẢN PHẨM THẬT \
             đã chọn: search_products có trường specs đọc sẵn socket / chipset / loại RAM. Mức độ:
+            - CHỈ chốt sản phẩm CÒN HÀNG: không chọn món in_stock = false; có món in_stock = true thì ưu tiên. App tự đổi \
+            món hết hàng / không có trang bán sang món cùng loại còn hàng, người dùng không phải tự tìm.
             - ERROR: lắp không được, BẮT BUỘC đổi (propose_build báo product_errors thì chọn lại sản phẩm).
             - WARNING: dùng được nhưng cần cập nhật / kiểm tra; nói ngắn với người dùng (propose_build báo product_warnings).
             - UNKNOWN: chưa đủ dữ liệu; KHÔNG khẳng định là tương thích, nhắc người dùng cần xác minh.
@@ -542,6 +544,39 @@ public class ChatService {
         return out;
     }
 
+    /**
+     * Món thay thế tốt nhất (tối đa 4 lần thử): còn hàng và giá đã kiểm tra, rồi giá đã kiểm tra, rồi có trang sản
+     * phẩm. now: link món đang chọn; món đang chọn ngang bằng thì trả về null (giữ nguyên).
+     */
+    private ProductSearch.Product bestLinked(List<ProductSearch.Product> candidates, String now) {
+        int nowRank = rank(now);
+        ProductSearch.Product best = null;
+        int bestRank = nowRank;
+        for (var c : candidates.stream().limit(4).toList()) {
+            String l = search.directLink(c.title(), c.shop(), c.url());
+            int r = rank(l);
+            if (r > bestRank) {
+                best = new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
+                bestRank = r;
+                if (r == 3) break;
+            }
+        }
+        return best;
+    }
+
+    /** 3: còn hàng + giá đã kiểm tra; 2: giá đã kiểm tra; 1: trang sản phẩm; 0: không có link / trang chủ */
+    private int rank(String url) {
+        if (url == null || ProductSearch.homePage(url)) return 0;
+        if (!priceChecked(url)) return 1;
+        return inStock(url) ? 3 : 2;
+    }
+
+    /** Trang cửa hàng của link xác nhận còn hàng */
+    private boolean inStock(String url) {
+        var page = url == null ? null : search.offer(url);
+        return page != null && Boolean.TRUE.equals(page.inStock());
+    }
+
     /** Link đã đọc được giá trên chính trang cửa hàng */
     private boolean priceChecked(String url) {
         var page = url == null ? null : search.offer(url);
@@ -677,10 +712,11 @@ public class ChatService {
     private void linkedPicks(BuildCheckRequest req, Map<String, Map<String, Object>> details, Map<String, ProductSearch.Product> picks,
             Map<String, CompletableFuture<String>> links, Map<String, List<ProductSearch.Product>> siblings, String tier, Long cap) {
         Map<String, CompletableFuture<ProductSearch.Product>> fixes = new LinkedHashMap<>();
-        // Món yếu: chưa có link, chỉ có trang chủ, hoặc link chưa đọc được giá trên trang (giá Google có thể sai)
+        // Món yếu: chưa có link, chỉ có trang chủ, link chưa đọc được giá trên trang (giá Google có thể sai), hoặc
+        // chưa xác nhận còn hàng
         var weak = links.entrySet().stream().filter(e -> {
             String l = e.getValue().join();
-            return l == null || ProductSearch.homePage(l) || !priceChecked(l);
+            return l == null || ProductSearch.homePage(l) || !priceChecked(l) || !inStock(l);
         }).map(Map.Entry::getKey).toList();
         // Phần còn dư tới trần chia đều cho các món phải đổi, để đổi món lấy link không làm phương án vượt trần
         long allowance = cap == null || weak.isEmpty() ? Long.MAX_VALUE : (cap - total(req, details, picks)) / weak.size();
@@ -692,20 +728,18 @@ public class ChatService {
             var candidates = candidates(pick, siblings.getOrDefault(code, List.of()), kit(req, details, code), tier).stream()
                     .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
                     .toList();
+            String spec = text(details.getOrDefault(code, Map.of()).get("spec"));
             fixes.put(code, CompletableFuture.supplyAsync(() -> {
-                // Ưu tiên món có giá đã kiểm tra trên trang; không có thì giữ món đang chọn nếu nó đã có link; chưa
-                // có link thì lấy món có trang sản phẩm, cuối cùng mới tới trang chủ
-                ProductSearch.Product page = null, home = null;
-                for (var c : candidates.stream().limit(4).toList()) {
-                    String l = search.directLink(c.title(), c.shop(), c.url());
-                    if (l == null) continue;
-                    var found = new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
-                    if (!ProductSearch.homePage(l) && priceChecked(l)) return found;
-                    if (!ProductSearch.homePage(l) && page == null) page = found;
-                    if (home == null) home = found;
-                }
-                if (now != null && !ProductSearch.homePage(now)) return null;
-                return page != null ? page : now == null ? home : null;
+                // Thứ tự ưu tiên: còn hàng + giá đã kiểm tra trên trang; giá đã kiểm tra; có trang sản phẩm. Món đang
+                // chọn không thua món thay thế thì giữ nguyên
+                var best = bestLinked(candidates, now);
+                if (best != null || now != null) return best;
+                // Không món nào trong nhóm có trang bán: tự tìm thêm theo thông số (app đi tìm, không bắt người dùng tìm)
+                String query = spec != null ? spec : ProductSearch.shortTitle(pick.title());
+                var more = candidates(pick, search.search(query), kit(req, details, code), tier).stream()
+                        .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
+                        .toList();
+                return bestLinked(more, null);
             }));
         });
         fixes.forEach((code, f) -> {

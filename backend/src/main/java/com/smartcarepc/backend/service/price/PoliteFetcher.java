@@ -36,6 +36,15 @@ public class PoliteFetcher {
 
     /** HTML của url, hoặc null nếu robots.txt cấm, phải chờ quá maxWait, hay trang lỗi */
     public String get(String url, Duration maxWait) {
+        Page p = page(url, maxWait);
+        return p == null ? null : p.html();
+    }
+
+    /** Trang tải được: HTML và địa chỉ cuối cùng sau khi web chuyển hướng (vd sản phẩm ngừng bán -> danh mục) */
+    public record Page(String html, String finalUrl) { }
+
+    /** Như get, kèm địa chỉ cuối cùng; null nếu robots.txt cấm, phải chờ quá maxWait, hay trang lỗi */
+    public Page page(String url, Duration maxWait) {
         URI uri;
         try {
             uri = URI.create(url);
@@ -51,15 +60,20 @@ public class PoliteFetcher {
             return null;
         }
         if (!waitTurn(uri.getHost(), rules.delay(), maxWait)) return null;
-        return fetch(uri, Duration.ofSeconds(6));
+        return fetchPage(uri, Duration.ofSeconds(6));
     }
 
     private String fetch(URI uri, Duration timeout) {
+        Page p = fetchPage(uri, timeout);
+        return p == null ? null : p.html();
+    }
+
+    private Page fetchPage(URI uri, Duration timeout) {
         try {
             var req = HttpRequest.newBuilder(uri).timeout(timeout)
                     .header("User-Agent", USER_AGENT).header("Accept-Language", "vi-VN,vi;q=0.9").GET().build();
             var res = http.send(req, HttpResponse.BodyHandlers.ofString());
-            return res.statusCode() == 200 ? res.body() : null;
+            return res.statusCode() == 200 ? new Page(res.body(), res.uri().toString()) : null;
         } catch (java.io.IOException e) {
             log.debug("Không đọc được {}: {}", uri, e.getMessage());
             return null;
