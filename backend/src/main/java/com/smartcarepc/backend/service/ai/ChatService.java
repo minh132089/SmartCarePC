@@ -374,13 +374,21 @@ public class ChatService {
             messages.add(message);
             // Chạy song song các công cụ của cùng một lượt (thường là nhiều search_products), rồi trả kết quả theo đúng thứ tự
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
-            if (names.contains("search_products")) {
+            // Trợ lý có khi vẫn gọi search_products sau khi công cụ đã bị bỏ (chép theo các lượt trước): không chạy
+            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS;
+            if (names.contains("search_products") && !searchClosed) {
                 searchRounds++;
                 progress.accept(STAGE_SEARCH);
-            }
-            else if (names.contains("propose_build")) progress.accept(STAGE_CHECK);
+            } else if (names.contains("propose_build")) progress.accept(STAGE_CHECK);
             var results = calls.stream()
-                    .map(call -> Io.async(() -> runTool((Map<String, Object>) call.get("function"), turn)))
+                    .map(call -> {
+                        var fn = (Map<String, Object>) call.get("function");
+                        if (searchClosed && "search_products".equals(fn.get("name"))) {
+                            return CompletableFuture.completedFuture(json.writeValueAsString(Map.of("error",
+                                    "Đã hết lượt tìm. Chốt bằng propose_build với kết quả đã có; món chưa ưng thì app tự đổi.")));
+                        }
+                        return Io.async(() -> runTool(fn, turn));
+                    })
                     .toList();
             long t1 = System.nanoTime();
             for (int i = 0; i < calls.size(); i++) {

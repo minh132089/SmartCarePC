@@ -512,10 +512,13 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search(any())).thenReturn(List.of());
         reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"RAM\"}"),
-                answer("Xong."));
+                toolCall("s3", "search_products", "{\"query\":\"Card\"}"), answer("Xong."));
 
         service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
 
+        // Lần tìm thứ 3 (trợ lý vẫn gọi dù công cụ đã bị bỏ) không chạy
+        org.mockito.Mockito.verify(search, org.mockito.Mockito.never()).search("Card");
+        assertThat(sent.get(3).get("messages").toString()).contains("Đã hết lượt tìm");
         // Vòng 3 (sau 2 vòng tìm) không còn công cụ search_products
         assertThat(sent.get(1).get("tools").toString()).contains("name=search_products");
         assertThat(sent.get(2).get("tools").toString()).doesNotContain("name=search_products");
