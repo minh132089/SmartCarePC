@@ -181,8 +181,11 @@ public class ProductSearch {
         }
         // Engine tìm được ít (món hiếm, cửa hàng đổi giao diện): bổ sung Google Shopping nếu Serper còn lượt
         if (out.size() < 3 && serperReady()) {
-            out.addAll(shopping(query));
-            if (out.size() < 3) out.addAll(organic(query + " giá"));
+            List<Product> google = new ArrayList<>(shopping(query));
+            if (out.size() + google.size() < 3) google.addAll(organic(query + " giá"));
+            // Cùng bộ lọc với engine: đúng loại linh kiện, đúng mã model, không phải laptop / hàng cũ ("tản khí tháp"
+            // từng ra "quạt tháp điện để bàn")
+            google.stream().filter(p -> p.title() != null && PriceEngine.relevance(query, p.title()) > 0).forEach(out::add);
         }
         Map<String, Product> unique = new LinkedHashMap<>();
         out.stream().filter(p -> p.url() != null).forEach(p -> unique.putIfAbsent(p.url(), p));

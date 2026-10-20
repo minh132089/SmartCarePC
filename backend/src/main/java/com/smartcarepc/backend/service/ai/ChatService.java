@@ -123,6 +123,8 @@ public class ChatService {
     private static final String RULES = """
             LUẬT LẮP PC (theo bộ luật chuẩn của app, docs/pc_compatibility_rules.md). Kiểm tra theo TÊN SẢN PHẨM THẬT \
             đã chọn: search_products có trường specs đọc sẵn socket / chipset / loại RAM. Mức độ:
+            - Ưu tiên món verified = true (giá và link đã kiểm tra trên trang cửa hàng). Món verified = false có giá \
+            tham khảo, có thể không mua được: chỉ chọn khi không có món verified phù hợp.
             - CHỈ chốt sản phẩm CÒN HÀNG: không chọn món in_stock = false; có món in_stock = true thì ưu tiên. App tự đổi \
             món hết hàng / không có trang bán sang món cùng loại còn hàng, người dùng không phải tự tìm.
             - ERROR: lắp không được, BẮT BUỘC đổi (propose_build báo product_errors thì chọn lại sản phẩm).
@@ -998,6 +1000,9 @@ public class ChatService {
                         if (!specs.isEmpty()) m.put("specs", specs);
                         // Engine so giá đọc được trang sản phẩm thì báo còn hàng / bảo hành để trợ lý chọn món mua được
                         var offer = search.offer(p.url());
+                        // verified: giá và link đọc thẳng trên trang cửa hàng; món không verified (Google Shopping) có
+                        // thể không mua được hoặc giá đã khác
+                        m.put("verified", offer != null && offer.priceVnd() != null);
                         if (offer != null && offer.inStock() != null) m.put("in_stock", offer.inStock());
                         if (offer != null && offer.warrantyMonths() != null) m.put("warranty_months", offer.warrantyMonths());
                         rows.add(m);

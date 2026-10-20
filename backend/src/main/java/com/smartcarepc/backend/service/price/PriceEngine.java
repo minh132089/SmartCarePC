@@ -294,7 +294,7 @@ public class PriceEngine {
      * Mức khớp 0..1 giữa từ khoá và tên sản phẩm; 0 là loại. Chữ có số (4060, i5, 12400f, b760m, 16gb, 650w) là mã
      * model: thiếu mã dài (từ 3 chữ số) là loại, thiếu quá nửa mã còn lại cũng loại. Chữ thường chỉ cộng điểm.
      */
-    static double relevance(String query, String title) {
+    public static double relevance(String query, String title) {
         String t = norm(title), squashed = t.replace(" ", "");
         String q = norm(query);
         for (String kind : OTHER_KINDS) if (t.startsWith(kind) && !q.contains(kind.strip())) return 0;
