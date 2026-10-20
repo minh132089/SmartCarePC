@@ -16,3 +16,9 @@ server:
   image_proxy: false
 ui:
   default_locale: "vi"
+# Google / Brave / DuckDuckGo hay chặn khi tìm dồn dập; bật thêm Bing và Yahoo để chia tải (đã thử: có link cửa hàng VN)
+engines:
+  - name: bing
+    disabled: false
+  - name: yahoo
+    disabled: false

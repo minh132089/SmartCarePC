@@ -34,6 +34,9 @@ class Searxng {
                     + "|[?&](q|s|query|page)=",
             Pattern.CASE_INSENSITIVE);
 
+    /** Mọi máy tìm kiếm đều chặn (tìm quá dồn dập): nghỉ một lúc thay vì gọi tiếp */
+    static final Duration PAUSE = Duration.ofMinutes(5);
+    private volatile java.time.Instant pausedUntil = java.time.Instant.EPOCH;
     private final String base;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     private final JsonMapper json = JsonMapper.builder().build();
@@ -44,13 +47,19 @@ class Searxng {
 
     /** Link trang sản phẩm ở cửa hàng đã biết cho từ khoá, nhiều nhất max link, theo thứ tự SearXNG xếp */
     List<String> productUrls(String query, int max) {
-        if (base.isEmpty()) return List.of();
+        if (base.isEmpty() || java.time.Instant.now().isBefore(pausedUntil)) return List.of();
         try {
             var req = HttpRequest.newBuilder(URI.create(base + "/search?format=json&language=vi-VN&q="
                     + URLEncoder.encode(query + " giá", StandardCharsets.UTF_8))).timeout(Duration.ofSeconds(6)).GET().build();
             var res = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (res.statusCode() != 200) return List.of();
-            return pick(json.readTree(res.body()), max);
+            JsonNode root = json.readTree(res.body());
+            if (root.path("results").isEmpty() && !root.path("unresponsive_engines").isEmpty()) {
+                log.warn("SearXNG: mọi máy tìm kiếm đang chặn ({}), nghỉ {} phút", root.path("unresponsive_engines"), PAUSE.toMinutes());
+                pausedUntil = java.time.Instant.now().plus(PAUSE);
+                return List.of();
+            }
+            return pick(root, max);
         } catch (java.io.IOException | RuntimeException e) {
             log.debug("SearXNG không trả lời: {}", e.getMessage());
             return List.of();

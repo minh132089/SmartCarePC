@@ -34,8 +34,11 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 public class PriceEngine {
 
-    /** Kết quả giữ 30 phút: câu hỏi lặp lại trả lời ngay, không gọi lại cửa hàng */
-    static final Duration CACHE = Duration.ofMinutes(30);
+    /**
+     * Kết quả giữ 2 giờ: câu hỏi lặp lại trả lời ngay, không gọi lại cửa hàng và máy tìm kiếm (gọi dồn dập là bị chặn).
+     * Thẻ cấu hình ghi rõ giờ kiểm tra giá.
+     */
+    static final Duration CACHE = Duration.ofHours(2);
     /** Chờ tối đa cho một từ khoá; nguồn nào chậm hơn thì bỏ, dùng các nguồn đã xong */
     static final Duration DEADLINE = Duration.ofSeconds(12);
     static final int MAX = 8;
