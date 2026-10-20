@@ -116,6 +116,10 @@ class PriceEngineTests {
         // Ô tìm kiếm của cửa hàng: bỏ "giá rẻ", số đo, socket
         assertThat(PriceEngine.shopQuery("Tản nhiệt khí CPU tháp 155mm 1 quạt giá rẻ LGA1700 AM4")).isEqualTo("Tản nhiệt khí CPU tháp");
         assertThat(PriceEngine.shopQuery("Card màn hình RTX 3050 8GB")).isEqualTo("Card màn hình RTX 3050");
+        assertThat(PriceEngine.shopQuery("Tản nước 240mm")).isEqualTo("tản nhiệt AIO");
+        assertThat(PriceEngine.shopQuery("tản khí tháp")).isEqualTo("tản nhiệt khí tháp");
+        assertThat(PriceEngine.shopQuery("Case ATX kính cường lực")).isEqualTo("vỏ máy tính ATX kính");
+        assertThat(PriceEngine.relevance("Tản nước 240mm", "Tản nhiệt AIO Cooler Master MasterLiquid 240L Core")).isPositive();
         // Thông số không bắt buộc khớp, mã model thì bắt buộc
         assertThat(PriceEngine.relevance("Tản nhiệt khí CPU tháp 155mm LGA1700", "Tản nhiệt khí Thermalright Peerless Assassin 120")).isPositive();
         assertThat(PriceEngine.relevance("Card màn hình RTX 3050 8GB", "Card màn hình MSI GeForce RTX 3060 12G")).isZero();

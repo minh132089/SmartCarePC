@@ -78,6 +78,8 @@ public class ChatService {
                - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, tổng TUYỆT ĐỐI không vượt ngân sách;
                - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng TUYỆT ĐỐI không vượt ngân sách; đây là gợi ý chính;
                - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, được vượt ngân sách tối đa khoảng 15%.
+            LUÔN gọi đủ ba propose_build rồi mới trả lời, kể cả khi không vừa ngân sách: khi đó chốt bộ rẻ nhất có thể \
+            cho tier đó và nói rõ trong câu trả lời là vượt bao nhiêu, vì sao. Không được trả lời mà chưa chốt phương án. \
             Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
             check_build thêm lần nữa. Phương án nào báo lỗi hoặc over_budget thì sửa đúng chỗ đó rồi gọi lại propose_build với cùng tier. \
             Xem kỹ thông số trong danh mục trước khi chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. \

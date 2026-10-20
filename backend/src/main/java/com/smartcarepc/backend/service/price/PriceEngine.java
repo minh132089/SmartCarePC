@@ -60,7 +60,7 @@ public class PriceEngine {
      * là sai hàng (tìm "tản nhiệt khí" mà ra vỏ máy).
      */
     private static final List<Map.Entry<String, Pattern>> KINDS = List.of(
-            Map.entry("cooler", Pattern.compile("\\btan nhiet\\b|\\bcooler\\b|\\baio\\b")),
+            Map.entry("cooler", Pattern.compile("\\btan nhiet\\b|\\btan nuoc\\b|\\btan khi\\b|\\bcooler\\b|\\baio\\b")),
             Map.entry("case", Pattern.compile("^vo\\b|\\bvo may tinh\\b|\\bvo case\\b|^case\\b")),
             Map.entry("mainboard", Pattern.compile("\\bbo mach chu\\b|\\bmainboard\\b|^main\\b")),
             Map.entry("gpu", Pattern.compile("\\bcard man hinh\\b|\\bcard do hoa\\b|\\bvga\\b")),
@@ -274,8 +274,18 @@ public class PriceEngine {
         return null;
     }
 
-    /** Từ khoá gửi ô tìm kiếm của cửa hàng: bỏ chữ thừa và thông số, giữ loại + mã model, tối đa 5 chữ */
+    /** Cách gọi thường ngày -> chữ cửa hàng hay dùng trong tên sản phẩm (ô tìm kiếm của cửa hàng tìm đúng chữ) */
+    private static final List<Map.Entry<Pattern, String>> SHOP_WORDS = List.of(
+            Map.entry(Pattern.compile("(?iuU)\\btản\\s+nước\\b"), "tản nhiệt AIO"),
+            Map.entry(Pattern.compile("(?iuU)\\btản\\s+khí\\b"), "tản nhiệt khí"),
+            Map.entry(Pattern.compile("(?iuU)^\\s*case\\b"), "vỏ máy tính"),
+            Map.entry(Pattern.compile("(?iuU)\\bvỏ\\s+case\\b"), "vỏ máy tính"),
+            Map.entry(Pattern.compile("(?iuU)^\\s*main\\b"), "bo mạch chủ"),
+            Map.entry(Pattern.compile("(?iuU)\\bnguồn\\b(?!\\s+máy)"), "nguồn máy tính"));
+
+    /** Từ khoá gửi ô tìm kiếm của cửa hàng: đổi sang chữ cửa hàng dùng, bỏ chữ thừa và thông số, tối đa 5 chữ */
     static String shopQuery(String query) {
+        for (var e : SHOP_WORDS) query = e.getKey().matcher(query).replaceAll(e.getValue());
         List<String> keep = new ArrayList<>();
         for (String w : query.replaceAll("(?i)giá (rẻ|tốt)|chính hãng|loại tốt|có đèn|đèn", " ").split("\\s+")) {
             String n = norm(w);
