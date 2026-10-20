@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode, type Ref } from 'react'
 import { ArrowUp, Check, X } from '@phosphor-icons/react'
 import { PARTS, type PartId } from '../../data/parts'
-import { totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
+import { compatText, totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
 
 /** Bong bóng tin nhắn: người dùng bên phải màu xanh, trợ lý bên trái màu trắng */
 export function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
@@ -100,7 +100,7 @@ function CompactCard({ card, action }: { card: BuildCard; action?: ReactNode }) 
   return (
     <div className="max-w-[92%] rounded-2xl bg-surface p-3.5 ring-1 ring-line sm:max-w-[420px]">
       <p className={`text-[13px] font-semibold ${card.compatible ? 'text-ok' : 'text-bad'}`}>
-        {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
+        {compatText(card).short}
       </p>
       <p className="mt-0.5 text-[14px] text-ink">
         {card.items.length} linh kiện{total && `, ước tính ${vndRange(total.min, total.max)}`}
@@ -116,7 +116,7 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
     <div className="max-w-[92%] overflow-hidden rounded-2xl bg-surface ring-1 ring-line sm:max-w-[420px]">
       <div className={`flex items-center gap-2 px-3.5 py-2.5 text-[13px] font-semibold ${card.compatible ? 'bg-ok-bg text-ok' : 'bg-bad-bg text-bad'}`}>
         {card.compatible ? <Check size={14} aria-hidden /> : <X size={14} aria-hidden />}
-        {card.compatible ? 'Các linh kiện lắp chung được' : 'Cấu hình này chưa lắp được'}
+        {compatText(card).short}
       </div>
       <ul className="divide-y divide-line px-3.5">
         {card.items.map((it) => (

@@ -118,25 +118,32 @@ public class ChatService {
 
     /** Luật chung cho cả hai trang */
     private static final String RULES = """
-            LUẬT LẮP PC: kiểm tra theo TÊN SẢN PHẨM THẬT đã chọn (search_products có trường specs đọc sẵn socket / chipset \
-            / loại RAM), không chỉ theo danh mục. propose_build báo product_errors thì phải chọn lại.
-            - Socket CPU phải trùng socket bo mạch:
-              Intel Core i3/i5/i7/i9 đời 12, 13, 14 -> LGA1700, bo chipset H610, B660, B760, H770, Z690, Z790.
-              Intel Core Ultra 5/7/9 đời 2 (200S, vd Ultra 7 265K) -> LGA1851, bo H810, B860, Z890; CHỈ dùng DDR5.
-              AMD Ryzen 1000 tới 5000 -> AM4, bo A520, B450, B550, X570; CHỈ dùng DDR4 (bo B450 có thể cần cập nhật BIOS cho Ryzen 5000).
-              AMD Ryzen 7000, 8000G, 9000 -> AM5, bo A620, B650, B850, X670, X870; CHỈ dùng DDR5.
-            - RAM phải cùng loại với bo: bo ghi DDR4 hoặc "D4" thì RAM DDR4; bo DDR5 thì RAM DDR5. Bo LGA1700 có cả \
-            bản DDR4 và DDR5, xem kỹ tên. Không dùng RAM laptop (SO-DIMM) cho máy bàn. Nên mua kit 2 thanh để chạy kênh đôi.
-            - Tản nhiệt phải có gá đúng socket: chân gá Intel và AMD khác nhau. Gá LGA1700 dùng được cho LGA1851; gá \
-            AM4 thường dùng được cho AM5. Tản khí phải thấp hơn giới hạn của vỏ; két tản nước phải có chỗ gắn trong vỏ.
-            - CPU không có đồ họa tích hợp (Intel đuôi F, AMD Ryzen 5000 không có chữ G, bản đuôi F) thì bắt buộc có card đồ họa.
-            - CPU bản tray, Intel đuôi K / KF, AMD dòng X và phần lớn Ryzen 9000 không kèm tản: phải mua thêm tản. CPU \
-            đuôi K muốn ép xung cần bo chipset Z (Intel) hoặc X / B (AMD).
-            - Nguồn: công suất khoảng 1,5 lần tổng điện CPU + card (vd card 115 W + CPU 65 W -> nguồn 550 - 650 W), chứng \
-            nhận 80 Plus Bronze trở lên, đủ đầu cấp điện cho card (card cao cấp RTX 40/50 dùng đầu 12VHPWR / 12V-2x6 \
-            hoặc dây chuyển kèm theo).
-            - Kích thước: bo phải vừa vỏ (Mini-ITX < Micro-ATX < ATX); card không dài hơn giới hạn của vỏ; nguồn SFX cho vỏ nhỏ.
-            - SSD M.2 NVMe cần khe M.2 trên bo; PCIe đời mới vẫn chạy được trên khe đời cũ (chỉ chậm hơn).
+            LUẬT LẮP PC (theo bộ luật chuẩn của app, docs/pc_compatibility_rules.md). Kiểm tra theo TÊN SẢN PHẨM THẬT \
+            đã chọn: search_products có trường specs đọc sẵn socket / chipset / loại RAM. Mức độ:
+            - ERROR: lắp không được, BẮT BUỘC đổi (propose_build báo product_errors thì chọn lại sản phẩm).
+            - WARNING: dùng được nhưng cần cập nhật / kiểm tra; nói ngắn với người dùng (propose_build báo product_warnings).
+            - UNKNOWN: chưa đủ dữ liệu; KHÔNG khẳng định là tương thích, nhắc người dùng cần xác minh.
+            Luật:
+            - Socket CPU phải khớp socket bo (ERROR), nhưng cùng socket chưa đủ: CPU phải có trong CPU Support List của \
+            đúng mã bo và BIOS đủ mới (UNKNOWN, nhắc người dùng hỏi cửa hàng). Ví dụ nền tảng (không phải bảng đầy đủ):
+              LGA1700: bo H610 / B760 / Z790, Core đời 12 / 13 / 14. LGA1851: bo B860 / Z890, Core Ultra máy bàn đời 2, \
+            không lắp CPU LGA1700. AM4: bo B450 / B550, nhiều Ryzen 3000 / 5000 (B450 với Ryzen 5000 có thể cần BIOS mới). \
+            AM5: bo B650 / X870, Ryzen 7000 / 8000G / 9000.
+            - RAM (ERROR): đúng loại DDR với bo và CPU, đúng dạng thanh máy bàn (không dùng RAM laptop SO-DIMM), không \
+            vượt số khe. Bo LGA1700 có bản DDR4 và bản DDR5: xem đúng mã bo, không suy ra từ socket. Nên chọn kit 2 thanh \
+            (RECOMMENDATION); tốc độ XMP / EXPO không được đảm bảo.
+            - Đồ họa: KHÔNG suy ra từ hậu tố. Intel đuôi F thường không có đồ họa tích hợp; Ryzen 7000 / 9000 thường có \
+            đồ họa cơ bản nhưng có ngoại lệ (vd 7500F). Không chắc CPU có đồ họa thì chọn thêm card đồ họa.
+            - Tản nhiệt: phải có gá đúng socket (ERROR); gá Intel và AMD khác nhau. Gá LGA1700 thường dùng cho LGA1851, gá \
+            AM4 thường dùng cho AM5 nhưng vẫn cần xác nhận với từng tản (WARNING). Tản khí phải thấp hơn giới hạn vỏ, két \
+            tản nước phải có chỗ gắn (ERROR). CPU có kèm tản hay không phải xem đúng bản (box / tray), không suy ra chỉ từ \
+            đuôi K / KF / X (WARNING): không chắc thì chọn thêm tản. CPU Intel đuôi K muốn ép xung cần bo chipset Z (WARNING).
+            - Nguồn: ước lượng sơ bộ khoảng 1,2 - 1,3 lần tổng điện CPU + card + phần khác, đối chiếu công suất khuyến \
+            nghị của hãng card (chỉ là gợi ý, không phải điều kiện tuyệt đối). Phải đủ đầu cấp điện cho CPU (EPS), bo và \
+            card đúng loại (PCIe 6+2, 12VHPWR / 12V-2x6) (ERROR). 80 Plus chỉ là hiệu suất, không bảo đảm chất lượng.
+            - Kích thước (ERROR): vỏ hỗ trợ cỡ bo (Mini-ITX / Micro-ATX / ATX), đủ chỗ cho card, tản, két nước, nguồn.
+            - Lưu trữ (ERROR): SSD M.2 phải đúng giao thức khe (NVMe hay SATA) và kích thước (2280...); PCIe đời mới vẫn \
+            chạy trên khe đời cũ nhưng chậm hơn (WARNING).
 
             Cách trả lời:
             - Trả lời bằng ngôn ngữ người dùng đang viết (thường là tiếng Việt). Giọng thân thiện, xưng "mình", gọi "bạn".
@@ -535,6 +542,16 @@ public class ChatService {
 
     /** Lỗi lắp chung giữa các sản phẩm thật đã chọn (theo tên sản phẩm, xem ProductRules) */
     private List<String> productIssues(Map<String, ProductSearch.Product> picks) {
+        return ProductRules.issues(productTitles(picks));
+    }
+
+    /** Mọi kết quả kiểm tra (ERROR / WARNING / UNKNOWN) cho các sản phẩm thật đã chọn */
+    private List<ProductRules.Finding> productFindings(Map<String, ProductSearch.Product> picks) {
+        return ProductRules.findings(productTitles(picks));
+    }
+
+    /** Loại linh kiện -> tên sản phẩm thật đã chọn */
+    private Map<String, String> productTitles(Map<String, ProductSearch.Product> picks) {
         Map<String, String> titles = new LinkedHashMap<>();
         picks.forEach((code, p) -> {
             try {
@@ -544,7 +561,7 @@ public class ChatService {
                 // mã lạ: kiểm tra tương thích đã báo
             }
         });
-        return ProductRules.issues(titles);
+        return titles;
     }
 
     /** Rẻ phải rẻ hơn rõ rệt: tối đa 90% ngân sách */
@@ -794,6 +811,9 @@ public class ChatService {
                         log.info("propose_build {}: sản phẩm thật lắp không được: {}", tier, productErrors);
                         saved.put("product_errors", productErrors);
                     }
+                    var productWarnings = productFindings(picks).stream()
+                            .filter(f -> f.severity() == ProductRules.Severity.WARNING).map(ProductRules.Finding::message).toList();
+                    if (!productWarnings.isEmpty()) saved.put("product_warnings", productWarnings);
                     saved.put("total_min_vnd", totalMin);
                     saved.put("total_max_vnd", totalMax);
                     saved.put("note", !result.compatible() ? "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build."
@@ -903,12 +923,27 @@ public class ChatService {
         });
         var r = c.result();
         String note = advice ? modelMatch.check(c.request()).note() : null;
-        // Sản phẩm thật lắp không được với nhau (vd bo DDR5 + RAM DDR4): báo đỏ trên thẻ dù danh mục lắp được
-        var productErrors = productIssues(c.picks());
+        // Kiểm tra trên sản phẩm thật theo docs/pc_compatibility_rules.md: ERROR làm thẻ báo đỏ (dù danh mục lắp được),
+        // WARNING thêm vào cảnh báo, UNKNOWN là điểm app chưa xác minh được, RECOMMENDATION là lời khuyên
+        var findings = productFindings(c.picks());
         List<Issue> errors = new ArrayList<>(forUser(r.errors()));
-        productErrors.forEach(m -> errors.add(new Issue("product.compat", m)));
-        return new BuildCard(lines, r.compatible() && productErrors.isEmpty(), errors, forUser(r.warnings()), c.summary(),
-                c.budgetVnd(), note, tier, variant);
+        List<Issue> warnings = new ArrayList<>(forUser(r.warnings()));
+        List<Issue> unknowns = new ArrayList<>(), tips = new ArrayList<>();
+        for (var f : findings) {
+            var issue = new Issue(f.ruleId(), f.message());
+            switch (f.severity()) {
+                case ERROR -> errors.add(issue);
+                case WARNING -> warnings.add(issue);
+                case UNKNOWN -> unknowns.add(issue);
+                case RECOMMENDATION -> tips.add(issue);
+            }
+        }
+        // Mục 3: ưu tiên kit 2 thanh để chạy kênh đôi
+        lines.stream().filter(l -> "ram".equals(l.category()) && l.quantity() == 1).findFirst().ifPresent(l -> tips.add(
+                new Issue("RAM_DUAL_CHANNEL", "Nên dùng 2 thanh RAM (kit 2 thanh) để chạy kênh đôi, máy nhanh hơn rõ khi chơi game.")));
+        boolean productOk = findings.stream().noneMatch(f -> f.severity() == ProductRules.Severity.ERROR);
+        return new BuildCard(lines, r.compatible() && productOk, errors, warnings, c.summary(), c.budgetVnd(), note, tier, variant,
+                unknowns, tips);
     }
 
     /** Lời nhắn cho trợ lý có kèm mã linh kiện trong ngoặc vuông; người dùng không cần thấy mã */

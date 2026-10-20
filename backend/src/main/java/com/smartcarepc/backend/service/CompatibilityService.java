@@ -228,7 +228,9 @@ public class CompatibilityService {
             int gpuWatt = all(Gpu.class).stream().map(Gpu::getTdpW).filter(Objects::nonNull).mapToInt(w -> w).sum();
             int need = (int) Math.ceil((cpu.getTdpW() + gpuWatt + BASE_WATT) * PSU_HEADROOM);
             if (psu.getWattage() < need) {
-                error("psu.wattage", "Nguồn " + psu.getWattage() + " W hơi yếu. Cấu hình này nên dùng nguồn từ " + need + " W trở lên.");
+                // docs/pc_compatibility_rules.md mục 6: ước lượng công suất chỉ là cảnh báo, không phải điều kiện tương thích tuyệt đối
+                warning("psu.wattage", "Nguồn " + psu.getWattage() + " W có thể hơi yếu. Ước lượng sơ bộ nên dùng nguồn từ " + need
+                        + " W trở lên; đối chiếu thêm công suất khuyến nghị của hãng card đồ họa.");
             }
         }
 

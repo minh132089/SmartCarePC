@@ -1,7 +1,7 @@
 import { ArrowSquareOut, ImageSquare, MagnifyingGlass } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
-import { totalOf, vnd, vndRange, type BuildCard, type BuildLine } from './chatStore'
+import { compatText, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue } from './chatStore'
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
@@ -35,9 +35,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-ink">
         {card.summary || 'Cấu hình trợ lý đã chọn'}
       </h2>
-      <p className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>
-        {card.compatible ? 'Các linh kiện lắp chung được.' : 'Cấu hình này chưa lắp được, xem lỗi bên dưới.'}
-      </p>
+      <p className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>{compatText(card).long}</p>
 
       {total && <Total min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
 
@@ -68,6 +66,8 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
           ))}
         </ul>
       )}
+      <IssueGroup title="Cần xác minh trước khi mua" issues={card.unknowns} />
+      <IssueGroup title="Gợi ý" issues={card.recommendations} />
 
       {action && <div className="mt-6">{action}</div>}
       {total && (
@@ -207,6 +207,21 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
 }
 
 /** Trang tìm kiếm trên web cửa hàng (GEARVN) theo thông số, cho dòng hiếm hoi chưa có sản phẩm thật; không qua Google */
+/** Một nhóm ghi chú theo mức của bộ luật (Cần xác minh, Gợi ý); không có thì không hiện */
+function IssueGroup({ title, issues }: { title: string; issues?: Issue[] | null }) {
+  if (!issues?.length) return null
+  return (
+    <div className="mt-4 rounded-xl bg-fill px-3.5 py-3">
+      <p className="text-[13px] font-semibold text-ink-2">{title}</p>
+      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13.5px] leading-[1.45] text-ink-2">
+        {issues.map((i) => (
+          <li key={i.rule + i.message}>{i.message}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /** Còn hàng / bảo hành / giờ kiểm tra giá của món đã chọn (engine so giá đọc từ trang cửa hàng) */
 function OfferFacts({ line }: { line: BuildLine }) {
   const facts: ReactNode[] = []

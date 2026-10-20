@@ -5,27 +5,50 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Luật lắp chung đọc từ TÊN SẢN PHẨM THẬT (danh mục 3D chỉ có linh kiện chung chung, không biết bo là DDR4 hay DDR5,
- * CPU là AM4 hay AM5). Đọc loại RAM, chipset bo mạch, đời CPU rồi kiểm tra chéo:
+ * Luật lắp chung đọc từ TÊN SẢN PHẨM THẬT, theo bộ luật chuẩn docs/pc_compatibility_rules.md. Danh mục 3D chỉ có
+ * linh kiện chung chung (không biết bo là DDR4 hay DDR5, CPU là AM4 hay AM5), nên phải đọc tên sản phẩm thật:
+ * loại RAM, chipset bo mạch, đời CPU, rồi kiểm tra chéo và xếp mức như bộ luật:
  * <ul>
- * <li>socket CPU phải trùng socket bo (đời CPU và chipset quyết định socket);</li>
- * <li>RAM phải cùng loại với bo (DDR4 không cắm được khe DDR5 và ngược lại);</li>
- * <li>CPU chỉ chạy DDR5 (Intel Core Ultra 200, AMD AM5) không đi với bo / RAM DDR4; AM4 chỉ chạy DDR4;</li>
- * <li>RAM laptop (SO-DIMM) không lắp vào máy bàn.</li>
+ * <li>ERROR: socket CPU khác socket bo; RAM khác loại DDR với bo; CPU chỉ chạy DDR5 đi với DDR4 (hoặc ngược lại);
+ * RAM laptop (SO-DIMM) cho máy bàn;</li>
+ * <li>WARNING: bo đời cũ có thể cần BIOS mới cho CPU đời mới; CPU Intel K muốn ép xung cần bo Z;</li>
+ * <li>UNKNOWN: app không có CPU Support List và BIOS tối thiểu của từng mã bo, không có danh sách gá của từng tản,
+ * nên không kết luận là tương thích (mục 11: "không suy đoán từ socket rằng mọi CPU đều được hỗ trợ").</li>
  * </ul>
- * Không đọc ra thì bỏ qua (không báo lỗi đoán mò).
+ * Chỉ dùng tên chipset / đời CPU để phát hiện chỗ CHẮC CHẮN không lắp được; không đọc ra thì không báo (không đoán).
  */
 public final class ProductRules {
 
     private ProductRules() {
     }
 
-    /** Thông số đọc được từ tên; null là không biết */
-    public record Spec(String socket, String ramType, String chipset, boolean laptopRam) {
+    public enum Severity { ERROR, WARNING, RECOMMENDATION, UNKNOWN }
+
+    /** Một kết quả kiểm tra, theo cấu trúc mục 10 của bộ luật (không có source_url: app chưa có nguồn hãng) */
+    public record Finding(String ruleId, Severity severity, List<String> affectedParts, String reason, String requiredAction) {
+
+        /** Câu cho người dùng: lý do, rồi việc cần làm */
+        public String message() {
+            return requiredAction == null ? reason : reason + " " + requiredAction;
+        }
+    }
+
+    /**
+     * Thông số đọc được từ tên; null là không biết.
+     *
+     * @param family    đời CPU: "core12".."core14", "ultra2", "ryzen1".."ryzen9" (số đầu của mã Ryzen)
+     * @param unlocked  CPU Intel mở khoá hệ số nhân (đuôi K / KF)
+     */
+    public record Spec(String socket, String ramType, String chipset, boolean laptopRam, String family, boolean unlocked) {
+
+        Spec(String socket, String ramType, String chipset, boolean laptopRam) {
+            this(socket, ramType, chipset, laptopRam, null, false);
+        }
 
         /** Câu ngắn cho trợ lý, vd "socket LGA1700, DDR5" (rỗng nếu không đọc được gì) */
         public String describe() {
@@ -38,7 +61,7 @@ public final class ProductRules {
         }
     }
 
-    /** Chipset bo mạch -> socket */
+    /** Chipset bo mạch -> socket (mục 2, ví dụ nền tảng) */
     private static final Map<String, String> CHIPSETS = new LinkedHashMap<>();
     static {
         for (String c : List.of("h610", "b660", "h670", "z690", "b760", "h770", "z790")) CHIPSETS.put(c, "LGA1700");
@@ -47,15 +70,19 @@ public final class ProductRules {
         for (String c : List.of("a320", "b350", "x370", "b450", "x470", "a520", "b550", "x570")) CHIPSETS.put(c, "AM4");
         for (String c : List.of("a620", "b650", "x670", "b840", "b850", "x870")) CHIPSETS.put(c, "AM5");
     }
+    /** Bo ra đời trước CPU: thường cần BIOS mới (mục 2, WARNING) */
+    private static final Set<String> INTEL_600 = Set.of("h610", "b660", "h670", "z690");
+    private static final Set<String> AM4_OLD = Set.of("a320", "b350", "x370", "b450", "x470", "a520", "b550", "x570");
+    private static final Set<String> AM5_600 = Set.of("a620", "b650", "x670");
 
     private static final Pattern DDR = Pattern.compile("\\bddr\\s?([345])\\b");
     /** Kiểu viết tắt trong tên bo: "B760M-A D4", "PRO B760M-E D4" */
     private static final Pattern BOARD_D = Pattern.compile("\\bd([45])\\b");
     private static final Pattern CHIPSET = Pattern.compile("\\b([abhxz]\\d{3})[a-z]?\\b");
     /** Intel Core i3 / i5 / i7 / i9 đời 10-14: "i5-12400F", "i5 14600kf", "core i7 13700" */
-    private static final Pattern INTEL_CORE = Pattern.compile("\\bi[3579]\\s?(1[0-4])\\d{3}[a-z]*\\b");
+    private static final Pattern INTEL_CORE = Pattern.compile("\\bi[3579]\\s?(1[0-4])\\d{3}([a-z]*)\\b");
     /** Intel Core Ultra 5 / 7 / 9 đời 2 (200S, máy bàn): "Ultra 7 265K", "Core Ultra 5 225F" */
-    private static final Pattern INTEL_ULTRA = Pattern.compile("\\bultra\\s?[579]\\s?2\\d{2}[a-z]*\\b");
+    private static final Pattern INTEL_ULTRA = Pattern.compile("\\bultra\\s?[579]\\s?2\\d{2}([a-z]*)\\b");
     /** AMD Ryzen: "Ryzen 5 5600", "Ryzen 7 7800X3D", "R5 7500F" */
     private static final Pattern RYZEN = Pattern.compile("\\b(?:ryzen|r)\\s?[3579]\\s?(\\d)\\d{3}[a-z0-9]*\\b");
     private static final Pattern LAPTOP = Pattern.compile("\\b(laptop|notebook|so\\s?dimm)\\b");
@@ -68,17 +95,18 @@ public final class ProductRules {
                 .replaceAll("[^a-z0-9]+", " ");
         switch (category) {
             case "cpu" -> {
-                if (INTEL_ULTRA.matcher(t).find()) return new Spec("LGA1851", "DDR5", null, false);
-                Matcher m = INTEL_CORE.matcher(t);
+                Matcher m = INTEL_ULTRA.matcher(t);
+                if (m.find()) return new Spec("LGA1851", "DDR5", null, false, "ultra2", m.group(1).startsWith("k"));
+                m = INTEL_CORE.matcher(t);
                 if (m.find()) {
                     int gen = Integer.parseInt(m.group(1));
-                    return new Spec(gen >= 12 ? "LGA1700" : "LGA1200", null, null, false);
+                    return new Spec(gen >= 12 ? "LGA1700" : "LGA1200", null, null, false, "core" + gen, m.group(2).startsWith("k"));
                 }
                 m = RYZEN.matcher(t);
                 if (m.find()) {
                     int series = Integer.parseInt(m.group(1));
-                    if (series >= 7) return new Spec("AM5", "DDR5", null, false);
-                    if (series >= 1) return new Spec("AM4", "DDR4", null, false);
+                    if (series >= 7) return new Spec("AM5", "DDR5", null, false, "ryzen" + series, false);
+                    if (series >= 1) return new Spec("AM4", "DDR4", null, false, "ryzen" + series, false);
                 }
                 return new Spec(null, null, null, false);
             }
@@ -97,7 +125,7 @@ public final class ProductRules {
                     Matcher d = BOARD_D.matcher(t);
                     if (d.find()) ram = "DDR" + d.group(1);
                 }
-                // Nền tảng chỉ có một loại RAM thì suy ra được
+                // Nền tảng chỉ có một loại RAM thì suy ra được. LGA1700 có cả DDR4 lẫn DDR5: không suy ra (mục 3)
                 if (ram == null && ("AM5".equals(socket) || "LGA1851".equals(socket))) ram = "DDR5";
                 if (ram == null && ("AM4".equals(socket) || "LGA1200".equals(socket))) ram = "DDR4";
                 return new Spec(socket, ram, chipset, false);
@@ -126,28 +154,75 @@ public final class ProductRules {
     }
 
     /**
-     * Lỗi lắp chung giữa các sản phẩm thật đã chọn. titles: loại linh kiện (cpu, motherboard, ram) -> tên sản phẩm.
-     * Rỗng là không thấy lỗi.
+     * Mọi kết quả kiểm tra cho các sản phẩm thật đã chọn. titles: loại linh kiện (cpu, motherboard, ram, cooler) ->
+     * tên sản phẩm.
      */
-    public static List<String> issues(Map<String, String> titles) {
+    public static List<Finding> findings(Map<String, String> titles) {
         Spec cpu = read("cpu", titles.get("cpu"));
         Spec board = read("motherboard", titles.get("motherboard"));
         Spec ram = read("ram", titles.get("ram"));
-        List<String> out = new ArrayList<>();
+        List<Finding> out = new ArrayList<>();
+        String cpuName = titles.get("cpu"), boardName = titles.get("motherboard");
+
+        // ERROR (mục 2, 3)
         if (cpu.socket() != null && board.socket() != null && !cpu.socket().equals(board.socket())) {
-            out.add("CPU \"" + titles.get("cpu") + "\" dùng socket " + cpu.socket() + " nhưng bo mạch \"" + titles.get("motherboard")
-                    + "\" là socket " + board.socket() + ": không lắp được.");
+            out.add(new Finding("CPU_SOCKET", Severity.ERROR, List.of("cpu", "motherboard"),
+                    "CPU \"" + cpuName + "\" dùng socket " + cpu.socket() + " nhưng bo mạch \"" + boardName + "\" là socket "
+                            + board.socket() + ": không lắp được.",
+                    "Chọn bo mạch đúng socket " + cpu.socket() + "."));
         }
         if (board.ramType() != null && ram.ramType() != null && !board.ramType().equals(ram.ramType())) {
-            out.add("Bo mạch dùng " + board.ramType() + " nhưng RAM là " + ram.ramType() + ": RAM không cắm được vào bo.");
+            out.add(new Finding("RAM_DDR_TYPE", Severity.ERROR, List.of("motherboard", "ram"),
+                    "Bo mạch dùng " + board.ramType() + " nhưng RAM là " + ram.ramType() + ": RAM không cắm được vào bo.",
+                    "Chọn RAM " + board.ramType() + " hoặc bo mạch bản " + ram.ramType() + "."));
         }
         if (cpu.ramType() != null) {
             String other = board.ramType() != null ? board.ramType() : ram.ramType();
             if (other != null && !other.equals(cpu.ramType())) {
-                out.add("CPU socket " + cpu.socket() + " chỉ chạy " + cpu.ramType() + " nhưng cấu hình đang dùng " + other + ".");
+                out.add(new Finding("CPU_DDR_SUPPORT", Severity.ERROR, List.of("cpu", board.ramType() != null ? "motherboard" : "ram"),
+                        "CPU socket " + cpu.socket() + " chỉ chạy " + cpu.ramType() + " nhưng cấu hình đang dùng " + other + ".",
+                        "Đổi bo mạch và RAM sang " + cpu.ramType() + "."));
             }
         }
-        if (ram.laptopRam()) out.add("\"" + titles.get("ram") + "\" là RAM laptop (SO-DIMM), không lắp vào máy bàn.");
+        if (ram.laptopRam()) {
+            out.add(new Finding("RAM_FORM_FACTOR", Severity.ERROR, List.of("ram"),
+                    "\"" + titles.get("ram") + "\" là RAM laptop (SO-DIMM), không lắp vào máy bàn.", "Chọn RAM máy bàn (DIMM)."));
+        }
+
+        // WARNING (mục 2): bo ra đời trước CPU thường cần BIOS mới; ép xung CPU K cần bo Z
+        boolean sameSocket = cpu.socket() != null && cpu.socket().equals(board.socket());
+        if (sameSocket && board.chipset() != null && cpu.family() != null) {
+            boolean oldBios = INTEL_600.contains(board.chipset()) && Set.of("core13", "core14").contains(cpu.family())
+                    || AM4_OLD.contains(board.chipset()) && Set.of("ryzen5").contains(cpu.family())
+                    || AM5_600.contains(board.chipset()) && Set.of("ryzen9").contains(cpu.family());
+            if (oldBios) {
+                out.add(new Finding("CPU_BIOS_UPDATE", Severity.WARNING, List.of("cpu", "motherboard"),
+                        "Bo " + board.chipset().toUpperCase() + " ra đời trước CPU này, có thể cần BIOS mới thì mới nhận CPU.",
+                        "Hỏi cửa hàng bo đã cập nhật BIOS chưa, hoặc chọn bo có BIOS Flashback."));
+            }
+            if (cpu.unlocked() && board.chipset().startsWith("b") || cpu.unlocked() && board.chipset().startsWith("h")) {
+                out.add(new Finding("CPU_OC_CHIPSET", Severity.WARNING, List.of("cpu", "motherboard"),
+                        "CPU đuôi K mở khoá ép xung nhưng bo " + board.chipset().toUpperCase() + " không ép xung hệ số nhân được.",
+                        "Không định ép xung thì không sao; muốn ép xung thì chọn bo chipset Z."));
+            }
+        }
+
+        // UNKNOWN (mục 10, 11): app không có danh sách hỗ trợ của hãng, không tự kết luận là tương thích
+        if (sameSocket) {
+            out.add(new Finding("CPU_SUPPORT_LIST", Severity.UNKNOWN, List.of("cpu", "motherboard"),
+                    "Chưa đối chiếu CPU Support List và BIOS tối thiểu của đúng mã bo mạch.",
+                    "Tra trang hỗ trợ CPU của hãng bo mạch theo đúng mã trước khi mua."));
+        }
+        if (cpu.socket() != null && titles.get("cooler") != null) {
+            out.add(new Finding("COOLER_MOUNT", Severity.UNKNOWN, List.of("cooler", "cpu"),
+                    "Chưa xác minh tản nhiệt có bộ gá cho socket " + cpu.socket() + " (gá Intel và AMD khác nhau).",
+                    "Xem trang thông số của tản có ghi " + cpu.socket() + "."));
+        }
         return out;
+    }
+
+    /** Chỉ các lỗi (ERROR): lắp không được, phải đổi sản phẩm */
+    public static List<String> issues(Map<String, String> titles) {
+        return findings(titles).stream().filter(f -> f.severity() == Severity.ERROR).map(Finding::reason).toList();
     }
 }

@@ -28,8 +28,19 @@ public record ChatResponse(String reply, BuildCard build, List<BuildCard> option
         this(reply, build, null);
     }
 
+    /**
+     * Mức kiểm tra theo docs/pc_compatibility_rules.md: errors (ERROR, phải đổi linh kiện), warnings (WARNING),
+     * unknowns (UNKNOWN: app chưa xác minh được, vd CPU Support List của bo; người dùng nên tự kiểm tra trước khi mua),
+     * recommendations (RECOMMENDATION: lời khuyên, không bắt buộc).
+     */
     public record BuildCard(List<Line> items, boolean compatible, List<Issue> errors, List<Issue> warnings,
-            String summary, Long budgetVnd, String modelNote, String tier, int variant) {
+            String summary, Long budgetVnd, String modelNote, String tier, int variant, List<Issue> unknowns,
+            List<Issue> recommendations) {
+
+        public BuildCard(List<Line> items, boolean compatible, List<Issue> errors, List<Issue> warnings, String summary,
+                Long budgetVnd, String modelNote, String tier, int variant) {
+            this(items, compatible, errors, warnings, summary, budgetVnd, modelNote, tier, variant, List.of(), List.of());
+        }
     }
 
     /**

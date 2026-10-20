@@ -58,4 +58,28 @@ class ProductRulesTests {
         assertThat(ProductRules.issues(Map.of("ram", "Ram Laptop Crucial DDR4 16GB Bus 3200"))).singleElement().asString()
                 .contains("SO-DIMM");
     }
+
+    @Test
+    void mucDoTheoBoLuatChuan() {
+        // Bo B660 (đời 600) với Core i5 đời 14: lắp được nhưng có thể cần BIOS mới
+        var f = ProductRules.findings(Map.of("cpu", "Intel Core i5-14400F", "motherboard", "MSI PRO B660M-A DDR4"));
+        assertThat(f).anySatisfy(x -> {
+            assertThat(x.ruleId()).isEqualTo("CPU_BIOS_UPDATE");
+            assertThat(x.severity()).isEqualTo(ProductRules.Severity.WARNING);
+        });
+        // CPU đuôi K trên bo B: chỉ cảnh báo, không phải lỗi
+        assertThat(ProductRules.findings(Map.of("cpu", "Intel Core i5-14600KF", "motherboard", "ASUS PRIME B760M-A D4")))
+                .anySatisfy(x -> assertThat(x.ruleId()).isEqualTo("CPU_OC_CHIPSET"))
+                .noneSatisfy(x -> assertThat(x.severity()).isEqualTo(ProductRules.Severity.ERROR));
+        // Cùng socket vẫn chưa đủ: luôn có UNKNOWN cho CPU Support List; có tản thì chưa xác minh gá
+        assertThat(ProductRules.findings(Map.of("cpu", "AMD Ryzen 5 7600", "motherboard", "Gigabyte B650M D3HP",
+                "cooler", "Tản nhiệt Cooler Master Hyper 212")))
+                .extracting(ProductRules.Finding::ruleId).contains("CPU_SUPPORT_LIST", "COOLER_MOUNT");
+        // Lỗi có đủ trường như mục 10: rule_id, severity, affected_parts, reason, required_action
+        var err = ProductRules.findings(Map.of("cpu", "AMD Ryzen 5 7600X", "motherboard", "MSI B550M PRO-VDH WIFI")).getFirst();
+        assertThat(err.ruleId()).isEqualTo("CPU_SOCKET");
+        assertThat(err.severity()).isEqualTo(ProductRules.Severity.ERROR);
+        assertThat(err.affectedParts()).containsExactly("cpu", "motherboard");
+        assertThat(err.requiredAction()).contains("AM5");
+    }
 }

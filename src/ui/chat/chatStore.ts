@@ -34,6 +34,12 @@ export type BuildCard = {
   compatible: boolean
   errors: Issue[]
   warnings: Issue[]
+  /**
+   * Theo bộ luật chuẩn (docs/pc_compatibility_rules.md): unknowns là điểm app chưa xác minh được (vd CPU Support List
+   * của bo, gá tản), recommendations là lời khuyên không bắt buộc
+   */
+  unknowns?: Issue[] | null
+  recommendations?: Issue[] | null
   /** Nhu cầu trợ lý đã hiểu và ngân sách người dùng nói (chỉ có ở cấu hình đã chốt) */
   summary?: string | null
   budgetVnd?: number | null
@@ -205,4 +211,14 @@ export function machineOfCard(card: BuildCard): FamilyId | 'gaming' | null {
   const code = card.items.find((i) => i.category === 'case')?.code.replace(/^case_/, '')
   if (code === 'gaming') return 'gaming'
   return (FAMILY_IDS as readonly string[]).includes(code ?? '') ? (code as FamilyId) : null
+}
+
+/**
+ * Dòng trạng thái của thẻ cấu hình. Theo bộ luật chuẩn, chưa xác minh hết (UNKNOWN) thì không khẳng định là lắp chung được.
+ */
+export function compatText(card: BuildCard): { ok: boolean; short: string; long: string } {
+  if (!card.compatible) return { ok: false, short: 'Cấu hình này chưa lắp được', long: 'Cấu hình này chưa lắp được, xem lỗi bên dưới.' }
+  if (card.unknowns?.length)
+    return { ok: true, short: 'Chưa thấy lỗi lắp chung', long: 'Chưa thấy lỗi lắp chung. Còn vài điểm cần xác minh trước khi mua (xem bên dưới).' }
+  return { ok: true, short: 'Các linh kiện lắp chung được', long: 'Các linh kiện lắp chung được.' }
 }
