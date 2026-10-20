@@ -253,6 +253,8 @@ public class ChatService {
         volatile Checked last;
         /** Ba phương án chốt bằng propose_build, theo tier (cheap / balanced / quality) */
         final Map<String, Checked> tiers = new ConcurrentHashMap<>();
+        /** Phương án đã bị nhắc vượt ngân sách (chỉ nhắc một lần, để trợ lý không chọn lại mãi tới hết lượt) */
+        final java.util.Set<String> overWarned = ConcurrentHashMap.newKeySet();
         /** Build 2 và 3 của từng tier: cùng linh kiện trong danh mục, đổi sang sản phẩm khác giá gần (variants()) */
         final Map<String, List<Checked>> variants = new ConcurrentHashMap<>();
         /** Toàn bộ kết quả của từng lần search_products, theo nhóm id ("s3" cho s3-1 ... s3-6) */
@@ -344,7 +346,9 @@ public class ChatService {
                     calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
                     (System.nanoTime() - t1) / 1_000_000);
         }
-        return respond("Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé.", turn);
+        // Hết số vòng: có phương án rồi thì vẫn gửi (kèm câu dẫn), chưa có gì mới bảo người dùng hỏi cụ thể hơn
+        return respond(turn.tiers.isEmpty() && turn.last == null
+                ? "Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé." : BUILDS_READY, turn);
     }
 
     /** Thứ tự hiện ba phương án trong bảng so sánh */
@@ -708,7 +712,12 @@ public class ChatService {
                     // trần không được gửi cho người dùng (respond)
                     Long cap = tierCap(checked.budgetVnd(), tier);
                     if (!result.compatible()) log.info("propose_build {}: chưa lắp chung được, trợ lý phải sửa", tier);
-                    if (turn.advice && cap != null && totalMax > cap) {
+                    if (turn.advice && cap != null && totalMax > cap && !turn.overWarned.add(tier)) {
+                        // Đã nhắc một lần mà vẫn vượt (thường do món đi kèm vỏ cố định): chấp nhận, chỉ cần nói rõ
+                        log.info("propose_build {}: vẫn vượt trần ({} > {}), chấp nhận", tier, totalMax, cap);
+                        saved.put("over_budget_note", "Vẫn vượt mức tối đa " + cap + " đồng. Không cần chọn lại nữa: "
+                                + "nói rõ trong câu trả lời là phương án này vượt bao nhiêu và vì sao.");
+                    } else if (turn.advice && cap != null && totalMax > cap) {
                         log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại", tier, totalMax, cap);
                         saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
                                 + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier.");
