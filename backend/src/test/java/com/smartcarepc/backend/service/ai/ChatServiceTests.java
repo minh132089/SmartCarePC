@@ -508,6 +508,20 @@ class ChatServiceTests {
     }
 
     @Test
+    void sauHaiVongTimThiPhaiChot() {
+        when(search.enabled()).thenReturn(true);
+        when(search.search(any())).thenReturn(List.of());
+        reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"RAM\"}"),
+                answer("Xong."));
+
+        service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
+
+        // Vòng 3 (sau 2 vòng tìm) không còn công cụ search_products
+        assertThat(sent.get(1).get("tools").toString()).contains("name=search_products");
+        assertThat(sent.get(2).get("tools").toString()).doesNotContain("name=search_products");
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);

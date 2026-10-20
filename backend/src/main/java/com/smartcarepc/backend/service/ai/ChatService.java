@@ -337,12 +337,15 @@ public class ChatService {
         // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
+        int searchRounds = 0;
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", maxTokens);
             body.put("messages", messages);
-            body.put("tools", tools);
+            // Đã tìm đủ MAX_SEARCH_ROUNDS vòng: bỏ công cụ tìm để trợ lý chốt với kết quả đã có (mỗi vòng tìm thêm tốn
+            // 15 - 35 giây; món chưa ưng thì app tự đổi lúc dựng thẻ)
+            body.put("tools", searchRounds >= MAX_SEARCH_ROUNDS ? withoutSearch(tools) : tools);
 
             long t0 = System.nanoTime();
             Map<String, Object> res;
@@ -371,7 +374,10 @@ public class ChatService {
             messages.add(message);
             // Chạy song song các công cụ của cùng một lượt (thường là nhiều search_products), rồi trả kết quả theo đúng thứ tự
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
-            if (names.contains("search_products")) progress.accept(STAGE_SEARCH);
+            if (names.contains("search_products")) {
+                searchRounds++;
+                progress.accept(STAGE_SEARCH);
+            }
             else if (names.contains("propose_build")) progress.accept(STAGE_CHECK);
             var results = calls.stream()
                     .map(call -> Io.async(() -> runTool((Map<String, Object>) call.get("function"), turn)))
@@ -667,6 +673,13 @@ public class ChatService {
             }
         });
         return titles;
+    }
+
+    /** Số vòng trợ lý được gọi search_products trước khi phải chốt */
+    static final int MAX_SEARCH_ROUNDS = 2;
+
+    private static List<Map<String, Object>> withoutSearch(List<Map<String, Object>> tools) {
+        return tools.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
     }
 
     /** Thời gian tối đa cho bước đổi món lấy link của một phương án */
