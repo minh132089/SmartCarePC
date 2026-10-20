@@ -142,6 +142,10 @@ class PriceEngineTests {
                 "Vỏ case NZXT H5 Elite White (CC-H51EW-01)")).isTrue();
         assertThat(PriceEngine.samePage("Bộ nhớ/ RAM Corsair Dominator Platinum White RGB 16GB DDR4-3200Mhz",
                 "RAM Corsair Dominator Platinum RGB 16GB (2x8GB) DDR4 3200MHz White")).isTrue();
+        // Trang bán cả bộ không phải trang CPU lẻ
+        assertThat(PriceEngine.samePage("CPU Intel Core i5-12400F", "Bộ PC CPU Intel Core i5-12400F Tray + Mainboard Infinity B760M")).isFalse();
+        assertThat(PriceEngine.samePage("CPU Intel Core i5-12400F", "Combo CPU Intel Core i5-12400F + Mainboard MSI B760M")).isFalse();
+        assertThat(PriceEngine.samePage("CPU Intel Core i5-12400F", "CPU Intel Core i5-12400F (Tặng kèm quạt tản nhiệt)")).isTrue();
         // Khác loại linh kiện / khác model
         assertThat(PriceEngine.samePage("Card màn hình MSI RTX 4060 Ventus 2X 8G OC", "Bo mạch chủ MSI PRO B760M-E DDR4")).isFalse();
         assertThat(PriceEngine.samePage("CPU Intel Core i5-12400F", "CPU Intel Core i5-14400F")).isFalse();

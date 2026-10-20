@@ -49,7 +49,7 @@ public class PriceEngine {
             "like ?new|\\bcũ\\b|đã qua sử dụng|\\b2nd\\b|trưng bày|thanh lý|\\btray\\b|bóc máy",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Tên bắt đầu bằng các loại này mà từ khoá không nhắc tới thì là hàng khác loại (laptop, PC lắp sẵn, màn hình) */
-    private static final List<String> OTHER_KINDS = List.of("laptop", "pc ", "may tinh", "bo may", "man hinh", "may bo");
+    private static final List<String> OTHER_KINDS = List.of("laptop", "pc ", "may tinh", "bo may", "bo pc", "combo", "man hinh", "may bo");
     /** Hàng cho laptop (RAM SO-DIMM, SSD laptop): không lắp vào máy bàn */
     private static final Pattern LAPTOP_PART = Pattern.compile("\\b(laptop|notebook|so ?dimm)\\b");
     /** Chữ không mang nghĩa khi so từ khoá với tên */
@@ -156,6 +156,8 @@ public class PriceEngine {
     public static boolean samePage(String expect, String page) {
         if (expect == null || page == null) return false;
         String e = norm(expect), p = norm(page), squashed = p.replace(" ", "");
+        // Trang bán cả bộ (bộ PC, combo, "CPU + mainboard") không phải trang của một linh kiện
+        if (BUNDLE.matcher(page.toLowerCase()).find() && !BUNDLE.matcher(expect.toLowerCase()).find()) return false;
         String ek = kind(e), pk = kind(p);
         if (ek != null && pk != null && !ek.equals(pk)) return false;
         Long ec = maxCapacity(e), pc = maxCapacity(p);
@@ -171,6 +173,10 @@ public class PriceEngine {
         Set<String> pw = new HashSet<>(Arrays.asList(p.split(" ")));
         return !words.isEmpty() && words.stream().filter(pw::contains).count() * 2 >= words.size();
     }
+
+    /** Dấu hiệu trang bán cả bộ: "Bộ PC ...", "Combo ...", "PC Gaming ...", "CPU ... + Mainboard ..." */
+    private static final Pattern BUNDLE = Pattern.compile(
+            "(?iuU)\\bbộ\\s+pc\\b|\\bcombo\\b|\\bpc\\s+gaming\\b|\\bbộ\\s+máy\\b|\\+\\s*(mainboard|main|bo mạch|ram|vga|card|cpu|ssd|nguồn)\\b");
 
     /** Dung lượng lớn nhất ghi trong tên, theo GB (1TB = 1000GB); null nếu không ghi */
     static Long maxCapacity(String normalized) {
