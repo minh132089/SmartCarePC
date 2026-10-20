@@ -81,6 +81,17 @@ public class ProductSearch {
         return !keys.isEmpty() && java.time.Instant.now().isAfter(pausedUntil);
     }
 
+    /**
+     * Tìm thẳng bằng engine tự chạy (trang tìm kiếm của cửa hàng + SearXNG): link là trang sản phẩm có giá thật. Dùng
+     * khi kết quả Google Shopping không cho được link xác minh.
+     */
+    public List<Product> engineSearch(String query) {
+        if (!engine.enabled() || query == null || query.isBlank()) return List.of();
+        return engine.search(query).stream()
+                .map(o -> new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl()))
+                .toList();
+    }
+
     /** Thông tin engine đọc được về link (còn hàng, bảo hành, lúc kiểm tra), null nếu link không do engine tìm */
     public Offer offer(String url) {
         return engine.offer(url);

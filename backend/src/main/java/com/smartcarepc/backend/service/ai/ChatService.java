@@ -748,10 +748,15 @@ public class ChatService {
                 if (best != null || now != null) return best;
                 // Không món nào trong nhóm có trang bán: tự tìm thêm theo thông số (app đi tìm, không bắt người dùng tìm)
                 String query = spec != null ? spec : ProductSearch.shortTitle(pick.title());
-                var more = candidates(pick, search.search(query), kit(req, details, code), tier).stream()
-                        .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
-                        .toList();
-                return bestLinked(more, null);
+                java.util.function.Function<List<ProductSearch.Product>, List<ProductSearch.Product>> fit = found ->
+                        candidates(pick, found, kit(req, details, code), tier).stream()
+                                .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
+                                .toList();
+                var more = bestLinked(fit.apply(search.search(query)), null);
+                // Google Shopping vẫn không cho link xác minh được: tìm thẳng trên web cửa hàng (link sẵn là trang sản phẩm)
+                if (more == null) more = bestLinked(fit.apply(search.engineSearch(query)), null);
+                if (more == null && spec != null) more = bestLinked(fit.apply(search.engineSearch(ProductSearch.shortTitle(pick.title()))), null);
+                return more;
             }));
         });
         fixes.forEach((code, f) -> {
