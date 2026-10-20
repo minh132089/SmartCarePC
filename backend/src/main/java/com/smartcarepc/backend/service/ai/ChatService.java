@@ -638,6 +638,9 @@ public class ChatService {
         return titles;
     }
 
+    /** Thời gian tối đa cho bước đổi món lấy link của một phương án */
+    static final java.time.Duration LINK_BUDGET = java.time.Duration.ofSeconds(25);
+
     /** Rẻ phải rẻ hơn rõ rệt: tối đa 90% ngân sách */
     static final double CHEAP_SHARE = 0.9;
     /** Option 2, 3 của Phù hợp cho bạn được đắt hơn ngân sách tối đa từng này */
@@ -759,8 +762,18 @@ public class ChatService {
                 return more;
             }));
         });
+        // Giới hạn thời gian: món tìm chưa xong thì giữ nguyên (thẻ ghi "chưa kiểm tra" / "chưa tìm được trang bán")
+        long deadline = System.currentTimeMillis() + LINK_BUDGET.toMillis();
         fixes.forEach((code, f) -> {
-            var p = f.join();
+            ProductSearch.Product p;
+            try {
+                p = f.get(Math.max(0, deadline - System.currentTimeMillis()), java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
             if (p == null) return;
             var trial = new LinkedHashMap<>(picks);
             trial.put(code, p);
