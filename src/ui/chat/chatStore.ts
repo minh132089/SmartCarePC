@@ -20,7 +20,14 @@ export type BuildLine = {
   shop?: string | null
   imageUrl?: string | null
   sourceUrl?: string | null
+  /** Engine so giá đọc từ trang cửa hàng: còn hàng, bảo hành (tháng), lúc kiểm tra giá (ISO); null nếu không biết */
+  inStock?: boolean | null
+  warrantyMonths?: number | null
+  checkedAt?: string | null
+  /** Cùng model ở cửa hàng khác, rẻ nhất trước */
+  compare?: ShopPrice[] | null
 }
+export type ShopPrice = { shop: string; priceVnd: number; url: string; inStock?: boolean | null; checkedAt?: string | null }
 /** Cấu hình trợ lý vừa kiểm tra bằng bộ kiểm tra tương thích của backend */
 export type BuildCard = {
   items: BuildLine[]

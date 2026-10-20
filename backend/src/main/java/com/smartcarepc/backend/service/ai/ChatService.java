@@ -353,7 +353,7 @@ public class ChatService {
      * để các chỗ chỉ đọc một thẻ (lịch sử hội thoại, nút xem và lắp) vẫn chạy như cũ.
      */
     private ChatResponse respond(String reply, Turn turn) {
-        List<BuildCard> options = new ArrayList<>();
+        Map<String, List<Checked>> chosen = new LinkedHashMap<>();
         for (String t : TIERS) {
             if (!turn.tiers.containsKey(t)) continue;
             // Mọi nút mua phải vào thẳng web cửa hàng. Link đã đổi song song lúc trợ lý viết câu trả lời; món nào vẫn
@@ -376,9 +376,19 @@ public class ChatService {
                 kept = List.of(all.stream().min(Comparator.comparingLong(c -> total(c.request(), c.details(), c.picks()))).orElseThrow());
                 log.warn("Phương án {} vượt trần {} dù đã thử bộ rẻ nhất", t, cap);
             }
+            chosen.put(t, kept);
+        }
+        // Bảng giá tốt nhất: tìm trước (song song) cùng model ở cửa hàng khác cho mọi món sẽ hiện, rồi mới dựng thẻ
+        if (turn.advice && search.enabled()) {
+            Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
+            chosen.values().forEach(list -> list.forEach(c -> c.picks().values().forEach(p -> picks.putIfAbsent(p.url(), p))));
+            search.warmCompare(picks.values());
+        }
+        List<BuildCard> options = new ArrayList<>();
+        chosen.forEach((t, kept) -> {
             int v = 1;
             for (var c : kept) options.add(card(c, turn.advice, t, v++));
-        }
+        });
         BuildCard build = options.stream().filter(o -> "balanced".equals(o.tier()) && o.variant() == 1).findFirst()
                 .orElseGet(() -> turn.last == null ? null : card(turn.last, turn.advice, null, 1));
         return new ChatResponse(reply, build, options.size() > 1 ? options : null);
@@ -423,7 +433,7 @@ public class ChatService {
     static final String STAGE_PICK = "Đang chọn linh kiện cho ba phương án Rẻ, Phù hợp, Chất lượng…";
     static final String STAGE_CHECK = "Đang kiểm tra các linh kiện lắp chung được không…";
     static final String STAGE_WRITE = "Đã có phương án, đang viết lời giải thích…";
-    static final String STAGE_LINKS = "Sắp xong, đang lấy link mua ở cửa hàng…";
+    static final String STAGE_LINKS = "Sắp xong, đang so giá cùng sản phẩm ở các cửa hàng khác…";
 
     /** Câu dẫn khi AI lỗi ở vòng cuối nhưng phương án đã có */
     static final String BUILDS_READY = "Mình đã chọn xong các phương án bên dưới. Bạn bấm vào từng option để xem chi tiết "
@@ -690,7 +700,9 @@ public class ChatService {
                     // Phương án vượt trần của nó (Rẻ, Phù hợp: ngân sách; Chất lượng: +15%): báo để trợ lý chọn lại. Thẻ vượt
                     // trần không được gửi cho người dùng (respond)
                     Long cap = tierCap(checked.budgetVnd(), tier);
+                    if (!result.compatible()) log.info("propose_build {}: chưa lắp chung được, trợ lý phải sửa", tier);
                     if (turn.advice && cap != null && totalMax > cap) {
+                        log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại", tier, totalMax, cap);
                         saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
                                 + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier.");
                     }
@@ -725,6 +737,10 @@ public class ChatService {
                         m.put("title", p.title());
                         m.put("shop", p.shop());
                         m.put("price_vnd", p.priceVnd());
+                        // Engine so giá đọc được trang sản phẩm thì báo còn hàng / bảo hành để trợ lý chọn món mua được
+                        var offer = search.offer(p.url());
+                        if (offer != null && offer.inStock() != null) m.put("in_stock", offer.inStock());
+                        if (offer != null && offer.warrantyMonths() != null) m.put("warranty_months", offer.warrantyMonths());
                         rows.add(m);
                     }
                     yield rows;
@@ -762,9 +778,16 @@ public class ChatService {
             var pick = c.picks().get(code);
             Long[] range = price(d, pick, n);
             String link = pick == null ? null : c.links().get(code).join();
+            // Bảng giá tốt nhất: còn hàng, bảo hành, lúc kiểm tra của món đã chọn, và cùng model ở cửa hàng khác
+            var offer = pick == null ? null : search.offer(pick.url());
+            List<ChatResponse.ShopPrice> compare = !advice || pick == null ? List.of()
+                    : search.compare(pick, c.siblings().getOrDefault(code, List.of())).stream()
+                            .map(o -> new ChatResponse.ShopPrice(o.shop(), o.priceVnd(), o.url(), o.inStock(), o.checkedAt())).toList();
             lines.add(new Line(code, part.category(), part.name(), n, text(d.get("spec")), text(d.get("reason")),
                     range[0], range[1], pick == null ? null : pick.imageUrl(), link,
-                    pick == null ? null : pick.title(), pick == null ? null : pick.shop()));
+                    pick == null ? null : pick.title(), pick == null ? null : pick.shop(),
+                    offer == null ? null : offer.inStock(), offer == null ? null : offer.warrantyMonths(),
+                    offer == null ? null : offer.checkedAt(), compare));
         });
         var r = c.result();
         String note = advice ? modelMatch.check(c.request()).note() : null;

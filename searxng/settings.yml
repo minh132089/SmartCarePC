@@ -1,0 +1,18 @@
+# SearXNG chạy trên máy demo cho engine tìm giá (backend gọi http://localhost:8888/search?format=json).
+# Chỉ nghe ở localhost, không mở ra ngoài.
+use_default_settings: true
+general:
+  instance_name: "SmartCarePC search"
+search:
+  safe_search: 0
+  default_lang: "vi-VN"
+  formats:
+    - html
+    - json
+server:
+  # Khoá ký phiên nội bộ của SearXNG; máy chủ chỉ nghe ở localhost nên giá trị cố định là đủ
+  secret_key: "smartcarepc-local-searxng"
+  limiter: false
+  image_proxy: false
+ui:
+  default_locale: "vi"

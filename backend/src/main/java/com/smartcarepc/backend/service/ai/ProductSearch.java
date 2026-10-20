@@ -19,12 +19,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import com.smartcarepc.backend.service.price.Offer;
+import com.smartcarepc.backend.service.price.PriceEngine;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam qua Serper.dev (kết quả Google).
- * Ưu tiên mục Shopping vì có sẵn giá và ảnh; ít kết quả thì tìm Google thường rồi mở trang sản phẩm
- * để đọc ảnh (og:image) và giá (JSON-LD / meta). Khoá đặt bằng biến môi trường SERPER_API_KEY.
+ * Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam. Nguồn chính là engine so giá tự chạy (service/price: đọc thẳng web
+ * cửa hàng và SearXNG, không tốn lượt dịch vụ nào). Serper.dev (Google Shopping, khoá SERPER_API_KEY) là nguồn phụ khi
+ * engine tìm được ít.
  */
 @Slf4j
 @Component
@@ -34,7 +37,7 @@ public class ProductSearch {
     public record Product(String title, String shop, Long priceVnd, String url, String imageUrl) {
     }
 
-    private static final int MAX = 6;
+    private static final int MAX = 8;
     private static final Pattern OG_IMAGE = Pattern.compile(
             "<meta[^>]+(?:property|name)=[\"']og:image[\"'][^>]*content=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
     private static final Pattern OG_IMAGE_REV = Pattern.compile(
@@ -45,8 +48,10 @@ public class ProductSearch {
     private final RestClient serper;
     private final RestClient web;
     private final String apiKey;
+    private final PriceEngine engine;
 
-    public ProductSearch(@Value("${app.search.serper-key:}") String apiKey) {
+    public ProductSearch(@Value("${app.search.serper-key:}") String apiKey, PriceEngine engine) {
+        this.engine = engine;
         var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(6)).followRedirects(HttpClient.Redirect.NORMAL).build());
         // Ba phương án và build tham khảo tìm link cùng lúc nên Serper có lúc trả chậm; 8 giây làm đứt giữa chừng
@@ -64,7 +69,63 @@ public class ProductSearch {
     }
 
     public boolean enabled() {
+        return engine.enabled() || serperReady();
+    }
+
+    /** Serper có khoá và không bị tạm tắt (hết lượt) */
+    private boolean serperReady() {
         return !apiKey.isEmpty() && java.time.Instant.now().isAfter(pausedUntil);
+    }
+
+    /** Thông tin engine đọc được về link (còn hàng, bảo hành, lúc kiểm tra), null nếu link không do engine tìm */
+    public Offer offer(String url) {
+        return engine.offer(url);
+    }
+
+    /** Kết quả tìm đúng tên model của từng món đã chọn (warmCompare), theo link món đó */
+    private final Map<String, List<Offer>> sameModel = new ConcurrentHashMap<>();
+
+    /**
+     * Tìm trước, song song, đúng tên model của các món đã chọn ở mọi cửa hàng (engine), để compare() có giá cùng
+     * sản phẩm ở cửa hàng khác. Chờ tối đa 20 giây; món tìm chưa xong thì chỉ so trong nhóm tìm kiếm cũ.
+     */
+    public void warmCompare(java.util.Collection<Product> picks) {
+        if (!engine.enabled()) return;
+        var jobs = picks.stream()
+                .filter(p -> p.title() != null && p.url() != null && !sameModel.containsKey(p.url()))
+                .map(p -> CompletableFuture.runAsync(() -> sameModel.put(p.url(), engine.search(shortTitle(p.title())))))
+                .toArray(CompletableFuture[]::new);
+        try {
+            CompletableFuture.allOf(jobs).get(20, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
+            log.debug("Tìm cùng model chưa xong hết: {}", e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (sameModel.size() > 2000) sameModel.clear();
+    }
+
+    /**
+     * Cùng model ở cửa hàng khác (để so giá): trong nhóm tìm kiếm của món và trong lần tìm đúng tên model
+     * (warmCompare), rẻ nhất trước, mỗi cửa hàng một giá, tối đa 3. Không tính chính cửa hàng của món đó.
+     */
+    public List<Offer> compare(Product pick, List<Product> group) {
+        if (pick == null || pick.title() == null) return List.of();
+        String self = PriceEngine.clean(pick.url());
+        Map<String, Offer> best = new LinkedHashMap<>();
+        List<Offer> pool = new ArrayList<>();
+        group.forEach(p -> {
+            var o = engine.offer(p.url());
+            pool.add(o != null ? o : new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), p.imageUrl(), null, null, null));
+        });
+        pool.addAll(sameModel.getOrDefault(pick.url(), List.of()));
+        pool.stream()
+                .filter(o -> o.title() != null && o.priceVnd() != null && !PriceEngine.clean(o.url()).equals(self))
+                .filter(o -> PriceEngine.sameModel(pick.title(), o.title()))
+                .filter(o -> o.shop() != null && !o.shop().equalsIgnoreCase(pick.shop()))
+                .sorted(java.util.Comparator.comparingLong(Offer::priceVnd))
+                .forEach(o -> best.putIfAbsent(o.shop(), o));
+        return best.values().stream().limit(3).toList();
     }
 
     /** Serper hết lượt / khoá bị từ chối: tạm coi như tắt tìm kiếm, để trợ lý trả lời bằng giá ước tính thay vì gọi mãi */
@@ -84,7 +145,7 @@ public class ProductSearch {
 
     /** Tìm tối đa 6 sản phẩm, đã bỏ trùng link, ưu tiên món có cả giá và ảnh */
     public List<Product> search(String query) {
-        if (!enabled()) throw new IllegalStateException("Chưa bật tìm kiếm sản phẩm (thiếu SERPER_API_KEY)");
+        if (!enabled()) throw new IllegalStateException("Chưa bật tìm kiếm sản phẩm");
         String key = query.strip().toLowerCase();
         var hit = cache.get(key);
         if (hit != null && System.currentTimeMillis() - hit.at() < CACHE_MS) return hit.products();
@@ -97,12 +158,20 @@ public class ProductSearch {
     }
 
     private List<Product> fresh(String query) {
-        List<Product> out = new ArrayList<>(shopping(query));
-        if (out.size() < 3) out.addAll(organic(query + " giá"));
+        List<Product> out = new ArrayList<>();
+        if (engine.enabled()) {
+            engine.search(query).forEach(o -> out.add(new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl())));
+        }
+        // Engine tìm được ít (món hiếm, cửa hàng đổi giao diện): thêm kết quả Google Shopping nếu Serper còn lượt
+        if (out.size() < 3 && serperReady()) {
+            out.addAll(shopping(query));
+            if (out.size() < 3) out.addAll(organic(query + " giá"));
+        }
         Map<String, Product> unique = new LinkedHashMap<>();
         out.stream().filter(p -> p.url() != null).forEach(p -> unique.putIfAbsent(p.url(), p));
+        // Kết quả engine đã xếp (khớp model, còn hàng, rẻ) nên giữ nguyên thứ tự; chỉ đẩy món thiếu giá xuống cuối
         return unique.values().stream()
-                .sorted((a, b) -> Integer.compare(score(b), score(a)))
+                .sorted((a, b) -> Integer.compare(score(b) >= 2 ? 1 : 0, score(a) >= 2 ? 1 : 0))
                 .limit(MAX)
                 .toList();
     }

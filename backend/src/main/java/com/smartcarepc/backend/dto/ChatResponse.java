@@ -1,5 +1,6 @@
 package com.smartcarepc.backend.dto;
 
+import java.time.Instant;
 import java.util.List;
 
 import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
@@ -11,6 +12,7 @@ import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
  * thông số nên mua, lý do chọn, giá (VND, cho cả số lượng của dòng đó), và sản phẩm thật trợ lý tìm được
  * bằng search_products: tên (productName), cửa hàng (shop), ảnh (imageUrl), trang mua (sourceUrl).
  * Link luôn là trang của cửa hàng (không qua Google), lấy từ kết quả tìm kiếm thật; không có thì null.
+ * Giá đọc từ web cửa hàng lúc checkedAt; compare liệt kê cùng model ở cửa hàng khác.
  * modelNote: ghi chú khi số thanh RAM hoặc số quạt khác máy mẫu 3D của vỏ đã chọn (null nếu giống).
  * options: ba phương án Rẻ / Phù hợp cho bạn / Chất lượng (tier cheap / balanced / quality) khi trợ lý đưa đủ;
  * build khi đó là phương án balanced. Mỗi tier có tới 3 build (variant 1 = trợ lý chọn; 2 và 3 = cùng linh kiện,
@@ -30,8 +32,23 @@ public record ChatResponse(String reply, BuildCard build, List<BuildCard> option
             String summary, Long budgetVnd, String modelNote, String tier, int variant) {
     }
 
+    /**
+     * inStock / warrantyMonths / checkedAt: engine so giá đọc từ trang cửa hàng (null nếu không biết). compare: cùng
+     * model ở cửa hàng khác, rẻ nhất trước (tối đa 3), để người dùng thấy bảng giá tốt nhất.
+     */
     public record Line(String code, String category, String name, int quantity,
             String spec, String reason, Long priceMinVnd, Long priceMaxVnd, String imageUrl, String sourceUrl,
-            String productName, String shop) {
+            String productName, String shop, Boolean inStock, Integer warrantyMonths, Instant checkedAt,
+            List<ShopPrice> compare) {
+
+        public Line(String code, String category, String name, int quantity, String spec, String reason, Long priceMinVnd,
+                Long priceMaxVnd, String imageUrl, String sourceUrl, String productName, String shop) {
+            this(code, category, name, quantity, spec, reason, priceMinVnd, priceMaxVnd, imageUrl, sourceUrl, productName, shop,
+                    null, null, null, List.of());
+        }
+    }
+
+    /** Giá của cùng sản phẩm ở một cửa hàng khác */
+    public record ShopPrice(String shop, Long priceVnd, String url, Boolean inStock, Instant checkedAt) {
     }
 }

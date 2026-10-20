@@ -1,0 +1,151 @@
+package com.smartcarepc.backend.service.price;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import tools.jackson.databind.json.JsonMapper;
+
+class PriceEngineTests {
+
+    private static final Instant AT = Instant.parse("2026-10-20T10:00:00Z");
+
+    private static String fixture(String name) throws IOException {
+        try (InputStream in = PriceEngineTests.class.getResourceAsStream("/shops/" + name)) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    @Test
+    void docTrangTimKiemGearvn() throws IOException {
+        var offers = ShopSearch.GEARVN.parse(fixture("gearvn-search.html"), AT);
+        assertThat(offers).hasSize(2);
+        var card = offers.getFirst();
+        assertThat(card.title()).isEqualTo("Card màn hình MSI GeForce RTX 4060 VENTUS 2X WHITE 8G OC");
+        assertThat(card.priceVnd()).isEqualTo(8_990_000L);
+        assertThat(card.oldPriceVnd()).isEqualTo(9_390_000L);
+        assertThat(card.url()).isEqualTo("https://gearvn.com/products/card-man-hinh-msi-geforce-rtx-4060-ventus-2x-white-8g-oc");
+        assertThat(card.shop()).isEqualTo("GEARVN");
+        assertThat(card.checkedAt()).isEqualTo(AT);
+    }
+
+    @Test
+    void docTrangTimKiemAnPhat() throws IOException {
+        var offers = ShopSearch.ANPHAT.parse(fixture("anphat-search.html"), AT);
+        assertThat(offers).singleElement().satisfies(o -> {
+            assertThat(o.title()).isEqualTo("Card màn hình ASUS Dual GeForce RTX 4060 EVO OC Edition 8GB GDDR6");
+            assertThat(o.priceVnd()).isEqualTo(8_190_000L);
+            assertThat(o.oldPriceVnd()).isEqualTo(8_990_000L);
+            assertThat(o.url()).isEqualTo("https://www.anphatpc.com.vn/vga-asus-dual-rtx4060-o8g-evo.html");
+            assertThat(o.imageUrl()).isEqualTo("https://anphat.com.vn/media/product/4060.jpg");
+        });
+    }
+
+    @Test
+    void docTrangSanPhamQuaJsonLd() throws IOException {
+        var o = ProductPage.parse(fixture("product-page.html"), "https://gearvn.com/products/asus-4060-evo", AT);
+        assertThat(o.priceVnd()).isEqualTo(7_990_000L);
+        assertThat(o.inStock()).isFalse();
+        assertThat(o.warrantyMonths()).isEqualTo(36);
+        assertThat(o.imageUrl()).isEqualTo("https://product.hstatic.net/x/asus.png");
+        assertThat(o.shop()).isEqualTo("GEARVN");
+        assertThat(ProductPage.parse("<html><body>Không có sản phẩm</body></html>", "https://gearvn.com/", AT)).isNull();
+    }
+
+    @Test
+    void docSoTien() {
+        assertThat(Prices.parse("8.990.000đ")).isEqualTo(8_990_000L);
+        assertThat(Prices.parse("8,990,000 ₫")).isEqualTo(8_990_000L);
+        assertThat(Prices.parse("7990000")).isEqualTo(7_990_000L);
+        assertThat(Prices.parse("7990000.00")).isEqualTo(7_990_000L);
+        assertThat(Prices.parse("Liên hệ")).isNull();
+        assertThat(ProductPage.warranty("Bảo hành: 24 tháng")).isEqualTo(24);
+        assertThat(ProductPage.warranty("không ghi")).isNull();
+    }
+
+    @Test
+    void lamTheoRobotsTxt() {
+        var anphat = PoliteFetcher.Robots.parse("""
+                User-agent: *
+                Disallow: /admin/
+                Disallow: /ajax/
+                Crawl-delay: 5
+                User-agent: CCBot
+                Disallow: /
+                """, "smartcarepc");
+        assertThat(anphat.delay().toSeconds()).isEqualTo(5);
+        assertThat(anphat.allowed("/tim?q=rtx")).isTrue();
+        assertThat(anphat.allowed("/ajax/price")).isFalse();
+        var phongvu = PoliteFetcher.Robots.parse("User-agent: *\nAllow: /\nDisallow: /search?*\n", "smartcarepc");
+        assertThat(phongvu.allowed("/search?query=rtx")).isFalse();
+        assertThat(phongvu.allowed("/card-msi-rtx-4060--s123")).isTrue();
+        assertThat(PoliteFetcher.Robots.parse("", "smartcarepc").allowed("/bat-ky")).isTrue();
+    }
+
+    @Test
+    void khopDungModel() {
+        assertThat(PriceEngine.relevance("RTX 4060 8GB", "Card màn hình MSI GeForce RTX 4060 VENTUS 2X 8G OC")).isPositive();
+        // Laptop / PC lắp sẵn có RTX 4060 không phải card rời
+        assertThat(PriceEngine.relevance("RTX 4060 8GB", "Laptop Acer Swift X (Ultra 7/ RTX 4060 8GB)")).isZero();
+        assertThat(PriceEngine.relevance("RTX 4060", "PC GVN AMD R7-7700X/ RTX 4060")).isZero();
+        assertThat(PriceEngine.relevance("RTX 4060", "Card màn hình MSI GeForce RTX 4060 Ti 8G")).isPositive();
+        assertThat(PriceEngine.relevance("Intel Core i5-12400F", "CPU Intel Core i5-12400F (Up to 4.4GHz)")).isPositive();
+        assertThat(PriceEngine.relevance("Intel Core i5-12400F", "CPU Intel Core i5-12400 (Up to 4.4GHz)")).isZero();
+        assertThat(PriceEngine.relevance("RAM DDR4 16GB 3200", "RAM Corsair Vengeance LPX 16GB (2x8GB) DDR4 3200MHz")).isPositive();
+        // RAM laptop không lắp vào máy bàn
+        assertThat(PriceEngine.relevance("RAM DDR4 16GB 3200", "Ram Laptop Crucial DDR4 16GB Bus 3200")).isZero();
+        // Từ khoá chung chung: đúng loại mới lấy
+        assertThat(PriceEngine.relevance("Tản nhiệt khí CPU", "Tản nhiệt Cooler Master Hyper 612 Apex")).isPositive();
+        assertThat(PriceEngine.relevance("Tản nhiệt khí CPU", "Vỏ máy tính Zotac Gaming ALLOY MATX White")).isZero();
+        assertThat(PriceEngine.relevance("Tản nhiệt khí CPU", "Bo mạch chủ ASUS PRIME B760M-A D4 CSM")).isZero();
+        assertThat(PriceEngine.relevance("Vỏ case mid tower kính cường lực", "Vỏ máy tính Corsair 3500X TG Mid Tower Black")).isPositive();
+    }
+
+    @Test
+    void cungModelOCuaHangKhac() {
+        assertThat(PriceEngine.sameModel("Card màn hình ASUS Dual GeForce RTX 4060 EVO OC Edition 8GB GDDR6",
+                "VGA ASUS Dual RTX 4060 EVO OC 8GB")).isTrue();
+        assertThat(PriceEngine.sameModel("Card màn hình MSI GeForce RTX 4060 VENTUS 2X 8G OC",
+                "Card màn hình MSI GeForce RTX 4060 GAMING X 8G")).isFalse();
+        assertThat(PriceEngine.sameModel("RTX 4060 Ti 8GB", "RTX 4060 8GB")).isFalse();
+    }
+
+    @Test
+    void xepHangBoHangCuVaHetHang() {
+        var o = List.of(
+                offer("Card MSI RTX 4060 Ventus 2X 8G", 8_500_000L, false),
+                offer("Card ASUS Dual RTX 4060 8G", 8_200_000L, true),
+                offer("Card Gigabyte RTX 4060 Windforce 8G", 7_900_000L, null),
+                offer("Card Zotac RTX 4060 8G cũ", 5_000_000L, true),
+                offer("Card Colorful RTX 4060 8G", 7_700_000L, true));
+        var ranked = PriceEngine.rank("RTX 4060", o);
+        // Còn đủ 3 món còn bán: bỏ món hết hàng; hàng cũ bị loại; còn hàng trước, rẻ trước
+        assertThat(ranked).extracting(Offer::title).containsExactly(
+                "Card Colorful RTX 4060 8G", "Card ASUS Dual RTX 4060 8G", "Card Gigabyte RTX 4060 Windforce 8G");
+    }
+
+    @Test
+    void searxngChiLayTrangSanPhamCuaCuaHangDaBiet() {
+        var root = JsonMapper.builder().build().readTree("""
+                {"results":[
+                  {"url":"https://gearvn.com/collections/vga-rtx-4060"},
+                  {"url":"https://gearvn.com/products/card-msi-rtx-4060"},
+                  {"url":"https://gearvn.com/blogs/cong-nghe/review-4060"},
+                  {"url":"https://phongvu.vn/c/vga-rtx-4060"},
+                  {"url":"https://phongvu.vn/card-msi-rtx-4060--s123"},
+                  {"url":"https://shopee.vn/card-4060"},
+                  {"url":"https://www.anphatpc.com.vn/vga-asus-4060.html"}]}""");
+        assertThat(Searxng.pick(root, 5)).containsExactly("https://gearvn.com/products/card-msi-rtx-4060",
+                "https://phongvu.vn/card-msi-rtx-4060--s123", "https://www.anphatpc.com.vn/vga-asus-4060.html");
+    }
+
+    private static Offer offer(String title, long price, Boolean inStock) {
+        return new Offer(title, "Shop", price, null, "https://gearvn.com/products/" + title.hashCode(), null, inStock, null, AT);
+    }
+}

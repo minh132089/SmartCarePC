@@ -126,6 +126,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
           )}
         </div>
         {line.reason && <p className="mt-1.5 text-[14px] leading-[1.45] text-ink-2">{line.reason}</p>}
+        <OfferFacts line={line} />
         {line.sourceUrl && (
           <a
             href={line.sourceUrl}
@@ -206,6 +207,57 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
 }
 
 /** Trang tìm kiếm trên web cửa hàng (GEARVN) theo thông số, cho dòng hiếm hoi chưa có sản phẩm thật; không qua Google */
+/** Còn hàng / bảo hành / giờ kiểm tra giá của món đã chọn (engine so giá đọc từ trang cửa hàng) */
+function OfferFacts({ line }: { line: BuildLine }) {
+  const facts: ReactNode[] = []
+  if (line.inStock === true) facts.push(<span key="s" className="text-ok">Còn hàng</span>)
+  if (line.inStock === false) facts.push(<span key="s" className="text-bad">Cửa hàng báo hết hàng</span>)
+  if (line.warrantyMonths) facts.push(<span key="w">Bảo hành {line.warrantyMonths % 12 === 0 ? `${line.warrantyMonths / 12} năm` : `${line.warrantyMonths} tháng`}</span>)
+  const at = checkedText(line.checkedAt)
+  if (at) facts.push(<span key="t">Giá kiểm tra {at}</span>)
+  const others = line.compare ?? []
+  if (!facts.length && !others.length) return null
+  return (
+    <div className="mt-2 space-y-1.5">
+      {facts.length > 0 && (
+        <p className="flex flex-wrap gap-x-2 text-[12.5px] text-ink-3">
+          {facts.map((f, i) => (
+            <span key={i} className="flex gap-x-2">
+              {i > 0 && <span aria-hidden>·</span>}
+              {f}
+            </span>
+          ))}
+        </p>
+      )}
+      {others.length > 0 && (
+        <div className="rounded-xl bg-fill px-3 py-2">
+          <p className="text-[12px] font-medium text-ink-2">Cùng sản phẩm ở cửa hàng khác{line.quantity > 1 ? ' (giá 1 sản phẩm)' : ''}</p>
+          <ul className="mt-1 space-y-0.5">
+            {others.map((o) => (
+              <li key={o.url} className="flex items-center justify-between gap-3 text-[13px]">
+                <a href={o.url} target="_blank" rel="noreferrer noopener" className={`min-w-0 truncate text-link hover:underline ${focus}`}>
+                  {o.shop}
+                  {o.inStock === false && <span className="text-ink-3"> (hết hàng)</span>}
+                </a>
+                <span className="shrink-0 tabular-nums text-ink">{vnd(o.priceVnd)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "lúc 17:40" nếu trong hôm nay, "lúc 17:40 ngày 19/10" nếu cũ hơn */
+function checkedText(iso?: string | null) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+  return d.toDateString() === new Date().toDateString() ? `lúc ${time}` : `lúc ${time} ngày ${d.getDate()}/${d.getMonth() + 1}`
+}
+
 function shoppingSearch(query: string) {
   return `https://gearvn.com/search?q=${encodeURIComponent(query)}`
 }
