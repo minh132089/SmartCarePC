@@ -162,6 +162,18 @@ class PriceEngineTests {
     }
 
     @Test
+    void khongNhanHangCu() {
+        assertThat(PriceEngine.usedGoods("Nguồn Thermaltake Litepower RGB 650W",
+                "https://tinhocngoisao.com/products/2nd-nguon-thermaltake-litepower-rgb-650w-bh-3t?srsltid=x")).isTrue();
+        assertThat(PriceEngine.usedGoods("Card RTX 3060 like new", "https://shop.vn/products/card-rtx-3060")).isTrue();
+        assertThat(PriceEngine.usedGoods("Card RTX 3060 cũ", "https://shop.vn/products/card-rtx-3060")).isTrue();
+        assertThat(PriceEngine.usedGoods("Nguồn MSI MAG A650BN", "https://memoryzone.com.vn/nguon-may-tinh-msi-mag-a650bn")).isFalse();
+        // "2nd" chỉ tính khi đứng riêng trong đường dẫn
+        assertThat(PriceEngine.usedGoods("SSD Samsung 2nd Gen", null)).isTrue();
+        assertThat(PriceEngine.usedGoods("Tản nhiệt", "https://shop.vn/products/tan-nhiet-2nd-gen-x")).isTrue();
+    }
+
+    @Test
     void docTinhTrangHang() {
         assertThat(ProductPage.stock(org.jsoup.Jsoup.parse("<html><body><h1>SSD</h1><button>Mua ngay</button></body></html>"))).isTrue();
         assertThat(ProductPage.stock(org.jsoup.Jsoup.parse("<html><body><h1>SSD</h1><span>Tạm hết hàng</span></body></html>"))).isFalse();

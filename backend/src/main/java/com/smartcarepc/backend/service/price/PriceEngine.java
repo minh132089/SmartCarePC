@@ -107,17 +107,28 @@ public class PriceEngine {
     public Offer readPage(String url, String expectTitle) {
         if (url == null || !Shops.productLike(url)) return null;
         var known = byUrl.get(url);
-        if (known != null) return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) ? known : null;
+        if (known != null) {
+            return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
+                    ? known : null;
+        }
         var fetched = fetcher.page(url, Duration.ofSeconds(4));
         // Sản phẩm ngừng bán hay bị web chuyển sang trang danh mục / trang chủ: không phải trang sản phẩm nữa
         if (fetched == null || !Shops.productLike(fetched.finalUrl())) return null;
         Offer page = ProductPage.parseLoose(fetched.html(), url, Instant.now());
         if (page == null || !samePage(expectTitle, page.title())) return null;
-        // Trang báo hết hàng: không đưa cho người dùng mua
-        if (Boolean.FALSE.equals(page.inStock())) return null;
+        // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận
+        if (Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())) return null;
         if (byUrl.size() > 5000) byUrl.clear();
         byUrl.put(url, page);
         return page;
+    }
+
+    /** Đường dẫn của trang hàng cũ: "/2nd-nguon-...", "/like-new-...", "/da-qua-su-dung" */
+    private static final Pattern USED_PATH = Pattern.compile("(?i)[/-](2nd|like-?new|qua-su-dung|thanh-ly|trung-bay|hang-cu|second-?hand)([/-]|$)");
+
+    /** Hàng cũ / 2nd / thanh lý / trưng bày, theo tên trên trang hoặc đường dẫn */
+    static boolean usedGoods(String title, String url) {
+        return title != null && JUNK.matcher(title).find() || url != null && USED_PATH.matcher(url.replaceFirst("[?#].*$", "")).find();
     }
 
     private static final Pattern CAPACITY = Pattern.compile("(\\d+)\\s?(gb|tb)\\b");
