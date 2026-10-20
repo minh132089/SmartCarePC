@@ -525,6 +525,24 @@ class ChatServiceTests {
     }
 
     @Test
+    void sauHaiVongDeXuatThiChiConVietCauTraLoi() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        String propose = """
+                {"tier":"balanced","summary":"Học","items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ"}]}
+                """;
+        reply(toolCall("p1", "propose_build", propose), toolCall("p2", "propose_build", propose),
+                toolCall("p3", "propose_build", propose), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        assertThat(res.reply()).isEqualTo("Xong.");
+        // Vòng 3: không cho gọi công cụ nữa; lời gọi thứ 3 bị từ chối
+        assertThat(sent.get(2).get("tool_choice")).isEqualTo("none");
+        assertThat(sent.get(3).get("messages").toString()).contains("Đã chốt đủ phương án");
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);

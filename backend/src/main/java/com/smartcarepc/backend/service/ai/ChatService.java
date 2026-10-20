@@ -337,7 +337,7 @@ public class ChatService {
         // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
-        int searchRounds = 0;
+        int searchRounds = 0, proposeRounds = 0;
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
@@ -345,7 +345,11 @@ public class ChatService {
             body.put("messages", messages);
             // Đã tìm đủ MAX_SEARCH_ROUNDS vòng: bỏ công cụ tìm để trợ lý chốt với kết quả đã có (mỗi vòng tìm thêm tốn
             // 15 - 35 giây; món chưa ưng thì app tự đổi lúc dựng thẻ)
-            body.put("tools", searchRounds >= MAX_SEARCH_ROUNDS ? withoutSearch(tools) : tools);
+            var offered = searchRounds >= MAX_SEARCH_ROUNDS ? withoutSearch(tools) : tools;
+            // Đã đề xuất đủ MAX_PROPOSE_ROUNDS vòng: chỉ còn viết câu trả lời (mỗi vòng đề xuất tốn ~50 giây; giá thật
+            // quá cao so với ngân sách thì trợ lý đề xuất lại mãi). Bước dựng thẻ vẫn lọc option theo trần giá
+            body.put("tools", offered);
+            if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
 
             long t0 = System.nanoTime();
             Map<String, Object> res;
@@ -376,6 +380,8 @@ public class ChatService {
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
             // Trợ lý có khi vẫn gọi search_products sau khi công cụ đã bị bỏ (chép theo các lượt trước): không chạy
             boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS;
+            boolean proposeClosed = proposeRounds >= MAX_PROPOSE_ROUNDS;
+            if (names.contains("propose_build") && !proposeClosed) proposeRounds++;
             if (names.contains("search_products") && !searchClosed) {
                 searchRounds++;
                 progress.accept(STAGE_SEARCH);
@@ -383,6 +389,10 @@ public class ChatService {
             var results = calls.stream()
                     .map(call -> {
                         var fn = (Map<String, Object>) call.get("function");
+                        if (proposeClosed && !turn.tiers.isEmpty()) {
+                            return CompletableFuture.completedFuture(json.writeValueAsString(Map.of("error",
+                                    "Đã chốt đủ phương án. Không gọi công cụ nữa, viết câu trả lời cho người dùng.")));
+                        }
                         if (searchClosed && "search_products".equals(fn.get("name"))) {
                             return CompletableFuture.completedFuture(json.writeValueAsString(Map.of("error",
                                     "Đã hết lượt tìm. Chốt bằng propose_build với kết quả đã có; món chưa ưng thì app tự đổi.")));
@@ -685,6 +695,8 @@ public class ChatService {
 
     /** Số vòng trợ lý được gọi search_products trước khi phải chốt */
     static final int MAX_SEARCH_ROUNDS = 2;
+    /** Số vòng propose_build (lần đầu + một lần sửa) trước khi phải viết câu trả lời */
+    static final int MAX_PROPOSE_ROUNDS = 2;
 
     private static List<Map<String, Object>> withoutSearch(List<Map<String, Object>> tools) {
         return tools.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
