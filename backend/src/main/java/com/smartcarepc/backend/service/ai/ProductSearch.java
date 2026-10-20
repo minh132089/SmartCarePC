@@ -25,9 +25,10 @@ import com.smartcarepc.backend.service.price.PriceEngine;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam. Nguồn chính là Serper.dev (Google Shopping, khoá SERPER_API_KEY; hết
- * lượt thì tự chuyển sang SERPER_API_KEY_BACKUP). Engine so giá tự chạy (service/price: đọc thẳng web cửa hàng và
- * SearXNG) là nguồn phụ khi Serper tìm được ít hoặc mọi khoá đều hết lượt.
+ * Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam. Nguồn chính là engine so giá tự chạy (service/price: đọc thẳng web
+ * cửa hàng và SearXNG), nên link, giá và tình trạng hàng đi chung từ trang cửa hàng. Serper.dev (Google Shopping, khoá
+ * SERPER_API_KEY; hết lượt thì tự chuyển sang SERPER_API_KEY_BACKUP) chỉ bổ sung khi engine tìm được ít; món từ Serper
+ * phải qua bước xác minh trang (directLink) mới có link.
  */
 @Slf4j
 @Component
@@ -174,17 +175,17 @@ public class ProductSearch {
 
     private List<Product> fresh(String query) {
         List<Product> out = new ArrayList<>();
-        if (serperReady()) {
+        if (engine.enabled()) {
+            engine.search(query).forEach(o -> out.add(new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl())));
+        }
+        // Engine tìm được ít (món hiếm, cửa hàng đổi giao diện): bổ sung Google Shopping nếu Serper còn lượt
+        if (out.size() < 3 && serperReady()) {
             out.addAll(shopping(query));
             if (out.size() < 3) out.addAll(organic(query + " giá"));
         }
-        // Serper tìm được ít hoặc mọi khoá đều hết lượt: thêm kết quả engine tự chạy (web cửa hàng + SearXNG)
-        if (out.size() < 3 && engine.enabled()) {
-            engine.search(query).forEach(o -> out.add(new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl())));
-        }
         Map<String, Product> unique = new LinkedHashMap<>();
         out.stream().filter(p -> p.url() != null).forEach(p -> unique.putIfAbsent(p.url(), p));
-        // Giữ thứ tự nguồn trả về (Shopping, rồi engine đã xếp khớp model / còn hàng / rẻ); chỉ đẩy món thiếu giá xuống cuối
+        // Giữ thứ tự nguồn trả về (engine đã xếp khớp model / còn hàng / rẻ, rồi Shopping); chỉ đẩy món thiếu giá xuống cuối
         return unique.values().stream()
                 .sorted((a, b) -> Integer.compare(score(b) >= 2 ? 1 : 0, score(a) >= 2 ? 1 : 0))
                 .limit(MAX)
