@@ -131,6 +131,42 @@ class PriceEngineTests {
     }
 
     @Test
+    void xacMinhTrangDungSanPham() {
+        // Cùng model nhưng khác dung lượng: không phải trang đúng (lỗi SSD 1TB nhưng link ra bản 4TB)
+        assertThat(PriceEngine.samePage("Kingston NV2 M.2 2280 PCIe 4.0 x4 NVMe SSD 1TB SNV2S/1000G",
+                "Ổ cứng SSD Kingston NV2 4TB M.2 2280 PCIe Gen4 x4 NVMe (SNV2S/4000G)")).isFalse();
+        assertThat(PriceEngine.samePage("Kingston NV2 M.2 2280 PCIe 4.0 x4 NVMe SSD 1TB SNV2S/1000G",
+                "Ổ cứng SSD Kingston NV2 1TB M.2 2280 PCIe Gen4 x4 NVMe (SNV2S/1000G)")).isTrue();
+        // Khác loại linh kiện / khác model
+        assertThat(PriceEngine.samePage("Card màn hình MSI RTX 4060 Ventus 2X 8G OC", "Bo mạch chủ MSI PRO B760M-E DDR4")).isFalse();
+        assertThat(PriceEngine.samePage("CPU Intel Core i5-12400F", "CPU Intel Core i5-14400F")).isFalse();
+        assertThat(PriceEngine.samePage("Bộ vi xử lý Intel Core i5 12400F", "CPU Intel Core i5-12400F (Up to 4.4GHz)")).isTrue();
+        // Link không phải trang sản phẩm
+        assertThat(Shops.productLike("https://hacom.vn/")).isFalse();
+        assertThat(Shops.productLike("https://gearvn.com/collections/ssd-nvme")).isFalse();
+        assertThat(Shops.productLike("https://phongvu.vn/c/ssd")).isFalse();
+        assertThat(Shops.productLike("https://www.phucanh.vn/chinh-sach-kiem-hang.html")).isFalse();
+        assertThat(Shops.productLike("https://shop.vn/search?q=ssd")).isFalse();
+        assertThat(Shops.productLike("https://gearvn.com/products/kingston-nv2-1tb")).isTrue();
+        assertThat(Shops.productLike("https://hacom.vn/o-cung-ssd-kingston-nv2-1tb")).isTrue();
+    }
+
+    @Test
+    void docTrangKhongCoJsonLdNhungCoMetaGia() {
+        var html = """
+                <html><head><meta property="og:type" content="product"/>
+                <meta property="og:title" content="Ổ cứng SSD Kingston NV2 1TB"/>
+                <meta property="product:price:amount" content="1450000"/></head><body>Bảo hành 36 tháng</body></html>""";
+        var o = ProductPage.parseLoose(html, "https://hacom.vn/ssd-kingston-nv2-1tb", AT);
+        assertThat(o.title()).isEqualTo("Ổ cứng SSD Kingston NV2 1TB");
+        assertThat(o.priceVnd()).isEqualTo(1_450_000L);
+        assertThat(o.warrantyMonths()).isEqualTo(36);
+        // Trang không có dấu hiệu sản phẩm (trang tin): không nhận
+        assertThat(ProductPage.parseLoose("<html><head><meta property=\"og:title\" content=\"Tin tức\"/></head></html>",
+                "https://hacom.vn/tin-tuc/abc", AT)).isNull();
+    }
+
+    @Test
     void cungModelOCuaHangKhac() {
         assertThat(PriceEngine.sameModel("Card màn hình ASUS Dual GeForce RTX 4060 EVO OC Edition 8GB GDDR6",
                 "VGA ASUS Dual RTX 4060 EVO OC 8GB")).isTrue();

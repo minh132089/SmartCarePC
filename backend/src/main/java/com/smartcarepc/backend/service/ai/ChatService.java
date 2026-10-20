@@ -403,6 +403,8 @@ public class ChatService {
             List<Checked> all = new ArrayList<>();
             all.add(base);
             for (var alt : turn.variants.getOrDefault(t, List.of())) all.add(withLinks(alt, base));
+            // Giá hiển thị là giá đọc trên chính trang cửa hàng của link (Google Shopping có thể cũ hoặc là bản khác)
+            all.replaceAll(c -> turn.advice ? withPagePrices(c) : c);
             // Luật cứng: Rẻ và Phù hợp không vượt ngân sách, Chất lượng không vượt quá 15%. Đo trên thẻ cuối cùng (sau khi
             // đổi món lấy link), cùng cách cộng với giao diện; build nào vượt thì bỏ, số option đánh lại từ 1
             List<Checked> kept = options(all, cap, altCap, c -> productIssues(c.picks()).isEmpty());
@@ -538,6 +540,23 @@ public class ChatService {
             out.add(new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings()));
         }
         return out;
+    }
+
+    /** Thay giá Google Shopping bằng giá đọc trên trang cửa hàng của link đã xác minh (nếu đọc được) */
+    private Checked withPagePrices(Checked c) {
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        c.picks().forEach((code, p) -> {
+            var link = c.links().get(code);
+            String url = link == null ? null : link.join();
+            var page = url == null ? null : search.offer(url);
+            if (page == null || page.priceVnd() == null || page.priceVnd().equals(p.priceVnd())) return;
+            if (p.priceVnd() != null && Math.abs(page.priceVnd() - p.priceVnd()) * 10 > p.priceVnd() * 2) {
+                log.info("Giá trang khác Google Shopping: {} {} -> {} ({})", p.title(), p.priceVnd(), page.priceVnd(), url);
+            }
+            picks.put(code, new ProductSearch.Product(p.title(), p.shop(), page.priceVnd(), p.url(),
+                    p.imageUrl() != null ? p.imageUrl() : page.imageUrl()));
+        });
+        return new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, c.links(), c.siblings());
     }
 
     /** Lỗi lắp chung giữa các sản phẩm thật đã chọn (theo tên sản phẩm, xem ProductRules) */
@@ -911,7 +930,7 @@ public class ChatService {
             Long[] range = price(d, pick, n);
             String link = pick == null ? null : c.links().get(code).join();
             // Bảng giá tốt nhất: còn hàng, bảo hành, lúc kiểm tra của món đã chọn, và cùng model ở cửa hàng khác
-            var offer = pick == null ? null : search.offer(pick.url());
+            var offer = pick == null ? null : link != null && search.offer(link) != null ? search.offer(link) : search.offer(pick.url());
             List<ChatResponse.ShopPrice> compare = !advice || pick == null ? List.of()
                     : search.compare(pick, c.siblings().getOrDefault(code, List.of())).stream()
                             .map(o -> new ChatResponse.ShopPrice(o.shop(), o.priceVnd(), o.url(), o.inStock(), o.checkedAt())).toList();

@@ -213,7 +213,11 @@ public class ProductSearch {
     private final Map<String, String> linkCache = new ConcurrentHashMap<>();
 
     public String directLink(String title, String shop, String link) {
-        if (link != null && !isGoogle(link)) return link;
+        // Link thẳng (engine, kết quả Google thường): engine đã đọc trang thì dùng; không thì phải xác minh trang
+        if (link != null && !isGoogle(link)) {
+            if (engine.offer(link) != null) return link;
+            return engine.readPage(link, title) != null ? link : null;
+        }
         if (!enabled() || title == null) return null;
         String key = title + "|" + shop;
         String hit = linkCache.get(key);
@@ -230,22 +234,33 @@ public class ProductSearch {
     private String resolve(String title, String shop) {
         String domain = domainOf(shop);
         if (domain != null) {
-            String hit = firstOn(post("/search", title + " site:" + domain), domain);
+            String hit = verified(onDomain(post("/search", title + " site:" + domain), domain), title);
             // Tên trong Shopping hay dài, kèm mã và quà tặng nên trang cửa hàng không khớp: thử lại với vài chữ đầu
             String brief = shortTitle(title);
-            if (hit == null && !brief.equals(title)) hit = firstOn(post("/search", brief + " site:" + domain), domain);
-            return hit != null ? hit : "https://" + domain + "/";
+            if (hit == null && !brief.equals(title)) hit = verified(onDomain(post("/search", brief + " site:" + domain), domain), title);
+            // Không xác minh được trang nào: không đưa link (trang chủ hay trang danh mục làm người dùng lạc); app đổi
+            // sang sản phẩm cùng nhóm có link đúng
+            return hit;
         }
         var organic = (List<Map<String, Object>>) post("/search", title + (shop == null ? "" : " " + shop)).getOrDefault("organic", List.of());
         String key = shop == null ? null : slug(shop);
-        String any = null;
+        if (key == null || key.length() < 4) return null;
+        List<String> sameShop = new ArrayList<>();
         for (var i : organic) {
             String u = https(i.get("link"));
-            if (u == null || isGoogle(u) || host(u) == null) continue;
-            if (key != null && key.length() >= 4 && slug(host(u)).contains(key)) return u;
-            if (any == null) any = u;
+            if (u != null && !isGoogle(u) && host(u) != null && slug(host(u)).contains(key)) sameShop.add(u);
         }
-        return any;
+        return verified(sameShop, title);
+    }
+
+    /**
+     * Link đầu tiên (tối đa 4) là trang đúng sản phẩm: trang một sản phẩm, tên khớp mã model và dung lượng
+     * (PriceEngine.readPage). Bỏ trang danh mục / tìm kiếm / tin tức và trang của phiên bản khác.
+     */
+    private String verified(List<String> urls, String title) {
+        return urls.stream().filter(com.smartcarepc.backend.service.price.Shops::productLike).limit(4)
+                .filter(u -> engine.readPage(u, title) != null)
+                .findFirst().orElse(null);
     }
 
     /** "CPU Intel Core i5-12400F (Up to 4.4GHz, 6 nhân 12 luồng) - Chính hãng" -> "CPU Intel Core i5-12400F" (tối đa 8 chữ) */
@@ -296,12 +311,12 @@ public class ProductSearch {
     }
 
     @SuppressWarnings("unchecked")
-    private static String firstOn(Map<String, Object> res, String domain) {
+    private static List<String> onDomain(Map<String, Object> res, String domain) {
         return ((List<Map<String, Object>>) res.getOrDefault("organic", List.of())).stream()
                 .map(i -> https(i.get("link")))
                 .filter(u -> u != null && host(u) != null && (host(u).equals(domain) || host(u).endsWith("." + domain)))
-                .findFirst()
-                .orElse(null);
+                .distinct()
+                .toList();
     }
 
     @SuppressWarnings("unchecked")

@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -27,12 +26,6 @@ import tools.jackson.databind.json.JsonMapper;
 @Slf4j
 @Component
 class Searxng {
-
-    /** Trang danh mục, bài viết, tìm kiếm: không phải trang một sản phẩm */
-    private static final Pattern NOT_PRODUCT = Pattern.compile(
-            "/(collections|blogs?|tin-tuc|tin-cong-nghe|news|c|danh-muc|category|tag|tim|search|pages|huong-dan|review)(/|$|\\?)"
-                    + "|[?&](q|s|query|page)=",
-            Pattern.CASE_INSENSITIVE);
 
     /** Mọi máy tìm kiếm đều chặn (tìm quá dồn dập): nghỉ một lúc thay vì gọi tiếp */
     static final Duration PAUSE = Duration.ofMinutes(5);
@@ -74,13 +67,7 @@ class Searxng {
         for (JsonNode r : root.path("results")) {
             String url = r.path("url").asString("").replaceFirst("#.*$", "");
             if (!url.startsWith("https://") || !Shops.known(url)) continue;
-            try {
-                URI u = URI.create(url);
-                String path = u.getRawPath() + (u.getRawQuery() == null ? "" : "?" + u.getRawQuery());
-                if (path.length() <= 1 || NOT_PRODUCT.matcher(path).find()) continue;
-            } catch (IllegalArgumentException e) {
-                continue;
-            }
+            if (!Shops.productLike(url)) continue;
             out.add(url);
             if (out.size() >= max) break;
         }

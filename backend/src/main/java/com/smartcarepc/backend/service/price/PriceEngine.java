@@ -99,6 +99,56 @@ public class PriceEngine {
         return url == null ? null : byUrl.get(url);
     }
 
+    /**
+     * Xác minh link trước khi đưa cho người dùng: phải là trang một sản phẩm, tên trên trang khớp sản phẩm mong đợi
+     * (cùng mã model, cùng dung lượng: SSD 1TB khác 4TB). Trả về thông tin đọc từ trang (giá trên trang là giá thật),
+     * null nếu không xác minh được. Kết quả được nhớ theo link, thẻ cấu hình dùng giá này thay giá Google Shopping.
+     */
+    public Offer readPage(String url, String expectTitle) {
+        if (url == null || !Shops.productLike(url)) return null;
+        var known = byUrl.get(url);
+        if (known != null) return samePage(expectTitle, known.title()) ? known : null;
+        Offer page = ProductPage.parseLoose(fetcher.get(url, Duration.ofSeconds(4)), url, Instant.now());
+        if (page == null || !samePage(expectTitle, page.title())) return null;
+        if (byUrl.size() > 5000) byUrl.clear();
+        byUrl.put(url, page);
+        return page;
+    }
+
+    private static final Pattern CAPACITY = Pattern.compile("(\\d+)\\s?(gb|tb)\\b");
+
+    /**
+     * Tên trên trang có đúng là sản phẩm mong đợi: cùng loại linh kiện, cùng dung lượng lớn nhất (GB / TB), và có phần
+     * lớn mã model của tên mong đợi (vd SNV2S, 1000G, 12400F). Tên mong đợi không có mã model thì cần trùng nửa số chữ.
+     */
+    public static boolean samePage(String expect, String page) {
+        if (expect == null || page == null) return false;
+        String e = norm(expect), p = norm(page), squashed = p.replace(" ", "");
+        String ek = kind(e), pk = kind(p);
+        if (ek != null && pk != null && !ek.equals(pk)) return false;
+        Long ec = maxCapacity(e), pc = maxCapacity(p);
+        if (ec != null && pc != null && !ec.equals(pc)) return false;
+        List<String> models = Arrays.stream(e.split(" ")).filter(PriceEngine::isModel).distinct().toList();
+        if (!models.isEmpty()) {
+            long hit = models.stream().filter(squashed::contains).count();
+            return hit * 10 >= models.size() * 6;
+        }
+        List<String> words = Arrays.stream(e.split(" ")).filter(w -> w.length() > 1 && !STOP.contains(w)).distinct().toList();
+        Set<String> pw = new HashSet<>(Arrays.asList(p.split(" ")));
+        return !words.isEmpty() && words.stream().filter(pw::contains).count() * 2 >= words.size();
+    }
+
+    /** Dung lượng lớn nhất ghi trong tên, theo GB (1TB = 1000GB); null nếu không ghi */
+    static Long maxCapacity(String normalized) {
+        var m = CAPACITY.matcher(normalized);
+        Long max = null;
+        while (m.find()) {
+            long v = Long.parseLong(m.group(1)) * (m.group(2).equals("tb") ? 1000 : 1);
+            if (max == null || v > max) max = v;
+        }
+        return max;
+    }
+
     /** Sản phẩm đang bán khớp từ khoá, tốt nhất trước (tối đa MAX) */
     public List<Offer> search(String query) {
         // "RTX 3050 hoặc GTX 1660": tìm từng model rồi gộp, vì không sản phẩm nào có cả hai mã

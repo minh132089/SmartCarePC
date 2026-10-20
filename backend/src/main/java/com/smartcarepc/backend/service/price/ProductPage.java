@@ -50,6 +50,28 @@ final class ProductPage {
         return null;
     }
 
+    /**
+     * Như parse, nhưng nhận cả trang không có JSON-LD: tên lấy từ og:title / h1, giá từ meta product:price:amount hoặc
+     * itemprop=price (có thể không có). Chỉ nhận khi trang có dấu hiệu là trang sản phẩm (og:type product, có giá, hay
+     * JSON-LD Product); null nếu không phải.
+     */
+    static Offer parseLoose(String html, String url, Instant at) {
+        Offer strict = parse(html, url, at);
+        if (strict != null || html == null) return strict;
+        Document doc = Jsoup.parse(html, url);
+        String name = doc.select("meta[property=og:title]").attr("content");
+        if (name.isBlank() && doc.selectFirst("h1") != null) name = doc.selectFirst("h1").text();
+        if (name.isBlank()) return null;
+        String raw = doc.select("meta[property=product:price:amount], meta[property=og:price:amount], meta[itemprop=price]").attr("content");
+        if (raw.isBlank() && doc.selectFirst("[itemprop=price][content]") != null) raw = doc.selectFirst("[itemprop=price][content]").attr("content");
+        Long price = Prices.parse(raw);
+        boolean product = price != null || doc.select("meta[property=og:type]").attr("content").toLowerCase().contains("product");
+        if (!product) return null;
+        String image = doc.select("meta[property=og:image]").attr("content");
+        return new Offer(name.strip(), Shops.name(url), price != null && price >= 10_000 ? price : null, null, url,
+                image.isBlank() ? null : image, null, warranty(doc.body() == null ? "" : doc.body().text()), at);
+    }
+
     /** Số tháng bảo hành ghi trên trang ("Bảo hành 3 năm" -> 36), null nếu không thấy */
     static Integer warranty(String text) {
         Matcher m = WARRANTY.matcher(text);

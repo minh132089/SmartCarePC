@@ -51,6 +51,27 @@ public final class Shops {
             Map.entry("tncstore.vn", "TNC Store"), Map.entry("ttgshop.vn", "TTG Shop"),
             Map.entry("tinhocanhphat.vn", "Tin học Anh Phát"));
 
+    /** Trang danh mục, bài viết, tìm kiếm, chính sách...: không phải trang một sản phẩm */
+    private static final java.util.regex.Pattern NOT_PRODUCT = java.util.regex.Pattern.compile(
+            "/(collections?|blogs?|tin-tuc|tin-cong-nghe|news|c|danh-muc|category|categories|tag|tags|tim|tim-kiem|search|pages|"
+                    + "huong-dan|review|chinh-sach|lien-he|gioi-thieu|tuyen-dung|khuyen-mai|build-pc|buildpc|brand|brands|"
+                    + "thuong-hieu|sitemap|account|cart|gio-hang)(/|$|\\?|\\.html)"
+                    // Trang chính sách / tin / hướng dẫn hay có đuôi: /chinh-sach-kiem-hang.html, /tin-tuc-cong-nghe
+                    + "|/(chinh-sach|tin-tuc|huong-dan|gioi-thieu|lien-he|tuyen-dung|khuyen-mai)-"
+                    + "|/(products?|san-pham)/?$|[?&](q|s|query|keyword|page)=",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** Link có dạng trang một sản phẩm (không phải trang chủ, danh mục, tìm kiếm, tin tức, chính sách) */
+    public static boolean productLike(String url) {
+        try {
+            URI u = URI.create(url);
+            String path = (u.getRawPath() == null ? "" : u.getRawPath()) + (u.getRawQuery() == null ? "" : "?" + u.getRawQuery());
+            return u.getHost() != null && path.length() > 1 && !NOT_PRODUCT.matcher(path).find();
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     /** Tên miền đã bỏ "www." của url, null nếu url hỏng */
     static String domain(String url) {
         try {
