@@ -65,7 +65,9 @@ public class PriceEngine {
             Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b")),
             Map.entry("ssd", Pattern.compile("\\bo cung\\b|\\bssd\\b")),
             Map.entry("ram", Pattern.compile("^ram\\b|\\bbo nho\\b|^ram ")),
-            Map.entry("cpu", Pattern.compile("\\bcpu\\b|\\bvi xu ly\\b")));
+            Map.entry("cpu", Pattern.compile("\\bcpu\\b|\\bvi xu ly\\b")),
+            // Quạt case: "Bộ 3 quạt ...", "Fan case ...". Tản / vỏ / nguồn có chữ "quạt" thì chữ loại kia đứng trước nên vẫn đúng loại
+            Map.entry("fans", Pattern.compile("\\bquat\\b|\\bfan\\b")));
     /** Chữ phân biệt phiên bản: phải trùng nhau mới là cùng model (RTX 4060 khác 4060 Ti, B760M khác B760M WiFi) */
     private static final Set<String> VARIANTS = Set.of("ti", "super", "xt", "xtx", "gre", "oc", "pro", "plus", "max", "wifi", "ii", "v2", "v3");
     /** Chữ chung chung, không giúp phân biệt model */
@@ -392,7 +394,7 @@ public class PriceEngine {
     }
 
     /** Loại linh kiện khớp sớm nhất trong chuỗi đã bỏ dấu, null nếu không nhận ra */
-    static String kind(String normalized) {
+    public static String kind(String normalized) {
         String best = null;
         int at = Integer.MAX_VALUE;
         for (var k : KINDS) {
@@ -432,7 +434,7 @@ public class PriceEngine {
     }
 
     /** Bỏ dấu, viết thường, chỉ giữ chữ và số */
-    static String norm(String s) {
+    public static String norm(String s) {
         String n = Normalizer.normalize(s.toLowerCase(), Normalizer.Form.NFD).replaceAll("\\p{M}", "").replace('đ', 'd');
         return n.replaceAll("[^a-z0-9]+", " ").strip();
     }

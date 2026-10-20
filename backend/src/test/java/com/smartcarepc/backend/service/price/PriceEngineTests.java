@@ -104,6 +104,11 @@ class PriceEngineTests {
         assertThat(PriceEngine.relevance("Tản nhiệt khí CPU", "Tản nhiệt Cooler Master Hyper 612 Apex")).isPositive();
         assertThat(PriceEngine.relevance("Tản nhiệt khí CPU", "Vỏ máy tính Zotac Gaming ALLOY MATX White")).isZero();
         assertThat(PriceEngine.relevance("Tản nhiệt khí CPU", "Bo mạch chủ ASUS PRIME B760M-A D4 CSM")).isZero();
+        // Bộ quạt case không phải tản nhiệt; tản có chữ "quạt" vẫn là tản
+        assertThat(PriceEngine.relevance("Tản khí dạng tháp", "Bộ 3 quạt Cooler Master SickleFlow 120 ARGB")).isZero();
+        assertThat(PriceEngine.kind(PriceEngine.norm("Tản nhiệt khí ID-COOLING SE-214-XT 1 quạt"))).isEqualTo("cooler");
+        assertThat(PriceEngine.kind(PriceEngine.norm("Vỏ máy tính Gamdias ATHENA M3M - 3 FAN ARGB"))).isEqualTo("case");
+        assertThat(PriceEngine.kind(PriceEngine.norm("Bộ 3 quạt Corsair RS120 ARGB"))).isEqualTo("fans");
         assertThat(PriceEngine.relevance("Vỏ case mid tower kính cường lực", "Vỏ máy tính Corsair 3500X TG Mid Tower Black")).isPositive();
     }
 

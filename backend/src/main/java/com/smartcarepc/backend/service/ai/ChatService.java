@@ -661,6 +661,24 @@ public class ChatService {
         return new CompatibilityResponse(errors.isEmpty(), errors, warnings);
     }
 
+    /** Loại linh kiện trong danh mục -> loại PriceEngine.kind nhận ra từ tên sản phẩm */
+    private static final Map<String, String> KIND_OF = Map.of("cooler", "cooler", "case", "case", "motherboard", "mainboard",
+            "gpu", "gpu", "psu", "psu", "ssd", "ssd", "ram", "ram", "cpu", "cpu", "fans", "fans");
+
+    /** Tên sản phẩm cho thấy loại khác với dòng linh kiện của mã (không nhận ra loại thì không coi là sai) */
+    private boolean wrongKind(String code, ProductSearch.Product p) {
+        if (p == null || p.title() == null) return false;
+        try {
+            var part = componentService.findByCode(code);
+            String want = part == null ? null : KIND_OF.get(part.category());
+            String got = com.smartcarepc.backend.service.price.PriceEngine.kind(
+                    com.smartcarepc.backend.service.price.PriceEngine.norm(p.title()));
+            return want != null && got != null && !want.equals(got);
+        } catch (ResourceNotFoundException e) {
+            return false;
+        }
+    }
+
     /** Lỗi lắp chung giữa các sản phẩm thật đã chọn (theo tên sản phẩm, xem ProductRules) */
     private List<String> productIssues(Map<String, ProductSearch.Product> picks) {
         return ProductRules.issues(productTitles(picks));
@@ -896,6 +914,14 @@ public class ChatService {
                         var group = turn.groups.get(id.replaceFirst("-\\d+$", ""));
                         if (group != null) siblings.put(code, group);
                         links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
+                    });
+                    // Sản phẩm sai loại với dòng linh kiện (vd bộ quạt case gắn vào dòng tản nhiệt): bỏ để app tìm lại đúng loại
+                    picks.entrySet().removeIf(e -> {
+                        if (!wrongKind(e.getKey(), e.getValue())) return false;
+                        log.info("propose_build: bỏ \"{}\" ở dòng {} vì sai loại linh kiện", e.getValue().title(), e.getKey());
+                        siblings.remove(e.getKey());
+                        links.remove(e.getKey());
+                        return true;
                     });
                     // Món trợ lý chưa chọn được sản phẩm: app tự tìm, để dòng nào cũng có hàng thật kèm link mua
                     var auto = autoPick(req, details, picks, siblings);

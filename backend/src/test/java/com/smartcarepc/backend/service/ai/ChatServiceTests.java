@@ -600,6 +600,27 @@ class ChatServiceTests {
     }
 
     @Test
+    void sanPhamSaiLoaiBiBoVaTimLai() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("tower_air_155")).thenReturn(part("tower_air_155", "cooler", "Tản khí dạng tháp"));
+        when(search.enabled()).thenReturn(true);
+        // Trợ lý gắn nhầm bộ quạt case vào dòng tản nhiệt
+        when(search.search("quạt")).thenReturn(List.of(
+                new ProductSearch.Product("Bộ 3 quạt Cooler Master SickleFlow 120 ARGB", "GEARVN", 690_000L, "https://gearvn.com/products/fan", null)));
+        when(search.search("Tản khí tháp")).thenReturn(List.of(
+                new ProductSearch.Product("Tản nhiệt khí Cooler Master Hyper 212", "GEARVN", 590_000L, "https://gearvn.com/products/hyper", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"quạt\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"tower_air_155","spec":"Tản khí tháp","reason":"Mát","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
+
+        assertThat(line.productName()).isEqualTo("Tản nhiệt khí Cooler Master Hyper 212");
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: đúng ngân sách; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
