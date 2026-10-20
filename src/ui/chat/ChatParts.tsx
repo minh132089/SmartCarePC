@@ -182,7 +182,7 @@ export function Composer({
         e.preventDefault()
         onSend()
       }}
-      className={`flex items-end gap-2 ring-1 ring-line focus-within:ring-accent/50 ${big ? 'rounded-[24px] bg-surface p-3 pl-4' : 'rounded-[20px] bg-canvas px-3 py-1.5'}`}
+      className={`flex items-end gap-2 ring-1 ring-line focus-within:ring-accent/50 ${big ? 'rounded-[24px] bg-surface p-2.5 pl-5' : 'rounded-[20px] bg-canvas px-3 py-1.5'}`}
     >
       <textarea
         ref={inputRef}
@@ -195,12 +195,12 @@ export function Composer({
             onSend()
           }
         }}
-        rows={big ? 3 : 1}
+        rows={1}
         maxLength={2000}
         placeholder={placeholder}
         aria-label="Câu hỏi"
-        className={`field-sizing-content flex-1 resize-none bg-transparent py-1 leading-snug outline-none placeholder:text-ink-3 ${
-          big ? 'max-h-48 min-h-[76px] text-[16px]' : 'max-h-28 min-h-[30px] text-[15px]'
+        className={`field-sizing-content flex-1 resize-none bg-transparent leading-snug outline-none placeholder:text-ink-3 ${
+          big ? 'max-h-48 min-h-10 py-[9px] text-[16px]' : 'max-h-28 min-h-[30px] py-1 text-[15px]'
         }`}
       />
       {extra}
