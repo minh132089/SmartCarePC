@@ -25,9 +25,9 @@ import com.smartcarepc.backend.service.price.PriceEngine;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam. Nguồn chính là engine so giá tự chạy (service/price: đọc thẳng web
- * cửa hàng và SearXNG, không tốn lượt dịch vụ nào). Serper.dev (Google Shopping, khoá SERPER_API_KEY) là nguồn phụ khi
- * engine tìm được ít.
+ * Tìm sản phẩm thật đang bán ở cửa hàng Việt Nam. Nguồn chính là Serper.dev (Google Shopping, khoá SERPER_API_KEY; hết
+ * lượt thì tự chuyển sang SERPER_API_KEY_BACKUP). Engine so giá tự chạy (service/price: đọc thẳng web cửa hàng và
+ * SearXNG) là nguồn phụ khi Serper tìm được ít hoặc mọi khoá đều hết lượt.
  */
 @Slf4j
 @Component
@@ -47,10 +47,13 @@ public class ProductSearch {
 
     private final RestClient serper;
     private final RestClient web;
-    private final String apiKey;
+    /** Khoá Serper theo thứ tự dùng: khoá chính, rồi khoá dự phòng khi khoá chính hết lượt */
+    private final List<String> keys;
+    private final java.util.concurrent.atomic.AtomicInteger keyIndex = new java.util.concurrent.atomic.AtomicInteger();
     private final PriceEngine engine;
 
-    public ProductSearch(@Value("${app.search.serper-key:}") String apiKey, PriceEngine engine) {
+    public ProductSearch(@Value("${app.search.serper-key:}") String apiKey,
+            @Value("${app.search.serper-backup-key:}") String backupKey, PriceEngine engine) {
         this.engine = engine;
         var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(6)).followRedirects(HttpClient.Redirect.NORMAL).build());
@@ -65,7 +68,8 @@ public class ProductSearch {
                 .defaultHeader("User-Agent", "Mozilla/5.0 (compatible; PCSmartCare/1.0; +product-preview)")
                 .defaultHeader("Accept-Language", "vi-VN,vi;q=0.9")
                 .build();
-        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.keys = java.util.stream.Stream.of(apiKey, backupKey)
+                .filter(k -> k != null && !k.isBlank()).map(String::trim).distinct().toList();
     }
 
     public boolean enabled() {
@@ -74,7 +78,7 @@ public class ProductSearch {
 
     /** Serper có khoá và không bị tạm tắt (hết lượt) */
     private boolean serperReady() {
-        return !apiKey.isEmpty() && java.time.Instant.now().isAfter(pausedUntil);
+        return !keys.isEmpty() && java.time.Instant.now().isAfter(pausedUntil);
     }
 
     /** Thông tin engine đọc được về link (còn hàng, bảo hành, lúc kiểm tra), null nếu link không do engine tìm */
@@ -159,17 +163,17 @@ public class ProductSearch {
 
     private List<Product> fresh(String query) {
         List<Product> out = new ArrayList<>();
-        if (engine.enabled()) {
-            engine.search(query).forEach(o -> out.add(new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl())));
-        }
-        // Engine tìm được ít (món hiếm, cửa hàng đổi giao diện): thêm kết quả Google Shopping nếu Serper còn lượt
-        if (out.size() < 3 && serperReady()) {
+        if (serperReady()) {
             out.addAll(shopping(query));
             if (out.size() < 3) out.addAll(organic(query + " giá"));
         }
+        // Serper tìm được ít hoặc mọi khoá đều hết lượt: thêm kết quả engine tự chạy (web cửa hàng + SearXNG)
+        if (out.size() < 3 && engine.enabled()) {
+            engine.search(query).forEach(o -> out.add(new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl())));
+        }
         Map<String, Product> unique = new LinkedHashMap<>();
         out.stream().filter(p -> p.url() != null).forEach(p -> unique.putIfAbsent(p.url(), p));
-        // Kết quả engine đã xếp (khớp model, còn hàng, rẻ) nên giữ nguyên thứ tự; chỉ đẩy món thiếu giá xuống cuối
+        // Giữ thứ tự nguồn trả về (Shopping, rồi engine đã xếp khớp model / còn hàng / rẻ); chỉ đẩy món thiếu giá xuống cuối
         return unique.values().stream()
                 .sorted((a, b) -> Integer.compare(score(b) >= 2 ? 1 : 0, score(a) >= 2 ? 1 : 0))
                 .limit(MAX)
@@ -357,9 +361,11 @@ public class ProductSearch {
     private Map<String, Object> post(String path, String query) {
         for (int attempt = 0; attempt < 3; attempt++) {
             throttle();
+            int used = keyIndex.get();
+            if (used >= keys.size()) return Map.of();
             try {
                 Map<String, Object> res = serper.post().uri(path)
-                        .header("X-API-KEY", apiKey)
+                        .header("X-API-KEY", keys.get(used))
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(Map.of("q", query, "gl", "vn", "hl", "vi", "num", 10))
                         .retrieve()
@@ -369,11 +375,21 @@ public class ProductSearch {
                 log.info("Serper {} quá giới hạn, thử lại", path); // vòng sau throttle() tự chờ
             } catch (org.springframework.web.client.HttpClientErrorException e) {
                 if (accountProblem(e.getStatusCode().value(), e.getResponseBodyAsString())) {
+                    // Còn khoá dự phòng: chuyển sang khoá đó rồi gọi lại ngay
+                    if (used + 1 < keys.size()) {
+                        if (keyIndex.compareAndSet(used, used + 1)) {
+                            log.warn("Serper khoá {} hết lượt / bị từ chối ({}), chuyển sang khoá dự phòng", used + 1,
+                                    e.getStatusCode().value());
+                        }
+                        continue;
+                    }
                     if (java.time.Instant.now().isAfter(pausedUntil)) {
-                        log.warn("Serper từ chối ({}): {}. Tạm tắt tìm sản phẩm {} phút, nạp thêm lượt hoặc đổi SERPER_API_KEY",
+                        log.warn("Serper từ chối mọi khoá ({}): {}. Tạm dùng engine tự chạy {} phút; nạp thêm lượt hoặc đổi khoá",
                                 e.getStatusCode().value(), e.getResponseBodyAsString(), PAUSE.toMinutes());
                     }
                     pausedUntil = java.time.Instant.now().plus(PAUSE);
+                    // Hết nghỉ thì thử lại từ khoá chính (có thể đã được nạp thêm lượt)
+                    keyIndex.set(0);
                 } else {
                     log.warn("Serper {} lỗi: {}", path, e.getMessage());
                 }
