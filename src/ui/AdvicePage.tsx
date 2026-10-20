@@ -221,7 +221,7 @@ export function AdvicePage() {
           {/* Màn hình rộng: bảng chi tiết luôn nằm bên phải khi đã có cấu hình */}
           {card && (
             <aside key={`${shown}-${card.tier ?? ''}-${card.variant ?? 1}`} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-line bg-panel px-5 py-6 lg:block">
-              {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label} · Option {card.variant ?? 1}</p>}
+              {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label}</p>}
               <ProposalView card={card} action={buildButton(card)} />
             </aside>
           )}
@@ -236,7 +236,7 @@ export function AdvicePage() {
             <IconButton label="Đóng" onClick={() => setSheet(false)} icon={<X size={16} aria-hidden />} />
           </div>
           <div className="mx-auto max-w-[560px] px-5 py-5">
-            {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label} · Option {card.variant ?? 1}</p>}
+            {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label}</p>}
             <ProposalView card={card} action={buildButton(card)} />
           </div>
         </div>

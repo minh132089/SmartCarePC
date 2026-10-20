@@ -204,7 +204,7 @@ class ChatServiceTests {
     }
 
     @Test
-    void build2Va3DoiSangSanPhamCungNhomGiaGan() {
+    void monThayTheCungNhomDungLoaiVaKhoangGia() {
         var chosen = new ProductSearch.Product("RAM Kingston 16GB (2x8GB) 3200", "Phong Vũ", 1_000_000L, "https://phongvu.vn/a", null);
         var group = List.of(chosen,
                 new ProductSearch.Product("RAM Corsair 16GB (2x8GB) 3200", "Hacom", 1_050_000L, "https://hacom.vn/b", null),
@@ -213,22 +213,20 @@ class ChatServiceTests {
                 new ProductSearch.Product("RAM 16GB 2x8GB like new", "Y", 1_000_000L, "https://y.vn/e", null),
                 new ProductSearch.Product("RAM TeamGroup 16GB (2x8GB)", "Z", 2_000_000L, "https://z.vn/f", null));
         // Bộ 2 thanh: chỉ đổi sang bộ khác; bỏ hàng like new và món đắt gấp đôi; gần giá nhất trước
-        assertThat(ChatService.alternatives(chosen, group, true, "quality")).extracting(ProductSearch.Product::title)
-                .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200");
-        // Không phải bộ: lấy cả thanh lẻ, nhưng cửa hàng biết tên miền (Hacom, GEARVN) đứng trước shop lạ dù giá gần hơn
-        assertThat(ChatService.alternatives(chosen, group, false, "quality")).extracting(ProductSearch.Product::title)
+        assertThat(ChatService.candidates(chosen, group, true, "quality")).extracting(ProductSearch.Product::title)
                 .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200");
         // Phương án Rẻ: không lấy món đắt hơn 15%; Chất lượng: không lấy món rẻ hơn 15%
-        assertThat(ChatService.alternatives(chosen, group, true, "cheap")).extracting(ProductSearch.Product::title)
+        assertThat(ChatService.candidates(chosen, group, true, "cheap")).extracting(ProductSearch.Product::title)
                 .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200");
+        // Không phải bộ: lấy cả thanh lẻ, nhưng cửa hàng biết tên miền (Hacom, GEARVN) đứng trước shop lạ dù giá gần hơn
         assertThat(ChatService.candidates(chosen, group, false, "quality")).extracting(ProductSearch.Product::title)
                 .containsExactly("RAM Corsair 16GB (2x8GB) 3200", "RAM Gskill 16GB (2x8GB) 3200", "RAM Kingston 8GB 3200");
         var cheapOnly = List.of(chosen, new ProductSearch.Product("RAM X 16GB (2x8GB)", "S", 800_000L, "https://s.vn/x", null));
-        assertThat(ChatService.alternatives(chosen, cheapOnly, true, "quality")).isEmpty();
+        assertThat(ChatService.candidates(chosen, cheapOnly, true, "quality")).isEmpty();
     }
 
     @Test
-    void moiTierCoBaBuildDeThamKhao() {
+    void moiPhuongAnChiMotBuild() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
@@ -249,10 +247,11 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 12 triệu")), null, null, "advice"));
 
-        assertThat(res.options()).hasSize(9);
-        var balanced = res.options().stream().filter(o -> "balanced".equals(o.tier())).toList();
-        assertThat(balanced).extracting(o -> o.variant()).containsExactly(1, 2, 3);
-        assertThat(balanced).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD A 1TB", "SSD B 1TB", "SSD C 1TB");
+        // Mỗi phương án (Rẻ, Phù hợp, Chất lượng) đúng một build: trả lời nhanh hơn, không ghép option tham khảo
+        assertThat(res.options()).hasSize(3);
+        assertThat(res.options()).extracting(ChatResponse.BuildCard::tier).containsExactly("cheap", "balanced", "quality");
+        assertThat(res.options()).extracting(ChatResponse.BuildCard::variant).containsOnly(1);
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsOnly("SSD A 1TB");
         assertThat(res.build().variant()).isEqualTo(1);
         assertThat(res.build().tier()).isEqualTo("balanced");
     }
@@ -571,13 +570,10 @@ class ChatServiceTests {
 
     @Test
     void tranGiaTheoPhuongAn() {
-        // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
+        // Rẻ: tối đa 90% ngân sách; Phù hợp: đúng ngân sách; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
-        assertThat(ChatService.altCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
         assertThat(ChatService.tierCap(25_000_000L, "balanced")).isEqualTo(25_000_000L);
-        assertThat(ChatService.altCap(25_000_000L, "balanced")).isEqualTo(27_000_000L);
         assertThat(ChatService.tierCap(25_000_000L, "quality")).isEqualTo(28_000_000L);
-        assertThat(ChatService.altCap(25_000_000L, "quality")).isEqualTo(28_000_000L);
         assertThat(ChatService.tierCap(null, "quality")).isNull();
     }
 
@@ -594,7 +590,7 @@ class ChatServiceTests {
     }
 
     @Test
-    void buildThamKhaoCuaPhuongAnPhuHopKhongVuotNganSach() {
+    void phuongAnPhuHopKhongVuotNganSach() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
@@ -611,8 +607,8 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        // Option 1 do trợ lý chọn, không vượt ngân sách; option 2, 3 của Phù hợp được đắt hơn ngân sách tối đa 2 triệu
-        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD A", "SSD Re", "SSD Dat");
+        // Build trợ lý chọn nằm trong ngân sách: giữ nguyên, không thêm build tham khảo
+        assertThat(res.options()).isNull();
         assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
     }
 
