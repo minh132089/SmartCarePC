@@ -75,7 +75,9 @@ public class ChatService {
             không có thì để trống product_id: app sẽ tự tìm và gắn sản phẩm thật cho món đó (xem auto_filled).
             5. Sau lượt tìm kiếm, đưa BA PHƯƠNG ÁN để người dùng so sánh: gọi propose_build ba lần TRONG CÙNG MỘT LƯỢT \
             (song song), mỗi lần một tier:
-               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, phải rẻ hơn rõ rệt: tổng TỐI ĐA 90% ngân sách;
+               - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, phải rẻ hơn rõ rệt: tổng TỐI ĐA 90% ngân sách. Vỏ theo \
+            ý người dùng (vd có kính) mà làm vượt mức này thì ĐƯỢC chọn vỏ khác có món đi kèm rẻ hơn (tản khí, card 2 \
+            quạt), và nói rõ trong câu trả lời đã bỏ điều gì để rẻ hơn (vd "bỏ mặt kính");
                - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng sát ngân sách nhưng TUYỆT ĐỐI không \
             vượt; đây là gợi ý chính (app tự thêm option tham khảo đắt hơn tối đa 2 triệu);
                - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, chỉ vượt ngân sách một chút: TỐI ĐA 3 triệu.
@@ -758,7 +760,9 @@ public class ChatService {
                     } else if (turn.advice && cap != null && totalMax > cap) {
                         log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại", tier, totalMax, cap);
                         saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
-                                + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier.");
+                                + "\". Đổi vài món sang sản phẩm rẻ hơn (search_products) rồi gọi lại propose_build với cùng tier."
+                                + ("cheap".equals(tier) ? " Món đi kèm vỏ đắt (tản nước, card 3 quạt) thì đổi sang vỏ khác rẻ hơn, "
+                                        + "kể cả khi phải bỏ mặt kính, và nói rõ điều đó với người dùng." : ""));
                     }
                     if (!auto.isEmpty()) {
                         saved.put("auto_filled", auto.entrySet().stream().map(e -> {
