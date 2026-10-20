@@ -72,7 +72,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       {action && <div className="mt-6">{action}</div>}
       {total && (
         <p className="mt-3 text-[12px] leading-snug text-ink-3">
-          Giá cửa hàng là giá lúc trợ lý tìm, có thể đã đổi. Dòng ghi "ước tính" là trợ lý ước theo thông số phổ thông. Chưa gồm màn hình, bàn phím và chuột.
+          Giá đọc trên web cửa hàng lúc trợ lý tìm, có thể đã đổi. Dòng ghi "chưa kiểm tra trên trang" là giá tham khảo từ Google, nên mở link xem lại. Dòng ghi "ước tính" là trợ lý ước theo thông số phổ thông. Chưa gồm màn hình, bàn phím và chuột.
         </p>
       )}
     </div>
@@ -119,7 +119,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             <div className="shrink-0 text-right">
               <p className="text-[13px] font-semibold text-ink tabular-nums">{vndRange(lo, hi)}</p>
               <p className="text-[12px] text-ink-3 tabular-nums">
-                {line.productName ? 'giá cửa hàng' : 'ước tính'}
+                {!line.productName ? 'ước tính' : line.priceChecked === false ? 'giá tham khảo, chưa kiểm tra trên trang' : 'giá trên web cửa hàng'}
                 {share != null && `, ${share}%`}
               </p>
             </div>

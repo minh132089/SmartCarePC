@@ -31,11 +31,21 @@ final class ProductPage {
         Document doc = Jsoup.parse(html, url);
         for (var script : doc.select("script[type=application/ld+json]")) {
             for (JsonNode product : products(script.data())) {
-                JsonNode offer = product.path("offers");
-                if (offer.isArray()) offer = offer.path(0);
-                Long price = Prices.parse(text(offer, "price") != null ? text(offer, "price") : text(offer, "lowPrice"));
+                JsonNode offers = product.path("offers");
+                JsonNode offer = offers.isArray() ? offers.path(0) : offers;
                 String name = text(product, "name");
-                if (price == null || price < 10_000 || name == null) continue;
+                if (name == null) continue;
+                // Trang có nhiều phiên bản / mức giá (vd nguồn 550W và 650W chung một trang, AggregateOffer giá thấp - cao):
+                // không biết giá nào đúng bản đã chọn, nên coi như chưa đọc được giá
+                java.util.Set<Long> prices = new java.util.TreeSet<>();
+                for (JsonNode o : offers.isArray() ? offers : List.of(offers)) {
+                    Long p = Prices.parse(text(o, "price") != null ? text(o, "price") : text(o, "lowPrice"));
+                    if (p != null && p >= 10_000) prices.add(p);
+                    Long high = Prices.parse(text(o, "highPrice"));
+                    if (high != null && high >= 10_000) prices.add(high);
+                }
+                if (prices.isEmpty()) continue;
+                Long price = prices.size() == 1 ? prices.iterator().next() : null;
                 String availability = text(offer, "availability");
                 Boolean inStock = availability == null ? null
                         : availability.contains("InStock") || availability.contains("LimitedAvailability")

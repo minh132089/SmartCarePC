@@ -26,6 +26,8 @@ export type BuildLine = {
   checkedAt?: string | null
   /** Cùng model ở cửa hàng khác, rẻ nhất trước */
   compare?: ShopPrice[] | null
+  /** Giá đã đọc lại trên chính trang của sourceUrl; false là giá tham khảo từ Google Shopping, chưa kiểm tra */
+  priceChecked?: boolean | null
 }
 export type ShopPrice = { shop: string; priceVnd: number; url: string; inStock?: boolean | null; checkedAt?: string | null }
 /** Cấu hình trợ lý vừa kiểm tra bằng bộ kiểm tra tương thích của backend */

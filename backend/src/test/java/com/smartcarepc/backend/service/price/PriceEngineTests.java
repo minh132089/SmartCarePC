@@ -152,6 +152,16 @@ class PriceEngineTests {
     }
 
     @Test
+    void trangNhieuMucGiaThiChuaBietGia() {
+        var html = """
+                <html><head><script type="application/ld+json">{"@type":"Product","name":"Nguồn Thermaltake Litepower RGB",
+                "offers":[{"@type":"Offer","price":"690000"},{"@type":"Offer","price":"990000"}]}</script></head><body></body></html>""";
+        var o = ProductPage.parse(html, "https://tinhocngoisao.com/products/nguon-thermaltake-litepower", AT);
+        assertThat(o.title()).isEqualTo("Nguồn Thermaltake Litepower RGB");
+        assertThat(o.priceVnd()).isNull();
+    }
+
+    @Test
     void docTrangKhongCoJsonLdNhungCoMetaGia() {
         var html = """
                 <html><head><meta property="og:type" content="product"/>

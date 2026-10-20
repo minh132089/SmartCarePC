@@ -415,6 +415,37 @@ class ChatServiceTests {
     }
 
     @Test
+    void giaTrenTheLaGiaDocTuTrangCuaHang() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD Kingston NV2 1TB", "A", 1_400_000L, "https://a.vn/ssd", null)));
+        when(search.search("Card")).thenReturn(List.of(new ProductSearch.Product("Card RTX 4060", "B", 8_000_000L, "https://b.vn/gpu", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        var at = java.time.Instant.parse("2026-10-20T10:00:00Z");
+        // Trang SSD bán giá khác Google Shopping: thẻ dùng giá trang
+        when(search.offer("https://a.vn/ssd")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "SSD Kingston NV2 1TB", "A", 1_550_000L, null, "https://a.vn/ssd", null, true, 36, at));
+        // Trang card ghi giá sai đơn vị (x100): bỏ, giữ giá cũ và ghi là chưa kiểm tra
+        when(search.offer("https://b.vn/gpu")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "Card RTX 4060", "B", 800_000_000L, null, "https://b.vn/gpu", null, null, null, at));
+        reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"Card\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Nhanh","product_id":"s1-1"},
+                {"code":"gpu_280","spec":"RTX 4060","reason":"Chơi game","product_id":"s2-1"}]}
+                """), answer("Xong."));
+
+        var items = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items();
+
+        var ssd = items.stream().filter(i -> i.category().equals("ssd")).findFirst().orElseThrow();
+        assertThat(ssd.priceMinVnd()).isEqualTo(1_550_000L);
+        assertThat(ssd.priceChecked()).isTrue();
+        var gpu = items.stream().filter(i -> i.category().equals("gpu")).findFirst().orElseThrow();
+        assertThat(gpu.priceMinVnd()).isEqualTo(8_000_000L);
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);

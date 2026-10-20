@@ -45,17 +45,18 @@ public record ChatResponse(String reply, BuildCard build, List<BuildCard> option
 
     /**
      * inStock / warrantyMonths / checkedAt: engine so giá đọc từ trang cửa hàng (null nếu không biết). compare: cùng
-     * model ở cửa hàng khác, rẻ nhất trước (tối đa 3), để người dùng thấy bảng giá tốt nhất.
+     * model ở cửa hàng khác, rẻ nhất trước (tối đa 3), để người dùng thấy bảng giá tốt nhất. priceChecked: giá đã đọc
+     * lại trên chính trang của sourceUrl (false: giá tham khảo từ Google Shopping, chưa kiểm tra trên trang).
      */
     public record Line(String code, String category, String name, int quantity,
             String spec, String reason, Long priceMinVnd, Long priceMaxVnd, String imageUrl, String sourceUrl,
             String productName, String shop, Boolean inStock, Integer warrantyMonths, Instant checkedAt,
-            List<ShopPrice> compare) {
+            List<ShopPrice> compare, Boolean priceChecked) {
 
         public Line(String code, String category, String name, int quantity, String spec, String reason, Long priceMinVnd,
                 Long priceMaxVnd, String imageUrl, String sourceUrl, String productName, String shop) {
             this(code, category, name, quantity, spec, reason, priceMinVnd, priceMaxVnd, imageUrl, sourceUrl, productName, shop,
-                    null, null, null, List.of());
+                    null, null, null, List.of(), null);
         }
     }
 

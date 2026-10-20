@@ -542,6 +542,12 @@ public class ChatService {
         return out;
     }
 
+    /** Link đã đọc được giá trên chính trang cửa hàng */
+    private boolean priceChecked(String url) {
+        var page = url == null ? null : search.offer(url);
+        return page != null && page.priceVnd() != null;
+    }
+
     /** Thay giá Google Shopping bằng giá đọc trên trang cửa hàng của link đã xác minh (nếu đọc được) */
     private Checked withPagePrices(Checked c) {
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
@@ -550,6 +556,8 @@ public class ChatService {
             String url = link == null ? null : link.join();
             var page = url == null ? null : search.offer(url);
             if (page == null || page.priceVnd() == null || page.priceVnd().equals(p.priceVnd())) return;
+            // Lệch quá 5 lần là lỗi đơn vị trên trang (vd giá ghi theo đồng x 100), không dùng
+            if (p.priceVnd() != null && (page.priceVnd() > p.priceVnd() * 5 || page.priceVnd() * 5 < p.priceVnd())) return;
             if (p.priceVnd() != null && Math.abs(page.priceVnd() - p.priceVnd()) * 10 > p.priceVnd() * 2) {
                 log.info("Giá trang khác Google Shopping: {} {} -> {} ({})", p.title(), p.priceVnd(), page.priceVnd(), url);
             }
@@ -669,9 +677,10 @@ public class ChatService {
     private void linkedPicks(BuildCheckRequest req, Map<String, Map<String, Object>> details, Map<String, ProductSearch.Product> picks,
             Map<String, CompletableFuture<String>> links, Map<String, List<ProductSearch.Product>> siblings, String tier, Long cap) {
         Map<String, CompletableFuture<ProductSearch.Product>> fixes = new LinkedHashMap<>();
+        // Món yếu: chưa có link, chỉ có trang chủ, hoặc link chưa đọc được giá trên trang (giá Google có thể sai)
         var weak = links.entrySet().stream().filter(e -> {
             String l = e.getValue().join();
-            return l == null || ProductSearch.homePage(l);
+            return l == null || ProductSearch.homePage(l) || !priceChecked(l);
         }).map(Map.Entry::getKey).toList();
         // Phần còn dư tới trần chia đều cho các món phải đổi, để đổi món lấy link không làm phương án vượt trần
         long allowance = cap == null || weak.isEmpty() ? Long.MAX_VALUE : (cap - total(req, details, picks)) / weak.size();
@@ -684,16 +693,19 @@ public class ChatService {
                     .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
                     .toList();
             fixes.put(code, CompletableFuture.supplyAsync(() -> {
-                // Ưu tiên món có trang sản phẩm; chỉ toàn trang chủ thì món đang chọn đã có trang chủ vẫn giữ nguyên
-                ProductSearch.Product home = null;
+                // Ưu tiên món có giá đã kiểm tra trên trang; không có thì giữ món đang chọn nếu nó đã có link; chưa
+                // có link thì lấy món có trang sản phẩm, cuối cùng mới tới trang chủ
+                ProductSearch.Product page = null, home = null;
                 for (var c : candidates.stream().limit(4).toList()) {
                     String l = search.directLink(c.title(), c.shop(), c.url());
                     if (l == null) continue;
                     var found = new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
-                    if (!ProductSearch.homePage(l)) return found;
+                    if (!ProductSearch.homePage(l) && priceChecked(l)) return found;
+                    if (!ProductSearch.homePage(l) && page == null) page = found;
                     if (home == null) home = found;
                 }
-                return now == null ? home : null;
+                if (now != null && !ProductSearch.homePage(now)) return null;
+                return page != null ? page : now == null ? home : null;
             }));
         });
         fixes.forEach((code, f) -> {
@@ -919,7 +931,9 @@ public class ChatService {
     }
 
     /** Thẻ cấu hình cho khung chat: loại của từng linh kiện, sản phẩm đã chọn (nếu có), kèm kết quả kiểm tra */
-    private BuildCard card(Checked c, boolean advice, String tier, int variant) {
+    private BuildCard card(Checked original, boolean advice, String tier, int variant) {
+        // Mọi thẻ (cả option 2, 3 và bộ rẻ nhất) đều dùng giá đọc trên trang cửa hàng của link
+        Checked c = advice ? withPagePrices(original) : original;
         Map<String, Integer> qty = new LinkedHashMap<>();
         c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
         List<Line> lines = new ArrayList<>();
@@ -938,7 +952,7 @@ public class ChatService {
                     range[0], range[1], pick == null ? null : pick.imageUrl(), link,
                     pick == null ? null : pick.title(), pick == null ? null : pick.shop(),
                     offer == null ? null : offer.inStock(), offer == null ? null : offer.warrantyMonths(),
-                    offer == null ? null : offer.checkedAt(), compare));
+                    offer == null ? null : offer.checkedAt(), compare, link == null ? null : priceChecked(link)));
         });
         var r = c.result();
         String note = advice ? modelMatch.check(c.request()).note() : null;
