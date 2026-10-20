@@ -139,6 +139,9 @@ public class ChatService {
             - RAM (ERROR): đúng loại DDR với bo và CPU, đúng dạng thanh máy bàn (không dùng RAM laptop SO-DIMM), không \
             vượt số khe. Bo LGA1700 có bản DDR4 và bản DDR5: xem đúng mã bo, không suy ra từ socket. Nên chọn kit 2 thanh \
             (RECOMMENDATION); tốc độ XMP / EXPO không được đảm bảo.
+            - Máy học / văn phòng không chơi game nặng: chọn CPU CÓ đồ họa tích hợp (vd Intel Core i3 / i5 đời 12 - 14 \
+            KHÔNG đuôi F, Ryzen bản G) và KHÔNG thêm card rời để tiết kiệm; app tự bỏ lỗi "thiếu card" khi CPU thật có \
+            đồ họa tích hợp. Chơi game thì mới cần card rời.
             - Đồ họa: KHÔNG suy ra từ hậu tố. Intel đuôi F thường không có đồ họa tích hợp; Ryzen 7000 / 9000 thường có \
             đồ họa cơ bản nhưng có ngoại lệ (vd 7500F). Không chắc CPU có đồ họa thì chọn thêm card đồ họa.
             - Tản nhiệt: phải có gá đúng socket (ERROR); gá Intel và AMD khác nhau. Gá LGA1700 thường dùng cho LGA1851, gá \
@@ -669,6 +672,21 @@ public class ChatService {
         return new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(), picks, c.links(), c.siblings());
     }
 
+    /**
+     * Bỏ lỗi "thiếu card đồ họa" khi CPU thật đã chọn có đồ họa tích hợp theo mã sản phẩm (ProductRules.hasIgpu);
+     * còn lại giữ nguyên kết quả kiểm tra.
+     */
+    private CompatibilityResponse withoutFalseGpuError(CompatibilityResponse r, Map<String, ProductSearch.Product> picks) {
+        if (r.errors().stream().noneMatch(i -> i.rule().equals("required.gpu"))) return r;
+        String cpu = productTitles(picks).get("cpu");
+        if (!Boolean.TRUE.equals(ProductRules.hasIgpu(cpu))) return r;
+        var errors = r.errors().stream().filter(i -> !i.rule().equals("required.gpu")).toList();
+        var warnings = new ArrayList<>(r.warnings());
+        warnings.add(new Issue("cpu.igpu", "Không có card rời: máy dùng đồ họa tích hợp của CPU \"" + cpu
+                + "\". Đủ cho học, văn phòng, xem phim; chơi game nặng thì cần thêm card."));
+        return new CompatibilityResponse(errors.isEmpty(), errors, warnings);
+    }
+
     /** Lỗi lắp chung giữa các sản phẩm thật đã chọn (theo tên sản phẩm, xem ProductRules) */
     private List<String> productIssues(Map<String, ProductSearch.Product> picks) {
         return ProductRules.issues(productTitles(picks));
@@ -948,9 +966,15 @@ public class ChatService {
                         links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
                     String tier = TIERS.contains(String.valueOf(input.get("tier"))) ? String.valueOf(input.get("tier")) : "balanced";
+                    // CPU thật có đồ họa tích hợp (theo mã sản phẩm) thì không bắt buộc card rời: danh mục chỉ có một CPU
+                    // chung chung ghi "không có đồ họa tích hợp" nên luôn báo thiếu card, đẩy máy văn phòng vượt ngân sách
+                    result = withoutFalseGpuError(result, picks);
                     // Ba propose_build của cùng một lượt chạy song song: giữ thẻ trong biến riêng, không đọc lại turn.last
+                    // Trợ lý có khi quên budget_vnd ở một tier: lấy ngân sách của tier khác trong cùng lượt
+                    Long budget = input.get("budget_vnd") instanceof Number n ? n.longValue()
+                            : turn.tiers.values().stream().map(Checked::budgetVnd).filter(java.util.Objects::nonNull).findFirst().orElse(null);
                     var checked = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
-                            input.get("budget_vnd") instanceof Number n ? n.longValue() : null, picks, links, siblings);
+                            budget, picks, links, siblings);
                     turn.tiers.put(tier, checked);
                     turn.last = checked;
                     // Build 2 và 3 dựng ngay để việc đổi link cửa hàng chạy song song lúc trợ lý viết câu trả lời

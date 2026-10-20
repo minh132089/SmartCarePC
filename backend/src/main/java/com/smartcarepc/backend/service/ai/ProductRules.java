@@ -221,6 +221,28 @@ public final class ProductRules {
         return out;
     }
 
+    /**
+     * CPU có đồ họa tích hợp theo mã sản phẩm (bộ luật mục 4: xét theo SKU, không suy từ danh mục). Intel Core đời 12 -
+     * 14 và Core Ultra 200: có, trừ đuôi F. Ryzen 1000 - 5000: chỉ bản G. Ryzen 7000 / 8000 / 9000: có, trừ đuôi F (vd
+     * 7500F). Không đọc ra thì null.
+     */
+    public static Boolean hasIgpu(String cpuTitle) {
+        if (cpuTitle == null) return null;
+        String t = Normalizer.normalize(cpuTitle.toLowerCase(), Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+                .replaceAll("[^a-z0-9]+", " ");
+        Matcher m = INTEL_ULTRA.matcher(t);
+        if (m.find()) return !m.group(1).contains("f");
+        m = INTEL_CORE.matcher(t);
+        if (m.find()) return Integer.parseInt(m.group(1)) >= 12 ? !m.group(2).contains("f") : null;
+        m = Pattern.compile("\\b(?:ryzen|r)\\s?[3579]\\s?(\\d)\\d{3}([a-z0-9]*)\\b").matcher(t);
+        if (m.find()) {
+            int series = Integer.parseInt(m.group(1));
+            String suffix = m.group(2);
+            return series >= 7 ? !suffix.contains("f") : suffix.contains("g");
+        }
+        return null;
+    }
+
     /** Chỉ các lỗi (ERROR): lắp không được, phải đổi sản phẩm */
     public static List<String> issues(Map<String, String> titles) {
         return findings(titles).stream().filter(f -> f.severity() == Severity.ERROR).map(Finding::reason).toList();

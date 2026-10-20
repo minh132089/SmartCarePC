@@ -82,4 +82,17 @@ class ProductRulesTests {
         assertThat(err.affectedParts()).containsExactly("cpu", "motherboard");
         assertThat(err.requiredAction()).contains("AM5");
     }
+
+    @Test
+    void doHoaTichHopTheoMaSanPham() {
+        assertThat(ProductRules.hasIgpu("Bộ vi xử lý Intel Core i3-12100")).isTrue();
+        assertThat(ProductRules.hasIgpu("Bộ vi xử lý Intel Core i3 14100F")).isFalse();
+        assertThat(ProductRules.hasIgpu("CPU Intel Core Ultra 5 225F")).isFalse();
+        assertThat(ProductRules.hasIgpu("CPU Intel Core Ultra 7 265K")).isTrue();
+        assertThat(ProductRules.hasIgpu("AMD Ryzen 5 5600G")).isTrue();
+        assertThat(ProductRules.hasIgpu("AMD Ryzen 5 5600X")).isFalse();
+        assertThat(ProductRules.hasIgpu("AMD Ryzen 5 7600")).isTrue();
+        assertThat(ProductRules.hasIgpu("AMD Ryzen 5 7500F")).isFalse();
+        assertThat(ProductRules.hasIgpu("CPU")).isNull();
+    }
 }

@@ -543,6 +543,33 @@ class ChatServiceTests {
     }
 
     @Test
+    void cpuCoDoHoaTichHopThiKhongBatBuocCardRoi() {
+        var gpuError = new Issue("required.gpu", "CPU này không có sẵn đồ họa, cần thêm card đồ họa");
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(false, List.of(gpuError), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("i3")).thenReturn(List.of(
+                new ProductSearch.Product("Bộ vi xử lý Intel Core i3-12100", "A", 2_500_000L, "https://a.vn/i3", null),
+                new ProductSearch.Product("Bộ vi xử lý Intel Core i3-12100F", "B", 2_000_000L, "https://b.vn/i3f", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"i3\"}"),
+                toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","items":[{"code":"cpu_std","spec":"i3","reason":"Đủ","product_id":"s1-1"}]}
+                """), toolCall("p2", "propose_build", """
+                {"tier":"cheap","summary":"Học","items":[{"code":"cpu_std","spec":"i3","reason":"Đủ","product_id":"s1-2"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
+
+        // i3-12100 có đồ họa tích hợp: lắp được, kèm lưu ý; i3-12100F không có: vẫn báo thiếu card
+        var balanced = res.options().stream().filter(o -> "balanced".equals(o.tier())).findFirst().orElseThrow();
+        assertThat(balanced.compatible()).isTrue();
+        assertThat(balanced.warnings()).anySatisfy(i -> assertThat(i.rule()).isEqualTo("cpu.igpu"));
+        var cheap = res.options().stream().filter(o -> "cheap".equals(o.tier())).findFirst().orElseThrow();
+        assertThat(cheap.compatible()).isFalse();
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: option 1 đúng ngân sách, option 2 / 3 vượt tối đa 2 triệu; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);
