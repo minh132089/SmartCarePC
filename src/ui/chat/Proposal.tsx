@@ -32,16 +32,16 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
   const total = totalOf(card)
   return (
     <div>
-      <h2 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-ink">
+      <h2 data-sm-item className="text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-ink">
         {card.summary || 'Cấu hình trợ lý đã chọn'}
       </h2>
-      <p className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>{compatText(card).long}</p>
+      <p data-sm-item className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>{compatText(card).long}</p>
 
       {total && <Total min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
 
       <div className="mt-6 space-y-6">
         {groupLines(card.items).map((g) => (
-          <section key={g.title}>
+          <section key={g.title} data-sm-item>
             <h3 className="px-1 text-[15px] font-semibold text-ink">{g.title}</h3>
             <ul className="mt-2 space-y-5 rounded-2xl bg-surface p-4">
               {g.lines.map((it) => (
@@ -69,7 +69,11 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       <IssueGroup title="Cần xác minh trước khi mua" issues={card.unknowns} />
       <IssueGroup title="Gợi ý" issues={card.recommendations} />
 
-      {action && <div className="mt-6">{action}</div>}
+      {action && (
+        <div data-sm-item className="mt-6">
+          {action}
+        </div>
+      )}
       {total && (
         <p className="mt-3 text-[12px] leading-snug text-ink-3">
           Giá đọc trên web cửa hàng lúc trợ lý tìm, có thể đã đổi. Dòng ghi "chưa kiểm tra trên trang" là giá tham khảo từ Google, nên mở link xem lại. Dòng ghi "ước tính" là trợ lý ước theo thông số phổ thông. Chưa gồm màn hình, bàn phím và chuột.

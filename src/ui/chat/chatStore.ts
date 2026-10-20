@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { FAMILY_IDS, type FamilyId } from '../../data/families'
-import { playDone, playSubmit, startThinking, stopThinking } from '../sound/sfx'
+import { playDone, playSubmit, playThinking } from '../sound/sfx'
 
 export type Issue = { rule: string; message: string }
 export type BuildLine = {
@@ -144,14 +144,13 @@ function createChat(mode: ChatMode) {
       const next: Msg[] = [...(history ?? get().messages), { role: 'user', content }]
       set({ messages: next, busy: true, stage: null, error: null })
       playSubmit()
-      startThinking()
+      playThinking()
       const ctrl = new AbortController()
       abort = ctrl
       try {
         const body = { mode, ...ctx, messages: next.slice(-HISTORY).map(toWire) }
         const data = await ask(body, ctrl.signal, (stage) => abort === ctrl && set({ stage }))
         set({ messages: [...next, { role: 'assistant', content: data.reply, build: data.build, options: data.options }] })
-        stopThinking()
         playDone()
       } catch (e) {
         if (ctrl.signal.aborted) return
@@ -159,7 +158,6 @@ function createChat(mode: ChatMode) {
       } finally {
         if (abort === ctrl) {
           abort = null
-          stopThinking()
           set({ busy: false, stage: null })
         }
       }
@@ -173,7 +171,6 @@ function createChat(mode: ChatMode) {
     reset: () => {
       abort?.abort()
       abort = null
-      stopThinking()
       set({ messages: [], busy: false, stage: null, error: null })
     },
   }))

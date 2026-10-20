@@ -1,18 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowCounterClockwise, ArrowRight, CaretRight, SpeakerHigh, SpeakerSlash, X } from '@phosphor-icons/react'
-import DecryptedText from '@/components/DecryptedText'
-import DotGrid from '@/components/DotGrid'
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react'
+import { ArrowCounterClockwise, ArrowRight, CaretRight, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
+import CardNav, { type CardNavItem, type CardNavLink } from '@/components/CardNav'
+import MicroSlats from '@/components/MicroSlats'
+import PixelSwap from '@/components/PixelSwap'
+import StaggeredMenu from '@/components/StaggeredMenu'
+import TechText from '@/components/TechText'
 import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
+import { useDark } from '../theme'
 import { machineOfCard, useAdviceChat, type BuildCard, type Pick } from './chat/chatStore'
 import { OptionsCanvas } from './chat/Options'
 import { TIER_INFO } from './chat/tiers'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
+import { useSound } from './sound/sfx'
+import { useStudy } from './study/study'
 import { StudyBar, StudyJoinLink } from './study/StudyBar'
-import { startAmbient, stopAmbient, useSound } from './sound/sfx'
-import { useDark } from '../theme'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -39,23 +43,24 @@ const BUSY_HINTS = [
  * Trang 1: tư vấn chọn máy bằng AI. Người dùng tự kể nhu cầu, trợ lý phân tích, chọn linh kiện từ danh mục
  * và chạy kiểm tra tương thích. Dưới thẻ cấu hình có nút "Xem và lắp máy này" để sang trang 2 (mô hình 3D).
  * Trang này không vẽ cảnh 3D nên không làm nóng máy người dùng.
+ *
+ * Giao diện dùng React Bits: màn giới thiệu (CardNav, nền MicroSlats, chữ TechText) chuyển sang khung chat bằng
+ * PixelSwap khi người dùng gửi câu đầu tiên; xong chuyển cảnh thì gỡ hẳn màn giới thiệu để nền không chạy nữa.
+ * Chi tiết linh kiện mở trong ngăn StaggeredMenu.
  */
 export function AdvicePage() {
   const { messages, busy, stage, error, send, retry, reset } = useAdviceChat()
   const setPage = useViewer((s) => s.setPage)
   const open = useOpenMachine()
-  const [draft, setDraft] = useState('')
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-  const empty = messages.length === 0 && !busy && !error
   const dark = useDark()
   const { muted, toggle: toggleSound } = useSound()
-  // Nhạc nền chỉ ở màn giới thiệu; người dùng bắt đầu chat (hoặc rời trang) thì tắt
-  useEffect(() => {
-    if (!empty) return
-    startAmbient()
-    return stopAmbient
-  }, [empty])
+  const [draft, setDraft] = useState('')
+  const introInputRef = useRef<HTMLTextAreaElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const empty = messages.length === 0 && !busy && !error
+  // Chuyển cảnh sang khung chat xong thì gỡ màn giới thiệu (nền WebGL, chữ canvas) cho máy nhẹ
+  const [introGone, setIntroGone] = useState(!empty)
   // Cấu hình đang xem chi tiết: mặc định là cấu hình mới nhất trợ lý đưa ra
   const latest = messages.findLastIndex((m) => m.build)
   // Chọn xem cấu hình cũ; trợ lý đưa cấu hình mới (latest đổi) thì tự quay về cấu hình mới
@@ -68,7 +73,7 @@ export function AdvicePage() {
     shown >= 0
       ? (messages[shown].options?.find((o) => o.tier === pick.tier && (o.variant ?? 1) === pick.variant) ?? messages[shown].build!)
       : null
-  // Màn hình hẹp: bảng chi tiết mở thành trang phủ kín, bấm "Xem chi tiết linh kiện" mới hiện
+  // Ngăn chi tiết linh kiện (StaggeredMenu), mở bằng nút "Xem chi tiết linh kiện" hoặc bấm một phương án
   const [sheet, setSheet] = useState(false)
 
   // Có tin mới thì cuộn xuống cuối
@@ -102,35 +107,38 @@ export function AdvicePage() {
     )
   }
 
-  // Thẻ trong hội thoại chỉ mở bảng chi tiết; nút "Xem và lắp máy này" chỉ nằm trong bảng để không lặp hai nơi
+  // Thẻ trong hội thoại chỉ mở ngăn chi tiết; nút "Xem và lắp máy này" chỉ nằm trong ngăn để không lặp hai nơi
   const cardAction = (_c: BuildCard, index: number) => (
     <button
+      data-sm-opener
       onClick={() => {
         setPicked({ index, latest })
         setSheet(true)
       }}
       aria-pressed={index === shown}
       className={`rounded-full px-4 py-2 text-[14px] font-medium ${press} ${focus} ${
-        index === shown ? 'bg-fill text-ink lg:bg-ink lg:text-on-ink' : 'bg-fill text-ink hover:bg-fill-hover'
+        index === shown ? 'bg-ink text-on-ink' : 'bg-fill text-ink hover:bg-fill-hover'
       }`}
     >
       Xem chi tiết linh kiện
     </button>
   )
 
-  return (
+  const soundButton = (
+    <IconButton
+      label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
+      onClick={toggleSound}
+      icon={muted ? <SpeakerSlash size={16} aria-hidden /> : <SpeakerHigh size={16} aria-hidden />}
+    />
+  )
+
+  const chat = (
     <div className="flex h-full flex-col bg-canvas">
       <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-2 md:px-10">
         <FlowSteps current={1} />
         <div className="flex items-center gap-2">
-          <IconButton
-            label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
-            onClick={toggleSound}
-            icon={muted ? <SpeakerSlash size={16} aria-hidden /> : <SpeakerHigh size={16} aria-hidden />}
-          />
-          {!empty && (
-            <IconButton label="Cuộc trò chuyện mới" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
-          )}
+          {soundButton}
+          <IconButton label="Cuộc trò chuyện mới" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
             Bỏ qua, xem mô hình 3D ›
           </button>
@@ -139,141 +147,269 @@ export function AdvicePage() {
       <div className="shrink-0 px-5 md:px-10">
         <StudyBar />
       </div>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+        <div className="mx-auto max-w-[820px] space-y-4 px-5 py-6">
+          <Thread
+            messages={messages}
+            busy={busy}
+            stage={stage}
+            error={error}
+            onRetry={() => retry({})}
+            cardAction={cardAction}
+            compactCards
+            busyHints={BUSY_HINTS}
+            optionsView={(m, i) =>
+              m.options ? (
+                <OptionsCanvas
+                  options={m.options}
+                  selected={picks[i] ?? DEFAULT_PICK}
+                  onSelect={(p) => {
+                    setPicks((all) => ({ ...all, [i]: p }))
+                    setPicked({ index: i, latest })
+                    setSheet(true)
+                  }}
+                />
+              ) : null
+            }
+          />
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">
+        <div className="mx-auto max-w-[820px]">
+          <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={chatInputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
+          <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
+        </div>
+      </div>
+    </div>
+  )
 
-      {empty ? (
-        <div className="relative min-h-0 flex-1">
-          {/* Nền chấm phản ứng theo con trỏ (React Bits DotGrid). Chỉ có ở màn giới thiệu: người dùng gửi câu đầu tiên là gỡ hẳn. */}
-          <div aria-hidden className="absolute inset-0">
-            <DotGrid
-              dotSize={4}
-              gap={22}
-              baseColor={dark ? '#3a3b43' : '#c6c6ce'}
-              activeColor={dark ? '#2997ff' : '#0071e3'}
-              proximity={130}
-              shockRadius={260}
-              shockStrength={4}
-              glow={0.6}
-              fade={0.9}
+  return (
+    <div className="flex h-full flex-col bg-canvas">
+      <PixelSwap
+        className="min-h-0 flex-1"
+        style={{ aspectRatio: 'auto' }}
+        active={!empty}
+        trigger="none"
+        pattern="bottom-to-top"
+        pixelSize={56}
+        pixelRadius={18}
+        duration={520}
+        pixelDuration={380}
+        randomness={0.35}
+        onComplete={(toChat) => {
+          setIntroGone(toChat)
+          if (toChat) chatInputRef.current?.focus()
+        }}
+        firstContent={
+          empty || !introGone ? (
+            <Intro
+              dark={dark}
+              draft={draft}
+              setDraft={setDraft}
+              ask={ask}
+              busy={busy}
+              inputRef={introInputRef}
+              soundButton={soundButton}
             />
-          </div>
-          <div className="relative h-full overflow-y-auto">
-            <div className="mx-auto flex min-h-full max-w-[720px] flex-col justify-center px-5 pt-8 pb-12 md:px-10">
-              <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-3 uppercase">SmartCare PC · trợ lý build máy</p>
-              <h1 className="mt-3 text-center font-mono text-[clamp(2.25rem,1.4rem+3.6vw,4.25rem)] leading-[1.05] font-semibold tracking-[-0.03em] text-ink">
-                <span className="sr-only">Create your own PC</span>
-                <span aria-hidden>
-                  <DecryptedText
-                    text="Create your own PC"
-                    animateOn="inViewHover"
-                    sequential
-                    revealDirection="start"
-                    speed={45}
-                    maxIterations={14}
-                    characters="01<>/[]{}#$%&*+=ABCDEF"
-                    encryptedClassName="text-accent"
-                  />
-                </span>
-              </h1>
-              <p className="mx-auto mt-4 max-w-[48ch] text-center text-[16px] leading-[1.5] text-ink-2">
-                Kể nhu cầu bằng lời của bạn. Trợ lý sẽ chọn linh kiện, so giá ở các cửa hàng và kiểm tra chúng có lắp chung được không.
+          ) : null
+        }
+        secondContent={chat}
+      />
+
+      {card && (
+        <StaggeredMenu
+          isFixed
+          position="right"
+          open={sheet}
+          onOpenChange={setSheet}
+          hideToggleWhenClosed
+          panelLabel="chi tiết linh kiện"
+          menuText="Linh kiện"
+          closeText="Đóng"
+          displaySocials={false}
+          displayItemNumbering={false}
+          colors={dark ? ['#16253a', '#0a4fa3'] : ['#dcebfd', '#0071e3']}
+          accentColor={dark ? '#2997ff' : '#0071e3'}
+          menuButtonColor={dark ? '#f5f5f7' : '#1d1d1f'}
+          openMenuButtonColor={dark ? '#f5f5f7' : '#1d1d1f'}
+          className="[--sm-panel-bg:var(--color-panel)] [--sm-width:clamp(400px,44vw,560px)]"
+        >
+          <div key={`${shown}-${card.tier ?? ''}-${card.variant ?? 1}`} className="text-ink">
+            {card.tier && (
+              <p data-sm-item className="mb-2 text-[13px] font-semibold text-accent">
+                Phương án: {TIER_INFO[card.tier].label}
               </p>
-              <div className="mt-7">
-                <Composer
-                  big
-                  value={draft}
-                  onChange={setDraft}
-                  onSend={ask}
-                  busy={busy}
-                  inputRef={inputRef}
-                  placeholder="Ví dụ: mình học thiết kế, có khoảng 20 triệu, muốn máy êm và không quá to"
-                />
-              </div>
-
-              <p className="mt-7 px-1 text-[13px] text-ink-2">Chưa biết kể thế nào? Bấm một ví dụ rồi sửa lại cho đúng ý bạn.</p>
-              <ul className="mt-2 space-y-1">
-                {EXAMPLES.map((ex) => (
-                  <li key={ex}>
-                    <button
-                      onClick={() => {
-                        setDraft(ex)
-                        inputRef.current?.focus()
-                      }}
-                      className={`group flex w-full items-start gap-2.5 rounded-xl px-1 py-2 text-left text-[15px] leading-[1.45] text-ink hover:text-link ${focus}`}
-                    >
-                      <ArrowRight size={14} aria-hidden className="mt-[5px] shrink-0 text-ink-3 group-hover:text-link" />
-                      {ex}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              <button onClick={() => setPage('build')} className={`mt-8 self-start px-1 text-[14px] font-medium text-link hover:underline sm:hidden ${focus}`}>
-                Bỏ qua, xem mô hình 3D ›
-              </button>
-              <StudyJoinLink className="mt-8 block px-1 text-left" />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-              <div className="mx-auto max-w-[760px] space-y-4 px-5 py-6">
-                <Thread
-                  messages={messages}
-                  busy={busy}
-                  stage={stage}
-                  error={error}
-                  onRetry={() => retry({})}
-                  cardAction={cardAction}
-                  compactCards
-                  busyHints={BUSY_HINTS}
-                  optionsView={(m, i) =>
-                    m.options ? (
-                      <OptionsCanvas
-                        options={m.options}
-                        selected={picks[i] ?? DEFAULT_PICK}
-                        onSelect={(p) => {
-                          setPicks((all) => ({ ...all, [i]: p }))
-                          setPicked({ index: i, latest })
-                          setSheet(true) // màn hình hẹp: mở bảng chi tiết; màn rộng bảng đã nằm bên phải
-                        }}
-                      />
-                    ) : null
-                  }
-                />
-              </div>
-            </div>
-            <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">
-              <div className="mx-auto max-w-[760px]">
-                <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={inputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
-                <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
-              </div>
-            </div>
-          </div>
-          {/* Màn hình rộng: bảng chi tiết luôn nằm bên phải khi đã có cấu hình */}
-          {card && (
-            <aside key={`${shown}-${card.tier ?? ''}-${card.variant ?? 1}`} aria-label="Chi tiết cấu hình" className="swap hidden w-[440px] shrink-0 overflow-y-auto border-l border-line bg-panel px-5 py-6 lg:block">
-              {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label}</p>}
-              <ProposalView card={card} action={buildButton(card)} />
-            </aside>
-          )}
-        </div>
-      )}
-
-      {/* Màn hình hẹp: bảng chi tiết phủ kín màn hình */}
-      {sheet && card && (
-        <div role="dialog" aria-label="Chi tiết cấu hình" className="chat-pop fixed inset-0 z-50 overflow-y-auto bg-panel lg:hidden">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel/90 px-5 py-3 backdrop-blur-xl">
-            <span className="text-[15px] font-semibold">Chi tiết linh kiện</span>
-            <IconButton label="Đóng" onClick={() => setSheet(false)} icon={<X size={16} aria-hidden />} />
-          </div>
-          <div className="mx-auto max-w-[560px] px-5 py-5">
-            {card.tier && <p className="mb-2 text-[13px] font-semibold text-accent">Phương án: {TIER_INFO[card.tier].label}</p>}
+            )}
             <ProposalView card={card} action={buildButton(card)} />
           </div>
-        </div>
+        </StaggeredMenu>
       )}
+    </div>
+  )
+}
+
+/** Mục trong thanh CardNav ở màn giới thiệu */
+const NAV_ITEMS: CardNavItem[] = [
+  {
+    label: 'Tư vấn',
+    description: 'Kể nhu cầu, trợ lý chọn linh kiện và so giá ở các cửa hàng.',
+    links: [
+      { label: 'Sinh viên, 12 triệu', href: '#' },
+      { label: 'Chơi game, 25 triệu', href: '#' },
+      { label: 'Dựng video, trên 40 triệu', href: '#' },
+    ],
+  },
+  {
+    label: 'Lắp máy 3D',
+    description: 'Xem mô hình máy và làm theo hướng dẫn từng bước.',
+    links: [
+      { label: 'Xem mô hình 3D', href: '#' },
+      { label: 'Hướng dẫn lắp máy', href: '#' },
+    ],
+  },
+  {
+    label: 'Nghiên cứu',
+    description: 'Dành cho người tham gia thử nghiệm của nhóm.',
+    links: [{ label: 'Nhập mã tham gia', href: '#' }],
+  },
+]
+
+/**
+ * Màn giới thiệu: thanh CardNav, nền MicroSlats phản ứng theo con trỏ, chữ "Create your own PC" bằng TechText,
+ * ô chat ngay dưới. Lớp phủ mờ giữa màn giữ chữ dễ đọc trên nền sóng.
+ */
+function Intro({
+  dark,
+  draft,
+  setDraft,
+  ask,
+  busy,
+  inputRef,
+  soundButton,
+}: {
+  dark: boolean
+  draft: string
+  setDraft: (v: string) => void
+  ask: () => void
+  busy: boolean
+  inputRef: RefObject<HTMLTextAreaElement | null>
+  soundButton: React.ReactNode
+}) {
+  const setPage = useViewer((s) => s.setPage)
+  const setGuide = useViewer((s) => s.setGuide)
+  const openStudy = useStudy((s) => s.open)
+  const fill = (text: string) => {
+    setDraft(text)
+    inputRef.current?.focus()
+  }
+  const onLink = (link: CardNavLink, _item: CardNavItem, event: MouseEvent<HTMLElement>) => {
+    event.preventDefault()
+    const example = ['Sinh viên, 12 triệu', 'Chơi game, 25 triệu', 'Dựng video, trên 40 triệu'].indexOf(link.label)
+    if (example >= 0) fill(EXAMPLES[example])
+    else if (link.label === 'Xem mô hình 3D') setPage('build')
+    else if (link.label === 'Hướng dẫn lắp máy') {
+      setGuide(true)
+      setPage('build')
+    } else if (link.label === 'Nhập mã tham gia') openStudy('join')
+  }
+
+  return (
+    <div className="relative h-full overflow-hidden bg-canvas">
+      <div aria-hidden className="absolute inset-0">
+        <MicroSlats
+          preset="swell"
+          color={dark ? '#0a4fa3' : '#c4daf5'}
+          glintColor={dark ? '#7cb8ff' : '#0071e3'}
+          backgroundColor={dark ? '#111113' : '#f5f5f7'}
+          slatWidth={9}
+          slatHeight={22}
+          gap={3}
+          cursorStrength={1.2}
+          cursorSize={50}
+        />
+      </div>
+      {/* Lớp phủ: giữa màn (chỗ chữ và ô chat) gần như màu nền, ra mép mới thấy rõ sóng */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 62% 72% at 50% 50%, var(--color-canvas) 0%, color-mix(in srgb, var(--color-canvas) 88%, transparent) 45%, color-mix(in srgb, var(--color-canvas) 20%, transparent) 100%)',
+        }}
+      />
+
+      <div className="relative flex h-full flex-col overflow-y-auto">
+        <div className="relative z-20 shrink-0 px-4 pt-4">
+          <CardNav
+            logo={<span className="text-[15px] font-semibold tracking-[-0.01em]">SmartCare PC</span>}
+            logoAlt="SmartCare PC"
+            items={NAV_ITEMS}
+            theme={dark ? 'dark' : 'light'}
+            surface="glass"
+            accentColor={dark ? '#2997ff' : '#0071e3'}
+            maxWidth={820}
+            cardHeight={150}
+            cta={{ label: 'Bắt đầu', onClick: () => inputRef.current?.focus() }}
+            onLinkClick={onLink}
+            ariaLabel="Điều hướng"
+          />
+        </div>
+        <div className="absolute top-5 right-5 z-30 hidden xl:block">{soundButton}</div>
+
+        <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center px-5 pt-6 pb-10 md:px-10">
+          <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">SmartCare PC · trợ lý build máy</p>
+          <h1 className="mt-2 text-ink">
+            <span className="sr-only">Create your own PC</span>
+            <div aria-hidden className="h-[clamp(84px,13vw,150px)] w-full">
+              <TechText
+                text="Create your own PC"
+                fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
+                fontWeight={700}
+                fontSize={120}
+                letterSpacing={-0.04}
+                color="currentColor"
+                accentColor={dark ? '#2997ff' : '#0071e3'}
+                intro="assemble"
+                introDuration={1.6}
+                draggable={false}
+              />
+            </div>
+          </h1>
+          <p className="mx-auto mt-2 max-w-[48ch] text-center text-[16px] leading-[1.5] text-ink-2">
+            Kể nhu cầu bằng lời của bạn. Trợ lý sẽ chọn linh kiện, so giá ở các cửa hàng và kiểm tra chúng có lắp chung được không.
+          </p>
+          <div className="mt-7">
+            <Composer
+              big
+              value={draft}
+              onChange={setDraft}
+              onSend={ask}
+              busy={busy}
+              inputRef={inputRef}
+              placeholder="Ví dụ: mình học thiết kế, có khoảng 20 triệu, muốn máy êm và không quá to"
+            />
+          </div>
+
+          <p className="mt-6 px-1 text-[13px] text-ink-2">Chưa biết kể thế nào? Bấm một ví dụ rồi sửa lại cho đúng ý bạn.</p>
+          <ul className="mt-2 space-y-1">
+            {EXAMPLES.map((ex) => (
+              <li key={ex}>
+                <button
+                  onClick={() => fill(ex)}
+                  className={`group flex w-full items-start gap-2.5 rounded-xl px-1 py-1.5 text-left text-[15px] leading-[1.45] text-ink hover:text-link ${focus}`}
+                >
+                  <ArrowRight size={14} aria-hidden className="mt-[5px] shrink-0 text-ink-3 group-hover:text-link" />
+                  {ex}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-6 flex items-center justify-between gap-3 px-1">
+            <StudyJoinLink className="text-left" />
+            <span className="xl:hidden">{soundButton}</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
