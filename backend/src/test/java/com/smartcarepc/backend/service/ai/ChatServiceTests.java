@@ -569,6 +569,37 @@ class ChatServiceTests {
     }
 
     @Test
+    void hetHangThiTimDungSanPhamOCuaHangKhac() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var at = java.time.Instant.parse("2026-10-21T10:00:00Z");
+        var pick = new ProductSearch.Product("Card Gigabyte RTX 4060 WINDFORCE OC 8G", "GEARVN", 7_900_000L, "https://gearvn.com/products/4060", null);
+        when(search.search("RTX 4060")).thenReturn(List.of(pick,
+                new ProductSearch.Product("Card MSI RTX 4060 Ventus 2X 8G", "GEARVN", 8_000_000L, "https://gearvn.com/products/msi-4060", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        // GEARVN hết hàng card đã chọn; An Phát còn đúng card đó; card MSI khác cũng còn hàng nhưng là sản phẩm khác
+        when(search.offer("https://gearvn.com/products/4060")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                pick.title(), "GEARVN", 7_900_000L, null, pick.url(), null, false, null, at));
+        when(search.offer("https://gearvn.com/products/msi-4060")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "Card MSI RTX 4060 Ventus 2X 8G", "GEARVN", 8_000_000L, null, "https://gearvn.com/products/msi-4060", null, true, null, at));
+        var anphat = new ProductSearch.Product("VGA Gigabyte RTX 4060 WINDFORCE OC 8GB", "An Phát", 7_950_000L, "https://www.anphatpc.com.vn/gigabyte-4060.html", null);
+        when(search.sameModelElsewhere(any())).thenReturn(List.of(anphat));
+        when(search.offer(anphat.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                anphat.title(), "An Phát", 7_950_000L, null, anphat.url(), null, true, 36, at));
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX 4060\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"gpu_280","spec":"RTX 4060","reason":"Chơi game","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
+
+        assertThat(line.productName()).isEqualTo("VGA Gigabyte RTX 4060 WINDFORCE OC 8GB");
+        assertThat(line.shop()).isEqualTo("An Phát");
+        assertThat(line.inStock()).isTrue();
+    }
+
+    @Test
     void tranGiaTheoPhuongAn() {
         // Rẻ: tối đa 90% ngân sách; Phù hợp: đúng ngân sách; Chất lượng: + 3 triệu
         assertThat(ChatService.tierCap(25_000_000L, "cheap")).isEqualTo(22_500_000L);

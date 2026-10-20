@@ -94,6 +94,22 @@ public class ProductSearch {
                 .toList();
     }
 
+    /**
+     * Đúng sản phẩm này (cùng model, PriceEngine.sameModel) ở các cửa hàng khác, đọc thẳng web cửa hàng: dùng khi cửa
+     * hàng đang chọn hết hàng hoặc không có trang bán. Còn hàng trước, rẻ trước; bỏ món đã biết hết hàng.
+     */
+    public List<Product> sameModelElsewhere(Product pick) {
+        if (!engine.enabled() || pick == null || pick.title() == null) return List.of();
+        String self = PriceEngine.clean(pick.url());
+        return engine.search(shortTitle(pick.title())).stream()
+                .filter(o -> o.priceVnd() != null && !Boolean.FALSE.equals(o.inStock()) && !PriceEngine.clean(o.url()).equals(self))
+                .filter(o -> PriceEngine.sameModel(pick.title(), o.title()))
+                .sorted(java.util.Comparator.comparingInt((Offer o) -> Boolean.TRUE.equals(o.inStock()) ? 0 : 1)
+                        .thenComparingLong(Offer::priceVnd))
+                .map(o -> new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl()))
+                .toList();
+    }
+
     /** Thông tin engine đọc được về link (còn hàng, bảo hành, lúc kiểm tra), null nếu link không do engine tìm */
     public Offer offer(String url) {
         return engine.offer(url);

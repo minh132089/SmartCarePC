@@ -121,6 +121,24 @@ public class ChatService {
 
     /** Luật chung cho cả hai trang */
     private static final String RULES = """
+            TỐI ƯU GIÁ TRỊ (skill của app, docs/pc_value_optimization_skill.md): tìm cấu hình tương thích, đủ nhu cầu, \
+            đáng tin cậy và có tổng chi phí sở hữu thấp, KHÔNG đơn giản là giá niêm yết thấp nhất.
+            - Xác định nhu cầu tối thiểu trước (game nào, độ phân giải, livestream, dựng phim, AI cần bao nhiêu VRAM) rồi \
+            mới chọn; không mua thừa hiệu năng.
+            - CPU + bo: tính giá nền tảng = CPU + bo + RAM + tản, không so giá CPU riêng; không trả thêm cho chipset cao \
+            cấp nếu không dùng tính năng của nó; CPU nhiều nhân hơn không mặc định tốt hơn cho game.
+            - Card đồ họa: chọn theo hiệu năng ở độ phân giải người dùng chơi; AI chạy máy thì ưu tiên VRAM.
+            - RAM: đủ dung lượng trước rồi mới tới bus; ưu tiên 2 thanh; không mua kit đắt nếu hiệu năng tăng không đáng kể.
+            - SSD: NVMe Gen3 / Gen4 tốt là đủ cho học, văn phòng, game; không chọn chỉ theo tốc độ đọc quảng cáo.
+            - Nguồn: KHÔNG hạ chuẩn nguồn hay bảo hành để tiết kiệm; chừa khoảng 20 - 30% công suất; 80 Plus chỉ là hiệu \
+            suất, không phải bằng chứng chất lượng; ưu tiên hãng có tiếng và bảo hành dài.
+            - Tản: không chọn tản nước đắt khi tản khí đủ (trừ khi vỏ đã chọn đi kèm tản nước theo luật vỏ ở bước 3).
+            - Hai món hiệu năng gần như nhau: chọn món tổng rẻ hơn và bảo hành dài hơn (warranty_months), còn hàng.
+            - Không đề xuất hàng cũ trừ khi người dùng muốn. Không bịa giá, link, tồn kho, benchmark; món verified = false \
+            là giá tham khảo.
+            - Trong câu trả lời, nếu có, nêu MỘT cách tiết kiệm: đổi món nào, bớt được khoảng bao nhiêu, đánh đổi gì.
+            Phương án "Chất lượng" ưu tiên bền, bảo hành dài và dễ nâng cấp sau này (vd bo nhiều khe, nguồn dư công suất).
+
             LUẬT LẮP PC (theo bộ luật chuẩn của app, docs/pc_compatibility_rules.md). Kiểm tra theo TÊN SẢN PHẨM THẬT \
             đã chọn: search_products có trường specs đọc sẵn socket / chipset / loại RAM. Mức độ:
             - Ưu tiên món verified = true (giá và link đã kiểm tra trên trang cửa hàng). Món verified = false có giá \
@@ -758,9 +776,17 @@ public class ChatService {
                     .toList();
             String spec = text(details.getOrDefault(code, Map.of()).get("spec"));
             fixes.put(code, Io.async(() -> {
-                // Thứ tự ưu tiên: còn hàng + giá đã kiểm tra trên trang; giá đã kiểm tra; có trang sản phẩm. Món đang
-                // chọn không thua món thay thế thì giữ nguyên
-                var best = bestLinked(candidates, now);
+                // 1. Đúng sản phẩm đã chọn nhưng ở cửa hàng khác (hết hàng / không có trang bán ở cửa hàng này): giữ
+                //    nguyên lựa chọn của trợ lý, chỉ đổi nơi mua
+                var sameElsewhere = search.sameModelElsewhere(pick).stream()
+                        .filter(c -> was[1] == null || price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1] <= allowance)
+                        .toList();
+                var same = bestLinked(sameElsewhere, now);
+                if (same != null && rank(same.url()) == 3) return same;
+                // 2. Sản phẩm khác cùng nhóm. Thứ tự ưu tiên: còn hàng + giá đã kiểm tra trên trang; giá đã kiểm tra;
+                //    có trang sản phẩm. Món đang chọn không thua món thay thế thì giữ nguyên
+                var best = bestLinked(candidates, same != null ? same.url() : now);
+                if (best == null) best = same;
                 if (best != null || now != null) return best;
                 // Không món nào trong nhóm có trang bán: tự tìm thêm theo thông số (app đi tìm, không bắt người dùng tìm)
                 String query = spec != null ? spec : ProductSearch.shortTitle(pick.title());
