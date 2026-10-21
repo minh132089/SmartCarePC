@@ -643,11 +643,17 @@ public class ChatService {
             if (lowOk || over && lowTotal < total(c.request(), c.details(), c.picks()) && productIssues(low.picks()).isEmpty()) c = low;
         }
         // Máy game vẫn vượt trần: thử cả bộ trên mẫu vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt), chỉ nhận khi hiện được
-        if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap) {
+        // Chỉ khi vượt không quá COMPACT_GAP (bo mATX + tản khí rẻ hơn bo ATX + tản nước cỡ 1 - 4 triệu): vượt xa hơn thì đổi
+        // vỏ cũng không vào trần, khỏi tốn vài chục lượt tìm
+        if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap
+                && total(c.request(), c.details(), c.picks()) - cap <= COMPACT_GAP) {
             c = compactSwitch(c, tier, cap, needs, aiTitles, notes);
         }
         return c;
     }
+
+    /** Khoản vượt trần tối đa còn đáng thử chuyển sang vỏ nhỏ gọn */
+    static final long COMPACT_GAP = 4_500_000;
 
     /** Vỏ có mẫu 3D bo ATX được thử chuyển sang mẫu nhỏ gọn (vỏ Mini / nhỏ gọn thì không) */
     private static final java.util.Set<String> ATX_CASES = java.util.Set.of("case_standard_tower", "case_gaming",

@@ -293,7 +293,8 @@ public class PriceEngine {
         var running = inFlight.putIfAbsent(key, mine);
         if (running != null) {
             try {
-                return running.get(DEADLINE.toMillis() * 3, TimeUnit.MILLISECONDS);
+                // Lượt đang chạy có thể phải chờ tới lượt (SLOT_WAIT) rồi mới tìm (tới vài lần DEADLINE)
+                return running.get(SLOT_WAIT.toMillis() + DEADLINE.toMillis() * 3, TimeUnit.MILLISECONDS);
             } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
                 return List.of();
             } catch (InterruptedException e) {
@@ -302,19 +303,39 @@ public class PriceEngine {
             }
         }
         List<Offer> found = List.of();
+        boolean slot = false;
         try {
+            // Tối đa SEARCH_SLOTS lượt tìm mới chạy cùng lúc: mỗi lượt mở trang tìm kiếm của mọi cửa hàng, chạy quá nhiều
+            // thì hàng đợi giãn cách theo cửa hàng dồn lại, lượt nào cũng hết giờ (ca thật v13: 64/98 lượt rỗng ~8,3 giây)
+            long w0 = System.nanoTime();
+            slot = slots.tryAcquire(SLOT_WAIT.toMillis(), TimeUnit.MILLISECONDS);
+            if (!slot) {
+                log.info("So giá \"{}\": chờ lượt quá {} ms, bỏ qua", query, SLOT_WAIT.toMillis());
+                return found;
+            }
+            long waited = (System.nanoTime() - w0) / 1_000_000;
             long t0 = System.nanoTime();
             found = fresh(query);
+            if (waited > 1000) log.info("So giá \"{}\": chờ lượt {} ms", query, waited);
             log.info("So giá \"{}\": {} sản phẩm trong {} ms", query, found.size(), (System.nanoTime() - t0) / 1_000_000);
             if (cache.size() > 500) cache.clear();
             // Kết quả rỗng chỉ nhớ EMPTY_CACHE (có thể là cửa hàng chậm nhất thời), có hàng nhớ CACHE
             cache.put(key, new Cached(Instant.now(), found));
             return found;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return found;
         } finally {
+            if (slot) slots.release();
             mine.complete(found);
             inFlight.remove(key, mine);
         }
     }
+
+    /** Số lượt tìm mới chạy cùng lúc, và thời gian tối đa chờ tới lượt */
+    static final int SEARCH_SLOTS = 4;
+    static final Duration SLOT_WAIT = Duration.ofSeconds(25);
+    private final java.util.concurrent.Semaphore slots = new java.util.concurrent.Semaphore(SEARCH_SLOTS, true);
 
     /** Từ khoá đang tìm -> kết quả sắp có (gộp các lượt tìm trùng chạy cùng lúc) */
     private final Map<String, CompletableFuture<List<Offer>>> inFlight = new ConcurrentHashMap<>();
