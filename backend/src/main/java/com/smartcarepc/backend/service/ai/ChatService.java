@@ -806,6 +806,21 @@ public class ChatService {
         var req = new BuildCheckRequest(items);
         Checked trial = new Checked(req, c.result(), details, c.summary(), c.budgetVnd(), picks, links, siblings);
         trial = normalized(withPagePrices(withLinkedPicks(trial, tier, cap)), aiTitles);
+        List<String> trialNotes = new ArrayList<>();
+        // Bộ nhỏ gọn còn vượt: ép giá hàng cùng thông số một lượt, rồi hạ card (cùng hãng, đủ VRAM) trên bản thử
+        if (cap != null && total(trial.request(), trial.details(), trial.picks()) > cap) {
+            Map<String, ProductSearch.Product> tp = new LinkedHashMap<>(trial.picks());
+            Map<String, CompletableFuture<String>> tl = new LinkedHashMap<>(trial.links());
+            Map<String, Map<String, Object>> td = new LinkedHashMap<>();
+            trial.details().forEach((k, d) -> td.put(k, new LinkedHashMap<>(d)));
+            if (!fitCap(trial.request(), td, tp, tl, trial.siblings(), cap).isEmpty()) {
+                trial = normalized(withPagePrices(new Checked(trial.request(), trial.result(), td, trial.summary(), trial.budgetVnd(), tp, tl,
+                        trial.siblings())), aiTitles);
+            }
+        }
+        if (cap != null && total(trial.request(), trial.details(), trial.picks()) > cap) {
+            trial = normalized(withPagePrices(lowerGpu(trial, cap, needs, trialNotes)), aiTitles);
+        }
         var r = withoutFalseGpuError(ModelMatchService.merge(compatibilityService.check(trial.request()), modelMatch.check(trial.request()).errors()),
                 trial.picks());
         trial = new Checked(trial.request(), r, trial.details(), trial.summary(), trial.budgetVnd(), trial.picks(), trial.links(), trial.siblings());
@@ -816,6 +831,7 @@ public class ChatService {
             return c;
         }
         log.info("Vượt trần {}: chuyển phương án {} sang vỏ nhỏ gọn (bo Micro-ATX), tổng {} -> {}", cap, tier, was, now);
+        notes.addAll(trialNotes);
         var casePick = trial.picks().get("case_compact_tower");
         boolean glassOk = !needs.glass() || casePick != null && glass(casePick.title());
         notes.add("Chuyển sang vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt) để vừa ngân sách"
@@ -1803,8 +1819,16 @@ public class ChatService {
 
     /** Nguồn chuẩn SFX / SFX-L (cho vỏ nhỏ) */
     static boolean sfx(String title) {
-        return title != null && title.toLowerCase().matches(".*\\bsfx\\b.*");
+        if (title == null) return false;
+        String t = title.toLowerCase();
+        // SFX-L dài hơn SFX, mẫu 3D vỏ Mini chưa chứng minh chứa được: không tính là SFX
+        if (t.matches(".*\\bsfx[\\s-]?l\\b.*")) return false;
+        // Model SFX đã xác minh mà tên cửa hàng hay bỏ chữ SFX (Corsair SF600, SilverStone SX500-G)
+        return t.matches(".*\\bsfx\\b.*") || SFX_MODELS.matcher(t).find();
     }
+
+    private static final java.util.regex.Pattern SFX_MODELS = java.util.regex.Pattern.compile(
+            "corsair.*\\bsf(450|600|750|850|1000)\\b|silverstone.*\\bsx(500|550|650|700|750|1000)(-g)?\\b|cooler\\s*master.*\\bv(550|650|750|850)\\s*sfx");
 
     /** Dung lượng RAM / SSD (GB) hoặc công suất nguồn (W) đọc từ tên sản phẩm, null nếu không đọc được */
     static Integer amount(String category, String title) {
@@ -2195,7 +2219,8 @@ public class ChatService {
             "case_compact_tower", List.of("vỏ máy tính mATX", "vỏ case micro ATX giá rẻ"),
             "case_mini_sff", List.of("case Cooler Master NR200P", "vỏ case SilverStone SG13", "vỏ máy tính mini ITX", "case ITX SFX", "vỏ case ITX"),
             "low_profile_47", List.of("tản nhiệt low profile", "tản nhiệt CPU thấp", "tản nhiệt Noctua NH-L9", "tản nhiệt ID-COOLING IS-40X"),
-            "psu_sfx", List.of("nguồn SFX", "nguồn SFX 80 Plus", "PSU SFX 600W"),
+            "psu_sfx", List.of("nguồn Cooler Master V550 SFX Gold", "nguồn Corsair SF600", "nguồn SilverStone SX500-G", "nguồn SFX",
+                    "nguồn SFX 80 Plus", "PSU SFX 600W"),
             "mb_itx", List.of("mainboard mini ITX", "bo mạch chủ ITX"));
 
     /** Từ khoá tìm thêm cho một dòng chưa có link: hàng phổ thông (BUDGET_QUERIES) và bo ITX / mATX theo socket CPU đã chọn */
@@ -2240,6 +2265,8 @@ public class ChatService {
             String ddr = ProductRules.read("motherboard", now.title()).ramType();
             if (chip != null) out.add("mainboard " + chip + (ddr == null ? "" : " " + ddr));
         }
+        // Bo ITX: thêm mã chipset ITX rẻ theo socket (H610I, A520I...) để ép giá / tìm hàng rẻ hơn cùng cỡ
+        if ("mb_itx".equals(code)) lineQueries(code, picks).forEach(x -> { if (!out.contains(x)) out.add(x); });
         if ("gpu".equals(category) && now != null) {
             gpuUpgrades(gpuChip(now.title())).stream().limit(2).forEach(chip -> {
                 var m = java.util.regex.Pattern.compile("^(rtx|gtx|rx|arc)(.*)$").matcher(chip);
@@ -2856,20 +2883,28 @@ public class ChatService {
             try {
                 pool.addAll(search.search(q));
                 pool.addAll(search.engineSearch(q));
+                // Thêm từ khoá kèm VRAM ("VGA RX 6600 8GB"): tìm theo chip trơn hay ra ít kết quả
+                pool.addAll(search.search(q + " " + floor + "GB"));
             } catch (RuntimeException e) {
                 log.debug("Tìm \"{}\" lỗi: {}", q, e.getMessage());
             }
+            Map<String, Integer> rejected = new java.util.TreeMap<>();
             var list = pool.stream()
-                    .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() <= maxPrice && !JUNK.matcher(p.title()).find())
-                    .filter(p -> other.equals(gpuChip(p.title())) && vram(p.title()) != null && vram(p.title()) >= floor)
-                    .filter(p -> ofKind("gpu", p.title()) && !recentlyNoLink(p) && swapOk(code, p, picks))
+                    .filter(p -> {
+                        String why = p.title() == null || p.priceVnd() == null ? "thiếu tên/giá" : JUNK.matcher(p.title()).find() ? "hàng cũ"
+                                : !other.equals(gpuChip(p.title())) ? "khác chip" : vram(p.title()) == null ? "không ghi VRAM"
+                                : vram(p.title()) < floor ? "thiếu VRAM" : p.priceVnd() > maxPrice ? "vượt giá"
+                                : !ofKind("gpu", p.title()) ? "sai loại" : recentlyNoLink(p) ? "vừa không có link"
+                                : !swapOk(code, p, picks) ? "sai cỡ / lỗi lắp" : stockOrder(p) >= 2 ? "hết hàng" : null;
+                        if (why != null) rejected.merge(why, 1, Integer::sum);
+                        return why == null;
+                    })
                     .filter(distinctUrl())
-                    .filter(p -> stockOrder(p) < 2)
                     .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                     .toList();
             var found = bestLinked(list, null, 8);
-            log.info("Thử chip {} cho dòng {} (thay {}): {} kết quả, {} qua lọc (VRAM >= {}, giá <= {}), {}", other, code, chip, pool.size(),
-                    list.size(), floor, maxPrice == Long.MAX_VALUE ? "-" : maxPrice,
+            log.info("Thử chip {} cho dòng {} (thay {}): {} kết quả, {} qua lọc (VRAM >= {}, giá <= {}), loại {}, {}", other, code, chip, pool.size(),
+                    list.size(), floor, maxPrice == Long.MAX_VALUE ? "-" : maxPrice, rejected,
                     found == null ? "không có link" : rank(found.url()) == 3 ? "có link còn hàng" : "link chưa rõ còn hàng");
             if (found != null && rank(found.url()) == 3) return found;
         }

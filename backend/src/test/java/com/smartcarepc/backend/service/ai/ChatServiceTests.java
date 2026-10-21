@@ -1684,6 +1684,10 @@ class ChatServiceTests {
         assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Case Mini Silverstone Sugo 13 Black SST-SG13B-Q")).as("tên mẫu ITX").isTrue();
         assertThat(ChatService.fitsCode("case_compact_tower", "Vỏ Case Mini Silverstone Sugo 13 Black SST-SG13B-Q")).isFalse();
         assertThat(ChatService.fitsCode("mb_itx", "Bo mạch chủ ASRock B760M-ITX/D4")).isTrue();
+        assertThat(ChatService.fitsCode("psu_sfx", "Nguồn Corsair SF600 600W 80 Plus Platinum")).as("model SFX không ghi chữ SFX").isTrue();
+        assertThat(ChatService.fitsCode("psu_sfx", "Nguồn SilverStone SX500-G 500W Gold")).isTrue();
+        assertThat(ChatService.fitsCode("psu_sfx", "Nguồn Cooler Master V850 SFX-L Gold")).as("SFX-L dài hơn mẫu 3D").isFalse();
+        assertThat(ChatService.fitsCode("psu_sfx", "Nguồn FSP HV PRO 650W 80 Plus Bronze")).isFalse();
     }
 
     @Test
