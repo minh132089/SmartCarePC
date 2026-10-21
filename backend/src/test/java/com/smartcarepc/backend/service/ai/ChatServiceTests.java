@@ -1093,7 +1093,7 @@ class ChatServiceTests {
         assertThat(ChatService.needs(List.of("Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.")))
                 .isEqualTo(new ChatService.Needs(8, 256));
         assertThat(ChatService.needs(List.of("Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu")))
-                .isEqualTo(new ChatService.Needs(16, 512));
+                .isEqualTo(new ChatService.Needs(16, 512, 8));
         assertThat(ChatService.needs(List.of("học online, cần RAM 16GB và SSD 1TB"))).isEqualTo(new ChatService.Needs(16, 1000));
         assertThat(ChatService.needs(List.of("xin chào"))).isNull();
     }
@@ -1269,6 +1269,19 @@ class ChatServiceTests {
         var r3060 = new ProductSearch.Product("Card Gigabyte GeForce RTX 3060 12GB", "C", 7_000_000L, "https://c.vn/1", null);
         assertThat(ChatService.equivalents("gpu", now, List.of(msi, ti, r3060), false, false, false)).containsExactly(msi);
         assertThat(ChatService.vram("Card MSI GeForce RTX 4060 Ventus 2X 8G")).isEqualTo(8);
+    }
+
+    @Test
+    void cardDoiSangChipManhHonReHonKhiDuVram() {
+        // v11 game: Ninja RTX 3060 12GB 9,2 triệu trong mọi lần vượt trần, RTX 4060 8GB 7,79 triệu mạnh hơn mà rẻ hơn
+        var now = new ProductSearch.Product("Ninja GeForce RTX 3060 12GB GDDR6", "A", 9_200_000L, "https://a.vn/3060", null);
+        var r4060 = new ProductSearch.Product("Card MSI GeForce RTX 4060 Ventus 2X 8G", "B", 7_790_000L, "https://b.vn/4060", null);
+        var r3050 = new ProductSearch.Product("Card MSI GeForce RTX 3050 Ventus 2X 6G", "B", 5_000_000L, "https://b.vn/3050", null);
+        var r4070 = new ProductSearch.Product("Card Asus RTX 4070 Dual 12G", "B", 8_000_000L, "https://b.vn/4070", null);
+        // Game Full HD (VRAM tối thiểu 8GB): được lên 4060; không xuống 3050; không nhảy quá 15 hạng (4070)
+        assertThat(ChatService.equivalents("gpu", now, List.of(r4060, r3050, r4070), false, false, false, 8)).containsExactly(r4060);
+        // Đồ họa / không cho đổi chip (vramMin null): chỉ cùng chip
+        assertThat(ChatService.equivalents("gpu", now, List.of(r4060), false, false, false, null)).isEmpty();
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------

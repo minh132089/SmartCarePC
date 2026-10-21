@@ -86,7 +86,8 @@ public class ChatService {
             5. Sau lượt tìm kiếm, đưa BA PHƯƠNG ÁN để người dùng so sánh: gọi propose_build ba lần TRONG CÙNG MỘT LƯỢT \
             (song song), mỗi lần một tier:
                - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, phải rẻ hơn rõ rệt: tổng TỐI ĐA 90% ngân sách. Bạn \
-            chỉ cần chọn thông số tối thiểu đủ dùng (vd RAM 8 GB, SSD 256 GB, nguồn 450W) và vỏ rẻ: app tự đổi từng món \
+            chỉ cần chọn thông số tối thiểu đủ dùng (vd máy học: RAM 8 GB, SSD 256 GB, nguồn 450W; máy game: RAM 16 GB, SSD \
+            512 GB, card hiệu năng trên giá tốt nhất trong kết quả tìm, vd RTX 4060 thường rẻ hơn mà mạnh hơn RTX 3060 12GB) và vỏ rẻ: app tự đổi từng món \
             sang hàng rẻ nhất cùng thông số trong kết quả tìm kiếm (xem cheap_swaps). Máy game / đồ họa có card rời: tier \
             cheap ưu tiên vỏ Tower nhỏ gọn (bo Micro-ATX như B760M / B650M / B550M, tản khí, card 2 quạt, nguồn ATX) vì bo \
             Micro-ATX rẻ hơn bo ATX 1 - 2 triệu; người dùng thích kính thì tìm vỏ Micro-ATX CÓ kính (vd "vỏ mATX kính cường lực"). \
@@ -640,7 +641,10 @@ public class ChatService {
     }
 
     /** Dung lượng tối thiểu (GB) app được hạ RAM / SSD xuống khi vượt trần; null là không hạ món đó */
-    record Needs(Integer ramMin, Integer ssdMin) {
+    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin) {
+        Needs(Integer ramMin, Integer ssdMin) {
+            this(ramMin, ssdMin, null);
+        }
     }
 
     private static final java.util.regex.Pattern RAM_ASKED = java.util.regex.Pattern.compile(
@@ -663,10 +667,14 @@ public class ChatService {
             int v = Integer.parseInt(d.group(1) != null ? d.group(1) : d.group(3));
             ssd = "tb".equalsIgnoreCase(d.group(2) != null ? d.group(2) : d.group(4)) ? v * 1000 : v;
         }
-        boolean heavy = all.matches(".*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|premiere|game|chơi|stream).*");
+        boolean creator = all.matches(".*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|premiere).*");
+        boolean game = all.matches(".*(game|chơi|stream).*");
+        boolean heavy = creator || game;
         boolean light = all.matches(".*(học|văn phòng|word|excel|online|lướt web|xem phim|kế toán).*");
         if (!heavy && !light && ram == null && ssd == null) return null;
-        return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256);
+        // Card: máy game Full HD đổi được sang chip ngang / mạnh hơn rẻ hơn nếu VRAM >= 8GB; máy đồ họa / dựng video không
+        // giảm VRAM (null: chỉ đổi cùng chip, cùng VRAM)
+        return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256, game && !creator ? 8 : null);
     }
 
     /**
@@ -1031,15 +1039,16 @@ public class ChatService {
                 // Nhóm tìm kiếm của trợ lý chỉ có hàng cùng tầm (tìm "Hyper 612" không ra tản 190 nghìn): món không ảnh
                 // hưởng hiệu năng thì tìm thêm bằng từ khoá chung để có hàng rẻ hơn cùng thông số
                 List<ProductSearch.Product> group = new ArrayList<>(siblings.getOrDefault(code, List.of()));
-                String generic = CHEAP_WIDEN.contains(category) ? widenQuery(code, category, now, picks) : null;
-                if (generic != null) {
+                List<String> generic = CHEAP_WIDEN.contains(category) ? widenQueries(code, category, now, picks) : List.of();
+            Integer vramMin = details.getOrDefault(code, Map.of()).get("vram_min") instanceof Number v ? v.intValue() : null;
+                for (String q : generic) {
                     try {
-                        group.addAll(search.search(generic));
+                        group.addAll(search.search(q));
                     } catch (RuntimeException e) {
-                        log.debug("Tìm thêm \"{}\" lỗi: {}", generic, e.getMessage());
+                        log.debug("Tìm thêm \"{}\" lỗi: {}", q, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks));
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks), vramMin);
             }));
         }
         for (var f : found.entrySet()) {
@@ -1086,6 +1095,12 @@ public class ChatService {
      */
     static List<ProductSearch.Product> equivalents(String category, ProductSearch.Product now, List<ProductSearch.Product> group,
             boolean kit, boolean cheap, boolean noGpu) {
+        return equivalents(category, now, group, kit, cheap, noGpu, null);
+    }
+
+    /** vramMin: khác null thì card được đổi sang chip ngang / mạnh hơn (GPU_RANK) có VRAM ít nhất từng này */
+    static List<ProductSearch.Product> equivalents(String category, ProductSearch.Product now, List<ProductSearch.Product> group,
+            boolean kit, boolean cheap, boolean noGpu, Integer vramMin) {
         if (now == null || now.priceVnd() == null || now.title() == null) return List.of();
         Integer need = amount(category, now.title());
         String nowKind = com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(now.title()));
@@ -1098,6 +1113,15 @@ public class ChatService {
                     return nowKind == null || k == null || nowKind.equals(k);
                 })
                 .filter(s -> {
+                    // Card xét trước nhánh cùng model: cùng chip thì phải cùng VRAM (khi cả hai ghi); chip khác chỉ được khi
+                    // ngang / mạnh hơn theo GPU_RANK (tối đa 15 hạng) và đủ VRAM tối thiểu theo nhu cầu
+                    if ("gpu".equals(category)) {
+                        String a = gpuChip(now.title()), b = gpuChip(s.title());
+                        Integer va = vram(now.title()), vb = vram(s.title());
+                        if (a == null || b == null) return false;
+                        if (a.equals(b)) return va == null || vb == null || va.equals(vb);
+                        return vramMin != null && vb != null && vb >= vramMin && gpuUpgrades(a).contains(b);
+                    }
                     if (com.smartcarepc.backend.service.price.PriceEngine.sameModel(now.title(), s.title())) return true;
                     if (cheap && "motherboard".equals(category)) return looseBoard(now.title(), s.title());
                     if (cheap && noGpu && "psu".equals(category)) {
@@ -1106,13 +1130,6 @@ public class ChatService {
                     }
                     // CPU: tên ở mỗi cửa hàng kèm thông số khác nhau ("Box", "Socket 1700/ 4 Cores"), so đúng mã model
                     if ("cpu".equals(category)) return cpuModel(now.title()) != null && cpuModel(now.title()).equals(cpuModel(s.title()));
-                    // Card: hãng khác được nếu cùng chip (giữ Ti / Super / XT) và cùng VRAM khi cả hai tên ghi; cỡ mẫu 3D do
-                    // phép kiểm chung (swapOk / fitsCode) xét lúc gắn
-                    if ("gpu".equals(category)) {
-                        String a = gpuChip(now.title()), b = gpuChip(s.title());
-                        Integer va = vram(now.title()), vb = vram(s.title());
-                        return a != null && a.equals(b) && (va == null || vb == null || va.equals(vb));
-                    }
                     // Vỏ, tản, quạt: model khác được nếu cùng lớp (vỏ chứa được bo cùng cỡ và vẫn có kính nếu vỏ cũ có;
                     // tản cùng kiểu; quạt cùng cỡ)
                     if ("case".equals(category)) {
@@ -1138,10 +1155,10 @@ public class ChatService {
      * không có link thì bước "link bắt buộc" sẽ đổi lại món đắt, nên chỉ đổi sang món có link. null nếu không có.
      */
     private ProductSearch.Product cheaperLinked(String category, ProductSearch.Product now, List<ProductSearch.Product> group, boolean kit,
-            boolean cheap, boolean noGpu, java.util.function.Predicate<ProductSearch.Product> fits) {
+            boolean cheap, boolean noGpu, java.util.function.Predicate<ProductSearch.Product> fits, Integer vramMin) {
         // Lọc lắp chung / cỡ 3D TRƯỚC khi giới hạn 4 lần thử: món đầu bị loại lúc gắn thì không mất cả dòng (vd H610 hợp lệ
         // đứng sau một bo bị loại)
-        var tries = equivalents(category, now, group, kit, cheap, noGpu).stream().filter(fits).limit(4)
+        var tries = equivalents(category, now, group, kit, cheap, noGpu, vramMin).stream().filter(fits).limit(4)
                 .map(c -> Io.async(() -> {
                     String l = search.directLink(c.title(), c.shop(), c.url());
                     if (l == null || rank(l) < 1) return null;
@@ -1570,6 +1587,20 @@ public class ChatService {
      * Từ khoá tìm thêm hàng rẻ hơn cho một dòng: bo theo socket CPU đã chọn + loại DDR (vd "mainboard LGA1700 DDR4", ra cả
      * H610 lẫn B760 đúng cỡ sau bước lọc), món khác theo từ khoá chung của mã
      */
+    /** Từ khoá tìm thêm hàng rẻ hơn (widenQuery), với card thêm tối đa 2 chip ngang / mạnh hơn gần nhất (vd "VGA RTX 4060") */
+    private List<String> widenQueries(String code, String category, ProductSearch.Product now, Map<String, ProductSearch.Product> picks) {
+        List<String> out = new ArrayList<>();
+        String q = widenQuery(code, category, now, picks);
+        if (q != null) out.add(q);
+        if ("gpu".equals(category) && now != null) {
+            gpuUpgrades(gpuChip(now.title())).stream().limit(2).forEach(chip -> {
+                var m = java.util.regex.Pattern.compile("^(rtx|gtx|rx|arc)(.*)$").matcher(chip);
+                if (m.find()) out.add("VGA " + m.group(1).toUpperCase() + " " + m.group(2).toUpperCase());
+            });
+        }
+        return out;
+    }
+
     private String widenQuery(String code, String category, ProductSearch.Product now, Map<String, ProductSearch.Product> picks) {
         // Card: tìm đúng chip ở mọi hãng ("VGA RTX 4060"), không tìm chung chung
         if ("gpu".equals(category)) return now == null ? null : coreQuery("gpu", now.title());
@@ -1638,17 +1669,18 @@ public class ChatService {
             boolean isKit = kit(req, details, code);
             // Vượt trần: tìm thêm hàng rẻ hơn ngoài nhóm tìm kiếm của trợ lý (tản, nguồn, vỏ, bo theo socket...), cho đổi bo
             // khác chipset cùng socket / DDR / cỡ như phương án Rẻ (looseBoard); vẫn giữ thông số tối thiểu
-            String generic = CHEAP_WIDEN.contains(category) ? widenQuery(code, category, now, picks) : null;
+            List<String> generic = CHEAP_WIDEN.contains(category) ? widenQueries(code, category, now, picks) : List.of();
+            Integer vramMin = details.getOrDefault(code, Map.of()).get("vram_min") instanceof Number v ? v.intValue() : null;
             linked.put(code, Io.async(() -> {
                 List<ProductSearch.Product> group = new ArrayList<>(siblings.getOrDefault(code, List.of()));
-                if (generic != null) {
+                for (String q : generic) {
                     try {
-                        group.addAll(search.search(generic));
+                        group.addAll(search.search(q));
                     } catch (RuntimeException e) {
-                        log.debug("Tìm thêm \"{}\" lỗi: {}", generic, e.getMessage());
+                        log.debug("Tìm thêm \"{}\" lỗi: {}", q, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks));
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks), vramMin);
             }));
         });
         while (total(req, details, picks) > cap) {
@@ -2047,6 +2079,26 @@ public class ChatService {
             case "fans" -> fanSize(now) == null || fanSize(now).equals(fanSize(other));
             default -> true;
         };
+    }
+
+    /**
+     * Hạng hiệu năng chơi game Full HD tương đối của chip card (càng cao càng mạnh), để đổi sang chip ngang / mạnh hơn mà
+     * rẻ hơn khi vượt trần (ca thật v11: RTX 3060 12GB 9,2 triệu trong khi RTX 4060 7,8 triệu). Bảng nhỏ duyệt tay theo
+     * các bài so sánh 1080p phổ biến (cập nhật 10/2026); chip không có trong bảng thì chỉ đổi cùng chip.
+     */
+    static final Map<String, Integer> GPU_RANK = Map.ofEntries(
+            Map.entry("gtx1650", 10), Map.entry("rtx3050", 20), Map.entry("rx6600", 30), Map.entry("rtx3060", 33),
+            Map.entry("rx7600", 35), Map.entry("rx6650xt", 36), Map.entry("rtx4060", 38), Map.entry("arcb580", 40),
+            Map.entry("rx7600xt", 40), Map.entry("rtx3060ti", 42), Map.entry("rx6700xt", 44), Map.entry("rtx5060", 45),
+            Map.entry("rtx4060ti", 46), Map.entry("rtx3070", 47), Map.entry("rx9060xt", 48), Map.entry("rtx5060ti", 52),
+            Map.entry("rx7700xt", 55), Map.entry("rtx4070", 58));
+
+    /** Chip ngang hoặc mạnh hơn trong vòng 15 hạng (không nhảy lên card công suất / giá khác hẳn), gần nhất trước */
+    static List<String> gpuUpgrades(String chip) {
+        Integer r = chip == null ? null : GPU_RANK.get(chip);
+        if (r == null) return List.of();
+        return GPU_RANK.entrySet().stream().filter(e -> e.getValue() > r && e.getValue() - r <= 15)
+                .sorted(Map.Entry.comparingByValue()).map(Map.Entry::getKey).toList();
     }
 
     private static final java.util.regex.Pattern VRAM = java.util.regex.Pattern.compile("\\b(4|6|8|10|12|16|20|24)\\s*g(b)?\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
@@ -2504,6 +2556,10 @@ public class ChatService {
                     // normalized đọc user_layout); chỉ nói dung lượng thì 1 hay 2 thanh đều được
                     if (turn.advice && turn.ramLayout != null) {
                         details.forEach((code, d) -> { if ("ram".equals(categoryOf(code))) d.put("user_layout", turn.ramLayout); });
+                    }
+                    // Card: máy game được đổi sang chip ngang / mạnh hơn rẻ hơn nếu đủ VRAM tối thiểu (Needs.vramMin)
+                    if (turn.advice && turn.needs != null && turn.needs.vramMin() != null) {
+                        details.forEach((code, d) -> { if ("gpu".equals(categoryOf(code))) d.put("vram_min", turn.needs.vramMin()); });
                     }
                     // Sản phẩm đã chọn theo id; bắt đầu đổi link Google Shopping sang link cửa hàng ngay bây giờ,
                     // chạy song song trong lúc trợ lý viết câu trả lời
