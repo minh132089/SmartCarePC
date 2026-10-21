@@ -286,16 +286,40 @@ public class PriceEngine {
         }
         String key = query.strip().toLowerCase();
         var hit = cache.get(key);
-        if (hit != null && hit.at().isAfter(Instant.now().minus(CACHE))) return hit.offers();
-        long t0 = System.nanoTime();
-        var found = fresh(query);
-        log.info("So giá \"{}\": {} sản phẩm trong {} ms", query, found.size(), (System.nanoTime() - t0) / 1_000_000);
-        if (!found.isEmpty()) {
-            if (cache.size() > 500) cache.clear();
-            cache.put(key, new Cached(Instant.now(), found));
+        if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? EMPTY_CACHE : CACHE))) return hit.offers();
+        // Cùng từ khoá đang được tìm (ba phương án chốt song song hay tìm trùng, vd "tản nhiệt khí CPU" 19 lần trong một câu):
+        // chờ chung một lượt, không bắn thêm request vào cửa hàng (ca thật v10: quá tải, 272/401 lượt hết giờ, trả rỗng)
+        var mine = new CompletableFuture<List<Offer>>();
+        var running = inFlight.putIfAbsent(key, mine);
+        if (running != null) {
+            try {
+                return running.get(DEADLINE.toMillis() * 3, TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
+                return List.of();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return List.of();
+            }
         }
-        return found;
+        List<Offer> found = List.of();
+        try {
+            long t0 = System.nanoTime();
+            found = fresh(query);
+            log.info("So giá \"{}\": {} sản phẩm trong {} ms", query, found.size(), (System.nanoTime() - t0) / 1_000_000);
+            if (cache.size() > 500) cache.clear();
+            // Kết quả rỗng chỉ nhớ EMPTY_CACHE (có thể là cửa hàng chậm nhất thời), có hàng nhớ CACHE
+            cache.put(key, new Cached(Instant.now(), found));
+            return found;
+        } finally {
+            mine.complete(found);
+            inFlight.remove(key, mine);
+        }
     }
+
+    /** Từ khoá đang tìm -> kết quả sắp có (gộp các lượt tìm trùng chạy cùng lúc) */
+    private final Map<String, CompletableFuture<List<Offer>>> inFlight = new ConcurrentHashMap<>();
+    /** Kết quả rỗng chỉ nhớ ngắn: đủ để không tìm lại trong cùng một câu tư vấn, rồi thử lại */
+    static final Duration EMPTY_CACHE = Duration.ofMinutes(2);
 
     private List<Offer> fresh(String query) {
         Instant at = Instant.now();
