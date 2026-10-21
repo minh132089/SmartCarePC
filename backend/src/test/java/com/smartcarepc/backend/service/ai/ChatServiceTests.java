@@ -1201,6 +1201,44 @@ class ChatServiceTests {
         assertThat(res.reply()).contains("Phương án Phù hợp: chưa tìm được");
     }
 
+    // ---- Hồi quy vòng đo v9 (review Sol 6.1, 21/10/2026) ---------------
+
+    @Test
+    void ramHaiThanhHaXuongMotThanhCungSanPham() {
+        // v9 học sinh: RAM 2 x 16GB (6,78 triệu) cho máy học Word không hạ được vì so giá từng sản phẩm, không so tiền cả dòng
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":4000000,"items":[{"code":"ram_ddr4","quantity":2,"spec":"2x16GB DDR4","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var ram = service.reply(new ChatRequest(List.of(new Message("user", "học online Word Excel, có 4 triệu")), null, null, "advice"))
+                .build().items().getFirst();
+
+        assertThat(ram.quantity()).isEqualTo(1);
+        assertThat(ram.priceMaxVnd()).isEqualTo(3_390_000L);
+    }
+
+    @Test
+    void phuongAnKhongHienThiBaoTroLyNgay() {
+        // v9: trợ lý giới thiệu phương án đã bị ẩn vì dòng thiếu link (không được báo)
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("card")).thenReturn(List.of(new ProductSearch.Product(
+                "Card màn hình ASUS Dual GeForce RTX 4060 V2 OC Edition 8GB", "A", 7_990_000L, "https://a.vn/4060", null)));
+        reply(toolCall("s", "search_products", "{\"query\":\"card\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":25000000,"items":[{"code":"gpu_280","spec":"RTX 4060","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        service.reply(new ChatRequest(List.of(new Message("user", "game 25 triệu")), null, null, "advice"));
+
+        assertThat((String) messages(2).get(5).get("content")).contains("not_shown").contains("gpu_280");
+    }
+
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
 
     private static Map<String, Object> answer(String text) {

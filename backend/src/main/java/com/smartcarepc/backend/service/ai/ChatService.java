@@ -93,7 +93,8 @@ public class ChatService {
                - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng sát ngân sách nhưng TUYỆT ĐỐI không \
             vượt; đây là gợi ý chính;
                - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, chỉ vượt ngân sách một chút: TỐI ĐA 3 triệu.
-            LUÔN gọi đủ ba propose_build rồi mới trả lời. Phương án vượt mức tối đa của tier sẽ KHÔNG được hiển thị: \
+            LUÔN gọi đủ ba propose_build rồi mới trả lời. Chỉ giới thiệu phương án có kết quả propose_build KHÔNG kèm not_shown \
+            (not_shown: thiếu hàng có link, lắp không được hay vượt mức: app không hiển thị). Phương án vượt mức tối đa của tier sẽ KHÔNG được hiển thị: \
             báo over_budget thì hạ thông số bằng cheaper_options; báo over_budget_final thì trong câu trả lời nói rõ chưa \
             tìm được phương án đó có link mua trong mức tiền, không giới thiệu cấu hình ấy. Không được trả lời mà chưa chốt phương án. \
             Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
@@ -722,7 +723,7 @@ public class ChatService {
                 Integer target = ("ram".equals(category) ? RAM_STEPS : SSD_STEPS).stream()
                         .filter(t -> t < have * 0.95 && t >= floor).findFirst().orElse(null);
                 if (target == null) continue;
-                var found = lowerTier(code, category, now, target, picks);
+                var found = lowerTier(code, category, now, target, picks, was);
                 if (found == null || found.priceVnd() == null) continue;
                 long save = was - found.priceVnd();
                 if (save > bestSave) {
@@ -754,10 +755,12 @@ public class ChatService {
 
     /** Món RAM / SSD dung lượng target rẻ hơn món đang chọn, có link mua, đúng loại / cỡ / DDR, qua phép kiểm chung */
     private ProductSearch.Product lowerTier(String code, String category, ProductSearch.Product now, int target,
-            Map<String, ProductSearch.Product> picks) {
+            Map<String, ProductSearch.Product> picks, long lineCost) {
         String ddr = "ram".equals(category) ? ProductRules.read("ram", now.title()).ramType() : null;
         String query = "ram".equals(category) ? "RAM " + (ddr == null ? "" : ddr + " ") + target + "GB" : "SSD NVMe M.2 " + label(target);
         List<ProductSearch.Product> pool = new ArrayList<>();
+        // Chính món đang chọn cũng là ứng viên: RAM 2 thanh 16GB hạ xuống 16GB là bỏ bớt một thanh cùng sản phẩm
+        pool.add(now);
         try {
             pool.addAll(search.search(query));
             pool.addAll(search.engineSearch(query));
@@ -765,16 +768,19 @@ public class ChatService {
             log.debug("Tìm \"{}\" lỗi: {}", query, e.getMessage());
         }
         var list = pool.stream()
-                .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() < now.priceVnd() && !JUNK.matcher(p.title()).find())
+                // So với TIỀN CẢ DÒNG đang mua (số thanh / bộ x giá), không phải giá một sản phẩm (ca thật v9: RAM 2 x 16GB
+                // 6,78 triệu không hạ được vì mỗi thanh 8GB 2,19 triệu không rẻ hơn một thanh 16GB 3,39 triệu... theo giá lẻ)
+                .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() < lineCost && !JUNK.matcher(p.title()).find())
                 .filter(p -> ofKind(category, p.title()) && plausible(category, p.priceVnd()) && fitsCode(code, p.title()) && !recentlyNoLink(p))
                 .filter(p -> "ram".equals(category)
                         ? ramFits(p.title(), target, null) && Integer.valueOf(target).equals(amount("ram", p.title()))
                                 && !serverRam(p.title()) && !ProductRules.read("ram", p.title()).laptopRam()
                                 && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType()))
                         : amount("ssd", p.title()) != null && Math.abs(amount("ssd", p.title()) - target) <= target * 0.07)
-                .filter(p -> swapOk(code, p, picks))
+                .filter(p -> p == now || swapOk(code, p, picks))
                 .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                 .toList();
+        if (list.contains(now)) return now;
         return bestLinked(list, null);
     }
 
@@ -852,6 +858,12 @@ public class ChatService {
             }
         }
         return best;
+    }
+
+    /** Thứ tự thử link: món trang / kết quả tìm kiếm đã ghi còn hàng trước, chưa rõ sau, đã biết hết hàng cuối */
+    private int stockOrder(ProductSearch.Product p) {
+        var o = p == null || p.url() == null ? null : search.offer(p.url());
+        return o == null || o.inStock() == null ? 1 : o.inStock() ? 0 : 2;
     }
 
     /** 3: còn hàng + giá đã kiểm tra; 2: giá đã kiểm tra; 1: trang sản phẩm; 0: không có link / trang chủ / hết hàng */
@@ -1010,7 +1022,7 @@ public class ChatService {
                         log.debug("Tìm thêm \"{}\" lỗi: {}", generic, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu);
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks));
             }));
         }
         for (var f : found.entrySet()) {
@@ -1102,8 +1114,10 @@ public class ChatService {
      * không có link thì bước "link bắt buộc" sẽ đổi lại món đắt, nên chỉ đổi sang món có link. null nếu không có.
      */
     private ProductSearch.Product cheaperLinked(String category, ProductSearch.Product now, List<ProductSearch.Product> group, boolean kit,
-            boolean cheap, boolean noGpu) {
-        var tries = equivalents(category, now, group, kit, cheap, noGpu).stream().limit(4)
+            boolean cheap, boolean noGpu, java.util.function.Predicate<ProductSearch.Product> fits) {
+        // Lọc lắp chung / cỡ 3D TRƯỚC khi giới hạn 4 lần thử: món đầu bị loại lúc gắn thì không mất cả dòng (vd H610 hợp lệ
+        // đứng sau một bo bị loại)
+        var tries = equivalents(category, now, group, kit, cheap, noGpu).stream().filter(fits).limit(4)
                 .map(c -> Io.async(() -> {
                     String l = search.directLink(c.title(), c.shop(), c.url());
                     if (l == null || rank(l) < 1) return null;
@@ -1608,7 +1622,7 @@ public class ChatService {
                         log.debug("Tìm thêm \"{}\" lỗi: {}", generic, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu);
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks));
             }));
         });
         while (total(req, details, picks) > cap) {
@@ -2287,8 +2301,9 @@ public class ChatService {
                 boolean isKit = kit(req, details, code);
                 java.util.function.Function<List<ProductSearch.Product>, List<ProductSearch.Product>> fit = found ->
                         linkable(category, pick, found, isKit).stream()
-                                .filter(c -> extra.applyAsLong(c) <= room && fitsCode(code, c.title()) && fits.test(c))
+                                .filter(c -> extra.applyAsLong(c) <= room && fitsCode(code, c.title()) && fits.test(c) && !recentlyNoLink(c))
                                 .sorted(Comparator.comparing((ProductSearch.Product c) -> extra.applyAsLong(c) > allowance)
+                                        .thenComparingInt(this::stockOrder)
                                         .thenComparingLong(c -> c.priceVnd() == null ? Long.MAX_VALUE : c.priceVnd()))
                                 .toList();
                 best = bestLinked(fit.apply(siblings.getOrDefault(code, List.of())), null, 8);
@@ -2327,6 +2342,7 @@ public class ChatService {
             String lineSpec = text(details.getOrDefault(code, Map.of()).get("spec"));
             String lineName = partName(code);
             String lineCore = coreQuery(lineCategory, lineSpec);
+            String lineChip = "gpu".equals(lineCategory) && lineSpec != null ? gpuChip(lineSpec) : null;
             int issuesNow = productIssues(picks).size();
             fixes.put(code, Io.async(() -> {
                 ProductSearch.Product fallback = null;
@@ -2337,7 +2353,10 @@ public class ChatService {
                                 .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
                                 .filter(c -> plausible(lineCategory, c.priceVnd()) && ofKind(lineCategory, c.title()) && fitsCode(code, c.title()))
                                 .filter(c -> !wrongKind(code, c) && !recentlyNoLink(c) && fitsWith(picks, code, c, issuesNow))
-                                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
+                                // Card: giữ đúng chip trợ lý ghi (RTX 4060 hãng nào cũng được, không thành 4060 Ti / 3050)
+                                .filter(c -> !"gpu".equals(lineCategory) || lineChip == null || lineChip.equals(gpuChip(c.title())))
+                                // Hàng đã biết còn trước (danh sách hay bị một hãng hết hàng chiếm hết lượt thử), rồi rẻ trước
+                                .sorted(Comparator.comparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
                                 .toList();
                         var best = bestLinked(list, null, 8);
                         // Hàng xác nhận còn bán thì xong; chưa rõ tình trạng thì giữ dự phòng, tìm tiếp các từ khoá sau
@@ -2629,6 +2648,21 @@ public class ChatService {
                     // trần không được gửi cho người dùng (respond)
                     Long cap = tierCap(checked.budgetVnd(), tier);
                     if (!result.compatible()) log.info("propose_build {}: chưa lắp chung được, trợ lý phải sửa", tier);
+                    // Bản cuối không hiện được (thiếu link / hết hàng, lắp không được, vượt trần): báo trợ lý ngay, để câu
+                    // trả lời chỉ giới thiệu phương án hiện được (ca thật v9: trợ lý tả phương án đã bị ẩn vì dòng thiếu link)
+                    if (turn.advice && search.enabled() && !showable(checked, cap)) {
+                        List<String> why = new ArrayList<>();
+                        if (cap != null && totalMax > cap) why.add("vượt mức tối đa " + cap + " đồng");
+                        var missing = missingBuy(checked);
+                        if (!missing.isEmpty()) why.add("các dòng chưa có hàng mua được (thiếu link hoặc hết hàng): " + missing);
+                        if (!result.compatible() || !productErrors.isEmpty()) why.add("linh kiện chưa lắp chung được");
+                        saved.put("not_shown", why);
+                        saved.put("note", "Phương án \"" + tier + "\" hiện CHƯA hiển thị được cho người dùng (xem not_shown). Còn lượt thì "
+                                + "gọi lại propose_build cùng tier, chọn món khác (product_id khác, hoặc để trống để app tự tìm) cho các "
+                                + "dòng trong not_shown. Hết lượt thì trong câu trả lời KHÔNG giới thiệu phương án này, chỉ nói ngắn "
+                                + "là chưa tìm được hàng mua được.");
+                        log.info("propose_build {}: chưa hiện được: {}", tier, why);
+                    }
                     if (turn.advice && cap != null && totalMax > cap
                             && turn.overWarned.computeIfAbsent(tier, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet() > MAX_OVER_WARNINGS) {
                         // Đã nhắc đủ số lần mà vẫn vượt: phương án này không được hiện (luật cứng, respond); trợ lý phải nói
