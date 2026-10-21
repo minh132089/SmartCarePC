@@ -1079,6 +1079,89 @@ class ChatServiceTests {
         assertThat(ram.priceMaxVnd()).isEqualTo(1_600_000L);
     }
 
+    // ---- Hồi quy vòng đo v6 (review Sol 6.1, 21/10/2026) ---------------
+
+    @Test
+    void mucToiThieuTheoNhuCau() {
+        assertThat(ChatService.needs(List.of("Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.")))
+                .isEqualTo(new ChatService.Needs(8, 256));
+        assertThat(ChatService.needs(List.of("Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu")))
+                .isEqualTo(new ChatService.Needs(16, 512));
+        assertThat(ChatService.needs(List.of("học online, cần RAM 16GB và SSD 1TB"))).isEqualTo(new ChatService.Needs(16, 1000));
+        assertThat(ChatService.needs(List.of("xin chào"))).isNull();
+    }
+
+    @Test
+    void ramMayChuKhongChoMayBan() {
+        assertThat(ChatService.serverRam("Bộ Nhớ Máy Chủ Kingston KSM32ED8/32HC 32GB DDR4 3200 ECC")).isTrue();
+        assertThat(ChatService.serverRam("RAM Kingston Fury Beast 16GB DDR4 3200")).isFalse();
+    }
+
+    @Test
+    void vuotTranThiHaRamXuongMucToiThieuTheoNhuCau() {
+        // v6 học sinh 12tr: RAM 16GB 3,39tr làm vượt trần; máy học Word dùng 8GB được
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("hàng")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i3-12100 Tray", "A", 3_000_000L, "https://a.vn/cpu", null),
+                new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
+        when(search.search("RAM DDR4 8GB")).thenReturn(List.of(
+                new ProductSearch.Product("Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, "https://b.vn/ram8", null),
+                new ProductSearch.Product("Bộ Nhớ Máy Chủ Kingston KSM 8GB DDR4 ECC", "B", 900_000L, "https://b.vn/ecc8", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"hàng\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":5000000,"items":[{"code":"cpu_std","spec":"i3-12100","reason":"Đủ","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":1,"spec":"16GB DDR4","reason":"Đủ","product_id":"s1-2"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học online, Word, Excel, có 5 triệu")), null, null, "advice"));
+
+        var ram = res.build().items().stream().filter(l -> l.category().equals("ram")).findFirst().orElseThrow();
+        assertThat(ram.productName()).as("8GB máy bàn, không lấy RAM máy chủ dù rẻ hơn").isEqualTo("Ram Kingston Fury Beast 8GB DDR4 3200");
+        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.rule()).isEqualTo("DOWNGRADE"));
+        assertThat((String) messages(2).get(5).get("content")).contains("downgrades").contains("RAM 16GB -> 8GB");
+    }
+
+    @Test
+    void nguoiDungNoiRoDungLuongThiKhongHa() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("hàng")).thenReturn(List.of(new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
+        when(search.search("RAM DDR4 8GB")).thenReturn(List.of(
+                new ProductSearch.Product("Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, "https://b.vn/ram8", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"hàng\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":3000000,"items":[{"code":"ram_ddr4","quantity":1,"spec":"16GB DDR4","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học online, cần RAM 16GB, có 3 triệu")), null, null, "advice"));
+
+        assertThat(res.build()).as("không hạ dưới 16GB người dùng yêu cầu: vượt trần thì không hiện").isNull();
+    }
+
+    @Test
+    void vuotTranThiDungQuatKemCpuBox() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(components.findByCode("tower_air_155")).thenReturn(part("tower_air_155", "cooler", "Tản khí"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("hàng")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i3 12100 Box", "A", 3_590_000L, "https://a.vn/cpu", null),
+                new ProductSearch.Product("Tản nhiệt khí Jonsbo CR-1200E", "A", 250_000L, "https://a.vn/tan", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"hàng\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":3700000,"items":[{"code":"cpu_std","spec":"i3","reason":"Đủ","product_id":"s1-1"},
+                {"code":"tower_air_155","spec":"Tản khí","reason":"Mát","product_id":"s1-2"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học online, 3,7 triệu")), null, null, "advice"));
+
+        assertThat(res.build().items()).extracting(Line::code).containsExactly("cpu_std");
+    }
+
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
 
     private static Map<String, Object> answer(String text) {

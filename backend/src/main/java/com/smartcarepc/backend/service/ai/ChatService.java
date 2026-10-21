@@ -363,15 +363,18 @@ public class ChatService {
         final List<Long> userAmounts;
         /** Cách chia thanh RAM người dùng nói rõ ("2x8GB", "1 thanh 16GB"), null nếu chỉ nói dung lượng hoặc không nói */
         final String ramLayout;
+        /** Mức RAM / SSD tối thiểu theo nhu cầu: app được hạ thông số xuống tới đây khi phương án vượt trần */
+        final Needs needs;
 
         Turn(boolean advice) {
-            this(advice, List.of(), null);
+            this(advice, List.of(), null, null);
         }
 
-        Turn(boolean advice, List<Long> userAmounts, String ramLayout) {
+        Turn(boolean advice, List<Long> userAmounts, String ramLayout, Needs needs) {
             this.advice = advice;
             this.userAmounts = userAmounts;
             this.ramLayout = ramLayout;
+            this.needs = needs;
         }
     }
 
@@ -403,7 +406,7 @@ public class ChatService {
 
         var userTexts = request.messages().reversed().stream()
                 .filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content).toList();
-        Turn turn = new Turn("advice".equals(request.mode()), amounts(userTexts), ramLayout(userTexts));
+        Turn turn = new Turn("advice".equals(request.mode()), amounts(userTexts), ramLayout(userTexts), needs(userTexts));
         // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
@@ -615,9 +618,13 @@ public class ChatService {
      * trang, tính lại RAM / spec theo hàng thật, vượt trần thì đổi hàng cùng thông số rẻ hơn rồi thử bộ rẻ nhất. Kết quả
      * là bản cuối: trợ lý đọc đúng tên, giá, tổng này, và sau đó app không đổi món nào nữa (thẻ và lời tư vấn khớp nhau).
      */
-    private Checked finalizeTier(Checked base, String tier, Long cap, Map<String, String> aiTitles) {
+    private Checked finalizeTier(Checked base, String tier, Long cap, Map<String, String> aiTitles, Needs needs, List<String> notes) {
         Checked c = normalized(withPagePrices(withLinkedPicks(base, tier, cap)), aiTitles);
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(refit(c, tier, cap), aiTitles);
+        // Vẫn vượt trần với hàng cùng thông số: dùng quạt kèm CPU (Intel Box) thay tản rời, rồi hạ RAM / SSD xuống mức tối
+        // thiểu theo nhu cầu (học Word 8GB / 256GB; game 16GB / 512GB), lấy link và giá trang lần nữa
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = withoutExtraCooler(c, notes);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(downgrade(c, cap, needs, notes)), aiTitles);
         boolean over = cap != null && total(c.request(), c.details(), c.picks()) > cap;
         if (over || !productIssues(c.picks()).isEmpty()) {
             var low = normalized(withPagePrices(cheapest(c, tier, cap)), aiTitles);
@@ -626,6 +633,149 @@ public class ChatService {
             if (lowOk || over && lowTotal < total(c.request(), c.details(), c.picks()) && productIssues(low.picks()).isEmpty()) c = low;
         }
         return c;
+    }
+
+    /** Dung lượng tối thiểu (GB) app được hạ RAM / SSD xuống khi vượt trần; null là không hạ món đó */
+    record Needs(Integer ramMin, Integer ssdMin) {
+    }
+
+    private static final java.util.regex.Pattern RAM_ASKED = java.util.regex.Pattern.compile(
+            "ram\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*ram", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern SSD_ASKED = java.util.regex.Pattern.compile(
+            "(?:ssd|ổ cứng|ổ)\\s*(\\d+)\\s*(gb|tb)|(\\d+)\\s*(gb|tb)\\s*(?:ssd|ổ cứng)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Mức tối thiểu theo nhu cầu người dùng kể: đồ họa / dựng video và game giữ RAM 16GB, SSD 512GB; học, văn phòng hạ được
+     * tới RAM 8GB, SSD 256GB. Người dùng nói rõ dung lượng (vd "RAM 16GB", "SSD 1TB") thì không hạ dưới mức đó. Không nhận
+     * ra nhu cầu thì null (không tự hạ).
+     */
+    static Needs needs(List<String> userTexts) {
+        String all = String.join(" ", userTexts.stream().filter(Objects::nonNull).toList()).toLowerCase();
+        Integer ram = null, ssd = null;
+        var r = RAM_ASKED.matcher(all);
+        if (r.find()) ram = Integer.parseInt(r.group(1) != null ? r.group(1) : r.group(2));
+        var d = SSD_ASKED.matcher(all);
+        if (d.find()) {
+            int v = Integer.parseInt(d.group(1) != null ? d.group(1) : d.group(3));
+            ssd = "tb".equalsIgnoreCase(d.group(2) != null ? d.group(2) : d.group(4)) ? v * 1000 : v;
+        }
+        boolean heavy = all.matches(".*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|premiere|game|chơi|stream).*");
+        boolean light = all.matches(".*(học|văn phòng|word|excel|online|lướt web|xem phim|kế toán).*");
+        if (!heavy && !light && ram == null && ssd == null) return null;
+        return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256);
+    }
+
+    /**
+     * CPU Intel bản Box (có quạt tản kèm) mà phương án còn vượt trần: bỏ dòng tản khí mua thêm, dùng quạt kèm CPU (mô
+     * hình 3D ghi chú bỏ bước lắp tản rời). Không đụng tản nước / vỏ có mẫu tản nước.
+     */
+    private Checked withoutExtraCooler(Checked c, List<String> notes) {
+        String cpu = productTitles(c.picks()).get("cpu");
+        if (!stockCooler(cpu)) return c;
+        var drop = c.request().items().stream()
+                .filter(i -> "tower_air_155".equals(i.code()) || "low_profile_47".equals(i.code())).toList();
+        if (drop.isEmpty()) return c;
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>(c.details());
+        drop.forEach(i -> {
+            picks.remove(i.code());
+            links.remove(i.code());
+            details.remove(i.code());
+        });
+        log.info("Vượt trần: bỏ tản rời {}, dùng quạt kèm CPU \"{}\"", drop.stream().map(BuildCheckRequest.Item::code).toList(), cpu);
+        notes.add("Bỏ tản nhiệt mua thêm, dùng quạt tản đi kèm CPU (bản Box)");
+        return new Checked(new BuildCheckRequest(c.request().items().stream().filter(i -> !drop.contains(i)).toList()), c.result(),
+                details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
+    }
+
+    private static final List<Integer> SSD_STEPS = List.of(2000, 1000, 512, 256);
+    private static final List<Integer> RAM_STEPS = List.of(64, 32, 16, 8);
+
+    /**
+     * Hạ thông số có giới hạn khi phương án vẫn vượt trần sau khi đã đổi hàng cùng thông số: mỗi bước hạ SSD hoặc RAM
+     * xuống một nấc (món tiết kiệm nhiều hơn trước), không dưới mức tối thiểu theo nhu cầu (needs), không đổi RAM khi người
+     * dùng nói rõ số thanh. Món mới phải có link mua, đúng loại / cỡ / DDR, qua phép kiểm chung; tối đa 4 bước.
+     */
+    private Checked downgrade(Checked c, Long cap, Needs needs, List<String> notes) {
+        if (cap == null || needs == null) return c;
+        BuildCheckRequest req = c.request();
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((code, d) -> details.put(code, new LinkedHashMap<>(d)));
+        for (int step = 0; step < 4 && total(req, details, picks) > cap; step++) {
+            String bestCode = null, bestNote = null, bestSpec = null;
+            ProductSearch.Product best = null;
+            long bestSave = 0;
+            for (var i : req.items()) {
+                String code = i.code(), category = categoryOf(code);
+                var now = picks.get(code);
+                var d = details.getOrDefault(code, Map.of());
+                if (now == null || now.priceVnd() == null || !("ram".equals(category) || "ssd".equals(category))) continue;
+                if ("ram".equals(category) && (needs.ramMin() == null || d.get("user_layout") != null)) continue;
+                if ("ssd".equals(category) && needs.ssdMin() == null) continue;
+                long was = price(d, now, i.qty())[1];
+                Integer have = "ram".equals(category) ? ramTotal(text(d.get("spec"))) : amount("ssd", now.title());
+                if (have == null) continue;
+                int floor = "ram".equals(category) ? needs.ramMin() : needs.ssdMin();
+                Integer target = ("ram".equals(category) ? RAM_STEPS : SSD_STEPS).stream()
+                        .filter(t -> t < have * 0.95 && t >= floor).findFirst().orElse(null);
+                if (target == null) continue;
+                var found = lowerTier(code, category, now, target, picks);
+                if (found == null || found.priceVnd() == null) continue;
+                long save = was - found.priceVnd();
+                if (save > bestSave) {
+                    bestSave = save;
+                    bestCode = code;
+                    best = found;
+                    String ddr = "ram".equals(category) ? ProductRules.read("ram", now.title()).ramType() : null;
+                    bestSpec = "ram".equals(category) ? target + "GB" + (ddr == null ? "" : " " + ddr) : "SSD " + label(target);
+                    bestNote = ("ram".equals(category) ? "RAM " + have + "GB -> " + target + "GB" : "SSD " + label(have) + " -> " + label(target))
+                            + " (" + best.title() + ", rẻ hơn " + save + " đồng)";
+                }
+            }
+            if (best == null) break;
+            var d = details.computeIfAbsent(bestCode, k -> new LinkedHashMap<>());
+            d.put("spec", bestSpec);
+            d.remove("buy_qty");
+            d.put("downgrade_note", "Đã hạ xuống " + bestSpec + " để vừa ngân sách, vẫn đủ nhu cầu của bạn; sau này nâng cấp thêm được.");
+            picks.put(bestCode, best);
+            links.put(bestCode, CompletableFuture.completedFuture(best.url()));
+            log.info("Vượt trần {}: hạ thông số {}", cap, bestNote);
+            notes.add(bestNote);
+        }
+        return new Checked(req, c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
+    }
+
+    private static String label(int gb) {
+        return gb >= 1000 ? gb / 1000 + "TB" : gb + "GB";
+    }
+
+    /** Món RAM / SSD dung lượng target rẻ hơn món đang chọn, có link mua, đúng loại / cỡ / DDR, qua phép kiểm chung */
+    private ProductSearch.Product lowerTier(String code, String category, ProductSearch.Product now, int target,
+            Map<String, ProductSearch.Product> picks) {
+        String ddr = "ram".equals(category) ? ProductRules.read("ram", now.title()).ramType() : null;
+        String query = "ram".equals(category) ? "RAM " + (ddr == null ? "" : ddr + " ") + target + "GB" : "SSD NVMe M.2 " + label(target);
+        List<ProductSearch.Product> pool = new ArrayList<>();
+        try {
+            pool.addAll(search.search(query));
+            pool.addAll(search.engineSearch(query));
+        } catch (RuntimeException e) {
+            log.debug("Tìm \"{}\" lỗi: {}", query, e.getMessage());
+        }
+        var list = pool.stream()
+                .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() < now.priceVnd() && !JUNK.matcher(p.title()).find())
+                .filter(p -> ofKind(category, p.title()) && plausible(category, p.priceVnd()) && fitsCode(code, p.title()) && !recentlyNoLink(p))
+                .filter(p -> "ram".equals(category)
+                        ? ramFits(p.title(), target, null) && Integer.valueOf(target).equals(amount("ram", p.title()))
+                                && !serverRam(p.title()) && !ProductRules.read("ram", p.title()).laptopRam()
+                                && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType()))
+                        : amount("ssd", p.title()) != null && Math.abs(amount("ssd", p.title()) - target) <= target * 0.07)
+                .filter(p -> swapOk(code, p, picks))
+                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
+                .toList();
+        return bestLinked(list, null);
     }
 
     /** Phương án hiện được cho người dùng: không vượt trần, lắp chung được (danh mục, mô hình 3D và sản phẩm thật) */
@@ -800,6 +950,8 @@ public class ChatService {
             String title = com.smartcarepc.backend.service.price.PriceEngine.norm(p.title());
             String got = com.smartcarepc.backend.service.price.PriceEngine.kind(title);
             if (want != null && got != null && !want.equals(got)) return true;
+            // RAM máy chủ (ECC / Registered, vd Kingston KSM32ED8 "Bộ nhớ máy chủ") không dành cho máy bàn phổ thông
+            if ("ram".equals(want) && serverRam(p.title())) return true;
             // Dòng tản khí mà gắn tản nước (AIO đắt gấp nhiều lần) hay ngược lại cũng là sai hàng
             if ("cooler".equals(want)) {
                 boolean liquid = title.matches(".*\\b(aio|tan nuoc|tan nhiet nuoc|liquid)\\b.*");
@@ -1557,6 +1709,14 @@ public class ChatService {
         }
     }
 
+    private static final java.util.regex.Pattern SERVER_RAM = java.util.regex.Pattern.compile(
+            "máy chủ|\\bserver\\b|\\becc\\b|\\brdimm\\b|registered|\\bksm\\d", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** RAM máy chủ (ECC, Registered / RDIMM): bo và CPU máy bàn phổ thông không bảo đảm chạy được, không chọn */
+    static boolean serverRam(String title) {
+        return title != null && SERVER_RAM.matcher(title).find();
+    }
+
     /**
      * Sản phẩm trợ lý chọn khác dung lượng chính trợ lý ghi trong spec (SSD; RAM mua thanh lẻ): đổi sang sản phẩm đúng
      * dung lượng trong cùng nhóm tìm kiếm (giá gần nhất); không có thì bỏ để app tự tìm theo spec.
@@ -1934,7 +2094,33 @@ public class ChatService {
         if (!fitsCode(code, p.title()) || wrongKind(code, p) || category != null && !plausible(category, p.priceVnd())) return false;
         var trial = new LinkedHashMap<>(picks);
         trial.put(code, p);
-        return productIssues(trial).size() <= productIssues(picks).size();
+        // Không chỉ đếm số lỗi: món thay không được đổi một lỗi lấy lỗi khác (vd hết lỗi socket nhưng thành lỗi DDR)
+        return errorRules(picks).containsAll(errorRules(trial));
+    }
+
+    /** Mã luật của các lỗi lắp chung (ERROR) giữa sản phẩm thật đã chọn */
+    private java.util.Set<String> errorRules(Map<String, ProductSearch.Product> picks) {
+        return productFindings(picks).stream().filter(f -> f.severity() == ProductRules.Severity.ERROR)
+                .map(ProductRules.Finding::ruleId).collect(Collectors.toSet());
+    }
+
+    /**
+     * Món đã tìm link mua đủ đường (cửa hàng khác, sản phẩm khác) mà không ra, theo tên làm gọn -> hạn: các lần propose
+     * sau trong 30 phút không chọn lại món đó (trợ lý hay chọn lại cùng món, mỗi lần mất cả chục giây tìm vô ích)
+     */
+    private final Map<String, Long> noLinkUntil = new ConcurrentHashMap<>();
+    static final java.time.Duration NO_LINK_TTL = java.time.Duration.ofMinutes(30);
+
+    private boolean recentlyNoLink(ProductSearch.Product p) {
+        if (p == null || p.title() == null) return false;
+        Long until = noLinkUntil.get(ProductSearch.shortTitle(p.title()).toLowerCase());
+        return until != null && until > System.currentTimeMillis();
+    }
+
+    private void rememberNoLink(ProductSearch.Product p) {
+        if (p == null || p.title() == null) return;
+        if (noLinkUntil.size() > 2000) noLinkUntil.clear();
+        noLinkUntil.put(ProductSearch.shortTitle(p.title()).toLowerCase(), System.currentTimeMillis() + NO_LINK_TTL.toMillis());
     }
 
     /** Thêm món p vào dòng code không làm tăng số lỗi lắp chung giữa các sản phẩm thật đã chọn */
@@ -2031,6 +2217,7 @@ public class ChatService {
                     if (best != null) return best;
                 }
                 log.info("Không tìm được link mua cho dòng {} (\"{}\") dù đã thử cửa hàng khác và sản phẩm khác", code, pick.title());
+                rememberNoLink(pick);
                 return null;
             }));
         });
@@ -2169,6 +2356,15 @@ public class ChatService {
                         if (group != null) siblings.put(code, group);
                         links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
+                    // Món vừa tìm link đủ đường mà không ra (trong 30 phút): bỏ để app tìm món khác cùng tầm giá
+                    picks.entrySet().removeIf(e -> {
+                        if (!turn.advice || !recentlyNoLink(e.getValue())) return false;
+                        log.info("propose_build: bỏ \"{}\" ở dòng {} vì vừa không tìm được link mua", e.getValue().title(), e.getKey());
+                        keepPriceRef(details.get(e.getKey()), e.getValue());
+                        siblings.remove(e.getKey());
+                        links.remove(e.getKey());
+                        return true;
+                    });
                     // Sản phẩm sai loại với dòng linh kiện (vd bộ quạt case gắn vào dòng tản nhiệt): bỏ để app tìm lại đúng loại
                     picks.entrySet().removeIf(e -> {
                         if (!wrongKind(e.getKey(), e.getValue()) && fitsCode(e.getKey(), e.getValue().title())) return false;
@@ -2233,9 +2429,10 @@ public class ChatService {
                             budget, picks, links, siblings);
                     // Chốt bản cuối ngay bây giờ (link cửa hàng, giá trên trang, RAM, trần) để trợ lý viết câu trả lời theo
                     // đúng bản sẽ hiện; sau bước này app không đổi món nữa
+                    List<String> downgrades = new ArrayList<>();
                     if (turn.advice && search.enabled()) {
                         var before = checked.request();
-                        checked = finalizeTier(checked, tier, capNow, aiTitles);
+                        checked = finalizeTier(checked, tier, capNow, aiTitles, turn.needs, downgrades);
                         if (!checked.request().equals(before)) {
                             var r = withoutFalseGpuError(matched(compatibilityService.check(checked.request()), checked.request(), turn), checked.picks());
                             checked = new Checked(checked.request(), r, checked.details(), checked.summary(), checked.budgetVnd(),
@@ -2286,6 +2483,12 @@ public class ChatService {
                     }
                     saved.put("total_min_vnd", totalMin);
                     saved.put("total_max_vnd", totalMax);
+                    if (!downgrades.isEmpty()) {
+                        saved.put("downgrades", downgrades);
+                        saved.put("downgrade_note", "Để vừa mức tối đa, app đã hạ thông số trong downgrades (vẫn đủ nhu cầu tối thiểu). "
+                                + "Nói rõ đánh đổi trong câu trả lời, vd RAM 8GB đủ cho Word, Excel, học online; mở nhiều tab hay chơi "
+                                + "game thì nên nâng lên 16GB sau.");
+                    }
                     // Bản cuối app sẽ hiện (sau khi đổi link, đọc giá trên trang): trợ lý tả đúng các món này
                     if (turn.advice && search.enabled()) {
                         List<Map<String, Object>> finalItems = new ArrayList<>();
@@ -2455,6 +2658,9 @@ public class ChatService {
                         + "được, chậm hơn chút khi chơi game nhưng chừa khe để nâng cấp."));
             }
         });
+        c.details().forEach((code, d) -> {
+            if (d.get("downgrade_note") != null) tips.add(new Issue("DOWNGRADE", String.valueOf(d.get("downgrade_note"))));
+        });
         // Máy mẫu 3D vẽ card 3 quạt (280 mm) mà card mua là loại 2 quạt: lắp cùng chỗ, chỉ ngắn hơn hình
         if (advice) lines.stream().filter(l -> "gpu_280".equals(l.code()) && Integer.valueOf(2).equals(gpuFans(l.productName()))).findFirst()
                 .ifPresent(l -> tips.add(new Issue("MODEL_GPU_SHORTER", "Hình 3D vẽ card 3 quạt; card bạn mua là loại 2 quạt, ngắn hơn, "
@@ -2505,6 +2711,7 @@ public class ChatService {
             String ddr = !"ram".equals(category) || spec == null ? null
                     : spec.toUpperCase().contains("DDR5") ? "DDR5" : spec.toUpperCase().contains("DDR4") ? "DDR4" : null;
             java.util.function.Predicate<ProductSearch.Product> ok = p -> p.title() != null && !JUNK.matcher(p.title()).find()
+                    && !recentlyNoLink(p)
                     && plausible(category, p.priceVnd()) && ofKind(category, p.title()) && !wrongKind(i.code(), p)
                     && fitsCode(i.code(), p.title()) && fitsWith(picks, i.code(), p, issuesNow)
                     && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType()))
