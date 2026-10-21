@@ -1681,6 +1681,9 @@ class ChatServiceTests {
         assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Xigmatek Gaming X II ATX")).isFalse();
         assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ case mATX Mini-ITX VSP")).isFalse();
         assertThat(ChatService.fitsCode("case_gaming", "Vỏ case Montech AIR 903 ATX")).isTrue();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Case Mini Silverstone Sugo 13 Black SST-SG13B-Q")).as("tên mẫu ITX").isTrue();
+        assertThat(ChatService.fitsCode("case_compact_tower", "Vỏ Case Mini Silverstone Sugo 13 Black SST-SG13B-Q")).isFalse();
+        assertThat(ChatService.fitsCode("mb_itx", "Bo mạch chủ ASRock B760M-ITX/D4")).isTrue();
     }
 
     @Test

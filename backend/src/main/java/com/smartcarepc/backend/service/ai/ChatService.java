@@ -2214,8 +2214,8 @@ public class ChatService {
     }
 
     /** Chipset bo Mini ITX hay có bán theo socket, rẻ trước */
-    private static final Map<String, List<String>> ITX_CHIPSETS = Map.of("LGA1700", List.of("H610I", "B760I"),
-            "AM4", List.of("A520I", "B550I"), "AM5", List.of("A620I", "B650I"));
+    private static final Map<String, List<String>> ITX_CHIPSETS = Map.of("LGA1700", List.of("H610I", "B760I", "B760M-ITX", "B760-I"),
+            "AM4", List.of("A520I", "B550I", "B550M-ITX"), "AM5", List.of("A620I", "B650I", "B650E-I"));
 
     /** Bo chipset phổ thông thấp nhất theo socket (vd B760M -> H610M) để tìm bo rẻ hơn cùng socket / DDR / cỡ */
     private static final Map<String, String> ENTRY_CHIPSET = Map.of("LGA1700", "H610M", "AM4", "A520M", "AM5", "A620M");
@@ -2959,8 +2959,17 @@ public class ChatService {
 
     /** Cỡ bo lớn nhất vỏ chứa được: như boardSize nhưng bỏ phần ghi chuẩn nguồn ("nguồn ATX", "SFX/ATX") */
     static Integer caseBoardSize(String title) {
-        return title == null ? null : boardSize(PSU_FORM.matcher(title).replaceAll(" "));
+        if (title == null) return null;
+        Integer size = boardSize(PSU_FORM.matcher(title).replaceAll(" "));
+        // Vỏ Mini ITX nổi tiếng hay ghi tên mẫu mà không ghi "ITX" (ca thật n5: "Vỏ Case Mini Silverstone Sugo 13 SST-SG13B-Q"
+        // bị loại vì không rõ cỡ)
+        return size == null && ITX_CASES.matcher(title).find() ? Integer.valueOf(1) : size;
     }
+
+    /** Dòng vỏ chỉ chứa bo Mini ITX (tên mẫu) */
+    private static final java.util.regex.Pattern ITX_CASES = java.util.regex.Pattern.compile(
+            "\\b(sugo|sg1[0-9]|nr200p?|a4-h2o|q58|ghost\\s*s1|meshlicious|ncase|terra|dan\\s*a4|jonsbo\\s*(a4|n1|v8|v10|z20i)|nzxt\\s*h1|h210i?|ridge)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private static final java.util.regex.Pattern BOARD_CHIP = java.util.regex.Pattern.compile("\\b[abhzx]\\d{3}-?([mie]?)\\b");
 
