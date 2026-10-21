@@ -1,7 +1,8 @@
 import { ArrowSquareOut, ImageSquare } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
-import { compatText, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue } from './chatStore'
+import { compatText, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue, type Verdict } from './chatStore'
+import { VERDICT_INFO } from './verdict'
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
@@ -37,6 +38,8 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       </h2>
       <p data-sm-item className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>{compatText(card).long}</p>
 
+      {card.verdict && <VerdictBox verdict={card.verdict} />}
+
       {total && <Total min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
 
       <div className="mt-6 space-y-6">
@@ -66,7 +69,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
           ))}
         </ul>
       )}
-      <IssueGroup title="Cần xác minh trước khi mua" issues={card.unknowns} />
+      {!card.verdict && <IssueGroup title="Cần xác minh trước khi mua" issues={card.unknowns} />}
       <IssueGroup title="Gợi ý" issues={card.recommendations} />
 
       {action && (
@@ -201,6 +204,36 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
 
 /** Trang tìm kiếm trên web cửa hàng (GEARVN) theo thông số, cho dòng hiếm hoi chưa có sản phẩm thật; không qua Google */
 /** Một nhóm ghi chú theo mức của bộ luật (Cần xác minh, Gợi ý); không có thì không hiện */
+/** Trạng thái phương án (backend tính theo docs/pc-build-verifier): điểm đang chặn, rồi việc cần làm trước khi mua */
+function VerdictBox({ verdict }: { verdict: Verdict }) {
+  const info = VERDICT_INFO[verdict.status]
+  return (
+    <div data-sm-item className="mt-4 rounded-xl bg-fill px-3.5 py-3">
+      <p className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
+        Trạng thái
+        <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${info.tone}`}>{info.label}</span>
+      </p>
+      {verdict.blockers.length > 0 && (
+        <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13.5px] leading-[1.45] text-bad">
+          {verdict.blockers.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
+      )}
+      {verdict.conditions.length > 0 && (
+        <>
+          <p className="mt-2 text-[12.5px] font-medium text-ink-2">Việc cần làm trước khi mua</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-[13.5px] leading-[1.45] text-ink-2">
+            {verdict.conditions.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
 function IssueGroup({ title, issues }: { title: string; issues?: Issue[] | null }) {
   if (!issues?.length) return null
   return (

@@ -4,6 +4,7 @@ import SpotlightCard from '@/components/SpotlightCard'
 import { useDark } from '../../theme'
 import { totalOf, vnd, vndRange, type BuildCard, type Pick, type Tier } from './chatStore'
 import { TIER_INFO } from './tiers'
+import { VERDICT_INFO } from './verdict'
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 const press = 'transition-transform duration-100 ease-out active:scale-[0.98] motion-reduce:active:scale-100'
@@ -82,6 +83,11 @@ function TierColumn({ tier, build, selected, onSelect }: { tier: Tier; build: Bu
           {tier === 'balanced' && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">Gợi ý</span>}
         </span>
         <span className="mt-0.5 text-[12px] leading-snug text-ink-2">{info.note}</span>
+        {build.verdict && (
+          <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-[11.5px] font-medium ${VERDICT_INFO[build.verdict.status].tone}`}>
+            {VERDICT_INFO[build.verdict.status].label}
+          </span>
+        )}
 
         {total && (
           <span className="mt-2.5 block">

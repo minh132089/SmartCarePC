@@ -35,12 +35,25 @@ public record ChatResponse(String reply, BuildCard build, List<BuildCard> option
      */
     public record BuildCard(List<Line> items, boolean compatible, List<Issue> errors, List<Issue> warnings,
             String summary, Long budgetVnd, String modelNote, String tier, int variant, List<Issue> unknowns,
-            List<Issue> recommendations) {
+            List<Issue> recommendations, Verdict verdict) {
 
         public BuildCard(List<Line> items, boolean compatible, List<Issue> errors, List<Issue> warnings, String summary,
                 Long budgetVnd, String modelNote, String tier, int variant) {
-            this(items, compatible, errors, warnings, summary, budgetVnd, modelNote, tier, variant, List.of(), List.of());
+            this(items, compatible, errors, warnings, summary, budgetVnd, modelNote, tier, variant, List.of(), List.of(), null);
         }
+
+        public BuildCard(List<Line> items, boolean compatible, List<Issue> errors, List<Issue> warnings, String summary,
+                Long budgetVnd, String modelNote, String tier, int variant, List<Issue> unknowns, List<Issue> recommendations) {
+            this(items, compatible, errors, warnings, summary, budgetVnd, modelNote, tier, variant, unknowns, recommendations, null);
+        }
+    }
+
+    /**
+     * Trạng thái phương án theo docs/pc-build-verifier (mục 1.3, 7.2): READY / CONDITIONAL / HOLD / BLOCKED. technical:
+     * lắp được, khởi động được; purchase: link, giá, còn hàng, ngân sách; status: mức xấu nhất của hai phần.
+     * blockers: điểm đang chặn; conditions: việc cần làm trước khi mua. Chỉ có ở trang tư vấn (null ở khung lắp máy).
+     */
+    public record Verdict(String status, String technical, String purchase, List<String> blockers, List<String> conditions) {
     }
 
     /**

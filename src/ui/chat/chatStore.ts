@@ -52,6 +52,19 @@ export type BuildCard = {
   tier?: Tier | null
   /** Build trong phương án: 1 = trợ lý chọn; 2, 3 = cùng linh kiện, sản phẩm khác giá gần để tham khảo */
   variant?: number
+  /** Trạng thái phương án do backend tính theo docs/pc-build-verifier (null ở khung lắp máy) */
+  verdict?: Verdict | null
+}
+export type VerdictStatus = 'READY' | 'CONDITIONAL' | 'HOLD' | 'BLOCKED'
+/** status: mức xấu nhất của technical (lắp được) và purchase (link, giá, còn hàng, ngân sách) */
+export type Verdict = {
+  status: VerdictStatus
+  technical: VerdictStatus
+  purchase: VerdictStatus
+  /** Điểm đang chặn (lỗi lắp, thiếu link / giá, hết hàng, vượt mức tối đa) */
+  blockers: string[]
+  /** Việc cần làm trước khi mua (hỏi cửa hàng, cập nhật BIOS, xem lại giá trên trang) */
+  conditions: string[]
 }
 /** Build đang xem trong bảng so sánh */
 export type Pick = { tier: Tier; variant: number }
