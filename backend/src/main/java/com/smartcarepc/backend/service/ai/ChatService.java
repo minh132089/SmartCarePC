@@ -59,8 +59,10 @@ public class ChatService {
             Việc của bạn:
             1. Phân tích lời kể thành: dùng máy để làm gì, ngân sách, kích thước hay kiểu dáng mong muốn, có cần nâng cấp \
             về sau không. Mở đầu câu trả lời bằng một dòng tóm tắt bạn hiểu nhu cầu thế nào, để người dùng sửa nếu sai.
-            2. Thiếu điều quan trọng (thường là ngân sách hoặc mục đích) thì hỏi lại, gộp thành một câu ngắn. \
-            Đủ để chọn thì làm luôn.
+            2. CHỈ hỏi lại khi thiếu ngân sách hoặc mục đích dùng máy, gộp thành một câu ngắn. Đã có cả hai thì làm luôn \
+            ba phương án: chi tiết phụ còn thiếu (độ phân giải, game cụ thể, phần mềm) thì tự giả định mức phổ biến và \
+            nói rõ giả định trong câu trả lời (vd "mình giả định bạn dựng video Full HD / 2K"). Không hứa việc không làm \
+            (vd "trong lúc chờ mình chuẩn bị sẵn"): đã hỏi lại thì dừng ở câu hỏi.
             3. Chọn đủ linh kiện cho một máy từ danh mục. Luôn chọn một vỏ máy (case): app sẽ mở mô hình 3D đúng kiểu \
             vỏ đó để hướng dẫn người dùng tự lắp từng bước. Mỗi vỏ có máy mẫu dựng sẵn với bo mạch, tản nhiệt, card đồ \
             họa và nguồn cố định (xem "Món đi kèm từng vỏ" ở cuối lời dặn), và hướng dẫn lắp dạy theo đúng các món đó. \
@@ -1571,6 +1573,13 @@ public class ChatService {
         return new Checked(request, c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
+    /** Thêm món p vào dòng code không làm tăng số lỗi lắp chung giữa các sản phẩm thật đã chọn */
+    private boolean fitsWith(Map<String, ProductSearch.Product> picks, String code, ProductSearch.Product p, int issuesNow) {
+        var trial = new LinkedHashMap<>(picks);
+        trial.put(code, p);
+        return productIssues(trial).size() <= issuesNow;
+    }
+
     /** Từ khoá chung theo mã danh mục, dùng khi tìm theo spec / tên danh mục không ra (tên hàng ở cửa hàng viết khác) */
     private static final Map<String, String> GENERIC_QUERY = Map.ofEntries(
             Map.entry("tower_air_155", "tản nhiệt khí CPU"), Map.entry("low_profile_47", "tản nhiệt low profile"),
@@ -1578,6 +1587,8 @@ public class ChatService {
             Map.entry("psu_atx", "nguồn máy tính 80 Plus"), Map.entry("psu_sfx", "nguồn SFX"),
             Map.entry("mb_atx", "mainboard ATX"), Map.entry("mb_matx", "mainboard micro ATX"), Map.entry("mb_itx", "mainboard mini ITX"),
             Map.entry("case_mini_sff", "vỏ máy tính mini ITX"), Map.entry("case_compact_tower", "vỏ máy tính micro ATX"),
+            Map.entry("case_standard_tower", "vỏ máy tính ATX mid tower"), Map.entry("case_gaming", "vỏ máy tính mid tower kính cường lực"),
+            Map.entry("case_showcase_dual_chamber", "vỏ máy tính bể cá 2 khoang"), Map.entry("case_full_tower", "vỏ máy tính full tower"),
             Map.entry("ram_ddr4", "RAM máy bàn 8GB"),
             Map.entry("ssd_m2_2280", "SSD NVMe M.2 512GB"), Map.entry("fan120", "quạt case 120mm"));
 
@@ -2005,6 +2016,9 @@ public class ChatService {
             Map<String, ProductSearch.Product> picks, Map<String, List<ProductSearch.Product>> siblings) {
         if (!search.enabled()) return Map.of();
         Map<String, CompletableFuture<ProductSearch.Product>> jobs = new LinkedHashMap<>();
+        // Lỗi lắp chung hiện có: món tự tìm không được làm phát sinh thêm (vd bo AM4 cho CPU LGA1700)
+        int issuesNow = productIssues(picks).size();
+        String cpuSocket = ProductRules.read("cpu", productTitles(picks).getOrDefault("cpu", "")).socket();
         for (var i : req.items()) {
             if (picks.containsKey(i.code()) || jobs.containsKey(i.code())) continue;
             Map<String, Object> d = details.getOrDefault(i.code(), Map.of());
@@ -2024,9 +2038,12 @@ public class ChatService {
             Integer want = "ram".equals(category) ? ramWant(spec, i.qty(), isKit) : specAmount(category, spec);
             java.util.function.Predicate<ProductSearch.Product> ok = p -> p.title() != null && !JUNK.matcher(p.title()).find()
                     && plausible(category, p.priceVnd()) && ofKind(category, p.title()) && !wrongKind(i.code(), p)
-                    && fitsCode(i.code(), p.title())
+                    && fitsCode(i.code(), p.title()) && fitsWith(picks, i.code(), p, issuesNow)
                     && (want == null || want.equals(amount(category, p.title())));
-            String generic = GENERIC_QUERY.get(i.code());
+            // Bo mạch: tìm theo socket của CPU đã chọn để ra đúng loại bo ngay từ đầu
+            String generic = "motherboard".equals(category) && cpuSocket != null
+                    ? "mainboard " + cpuSocket + (spec != null && spec.toUpperCase().contains("DDR5") ? " DDR5" : spec != null && spec.toUpperCase().contains("DDR4") ? " DDR4" : "")
+                    : GENERIC_QUERY.get(i.code());
             jobs.put(i.code(), Io.async(() -> findFor(spec, name, generic, lo, hi, ok, list -> siblings.put(i.code(), list))));
         }
         Map<String, ProductSearch.Product> out = new LinkedHashMap<>();

@@ -582,6 +582,34 @@ class ChatServiceTests {
     }
 
     @Test
+    void appTuTimBoMachKhopSocketCpu() {
+        // Ca thật: dòng bo gắn nhầm cái vỏ, app tự tìm ra bo AM4 cho CPU LGA1700
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(components.findByCode("mb_atx")).thenReturn(part("mb_atx", "motherboard", "Bo mạch chủ ATX"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("i5")).thenReturn(List.of(
+                new ProductSearch.Product("Bộ vi xử lý Intel Core i5-12400F", "GEARVN", 3_380_000L, "https://gearvn.com/products/i5", null)));
+        when(search.search("vỏ")).thenReturn(List.of(
+                new ProductSearch.Product("Vỏ Máy Tính Xigmatek XA-22 (ATX)", "GEARVN", 350_000L, "https://gearvn.com/products/xa22", null)));
+        when(search.search(org.mockito.ArgumentMatchers.argThat(q -> q != null && (q.contains("ATX, DDR4") || q.contains("mainboard")))))
+                .thenReturn(List.of(
+                        new ProductSearch.Product("Bo Mạch Chủ Gigabyte A520M-K V2", "GEARVN", 1_590_000L, "https://gearvn.com/products/a520", null),
+                        new ProductSearch.Product("Bo mạch chủ MSI PRO B760M-E DDR4", "GEARVN", 2_390_000L, "https://gearvn.com/products/b760", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s1", "search_products", "{\"query\":\"i5\"}"), toolCall("s2", "search_products", "{\"query\":\"vỏ\"}"),
+                toolCall("p1", "propose_build", """
+                {"summary":"Game","items":[{"code":"cpu_std","spec":"i5-12400F","reason":"Game","product_id":"s1-1"},
+                {"code":"mb_atx","spec":"ATX, DDR4, 4 khe RAM","reason":"Đủ","product_id":"s2-1"}]}
+                """), answer("Xong."));
+
+        var items = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items();
+
+        assertThat(items).filteredOn(i -> i.category().equals("motherboard")).extracting(Line::productName)
+                .containsExactly("Bo mạch chủ MSI PRO B760M-E DDR4");
+    }
+
+    @Test
     void cpuCoDoHoaTichHopThiKhongBatBuocCardRoi() {
         var gpuError = new Issue("required.gpu", "CPU này không có sẵn đồ họa, cần thêm card đồ họa");
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(false, List.of(gpuError), List.of()));
