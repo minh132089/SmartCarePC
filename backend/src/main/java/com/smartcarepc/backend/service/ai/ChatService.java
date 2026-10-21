@@ -643,6 +643,25 @@ public class ChatService {
             if (lowOk || over && lowTotal < total(c.request(), c.details(), c.picks()) && productIssues(low.picks()).isEmpty()) c = low;
         }
         // Máy game vẫn vượt trần: thử cả bộ trên mẫu vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt), chỉ nhận khi hiện được
+        // Vượt trần ít (SQUEEZE_GAP): ép thêm một lượt, mọi dòng đổi sang hàng cùng thông số rẻ hơn có link (kể cả tier Rẻ,
+        // vốn chỉ chạy cheapen một món mỗi dòng), món tiết kiệm nhiều nhất trước
+        long nowTotal = cap == null ? 0 : total(c.request(), c.details(), c.picks());
+        if (cap != null && nowTotal > cap && nowTotal - cap <= SQUEEZE_GAP) {
+            Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+            Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+            Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+            c.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
+            var swaps = fitCap(c.request(), details, picks, links, c.siblings(), cap);
+            if (!swaps.isEmpty()) {
+                var squeezed = normalized(withPagePrices(new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks,
+                        links, c.siblings())), aiTitles);
+                if (total(squeezed.request(), squeezed.details(), squeezed.picks()) < nowTotal) {
+                    log.info("Vượt trần {} ít ({}): ép giá thêm {} món -> {}", cap, nowTotal - cap, swaps.size(),
+                            total(squeezed.request(), squeezed.details(), squeezed.picks()));
+                    c = squeezed;
+                }
+            }
+        }
         // Chỉ khi vượt không quá COMPACT_GAP (bo mATX + tản khí rẻ hơn bo ATX + tản nước cỡ 1 - 4 triệu): vượt xa hơn thì đổi
         // vỏ cũng không vào trần, khỏi tốn vài chục lượt tìm
         if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap
@@ -651,6 +670,9 @@ public class ChatService {
         }
         return c;
     }
+
+    /** Khoản vượt trần tối đa còn ép giá thêm một lượt (đổi hàng cùng thông số rẻ hơn) */
+    static final long SQUEEZE_GAP = 1_500_000;
 
     /** Khoản vượt trần tối đa còn đáng thử chuyển sang vỏ nhỏ gọn */
     static final long COMPACT_GAP = 4_500_000;
@@ -772,7 +794,8 @@ public class ChatService {
                 .filter(p -> allowed.contains(cpuModel(p.title())) && (!noGpu || Boolean.TRUE.equals(ProductRules.hasIgpu(p.title()))))
                 .filter(p -> swapOk(code, p, c.picks()))
                 .filter(distinctUrl())
-                .sorted(Comparator.comparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
+                .filter(p -> stockOrder(p) < 2)
+                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                 .toList();
         var found = bestLinked(list, null, 6);
         if (found == null) {
@@ -960,7 +983,8 @@ public class ChatService {
                                 && amount("ssd", p.title()) >= floor * 0.97)
                 .filter(p -> p == now || swapOk(code, p, picks))
                 .filter(distinctUrl())
-                .sorted(Comparator.comparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
+                .filter(p -> stockOrder(p) < 2)
+                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                 .toList();
         if (list.contains(now)) return now;
         var found = bestLinked(list, null, 8);
@@ -1329,6 +1353,7 @@ public class ChatService {
                     return new ProductSearch.Product(c.title(), c.shop(), price, l, c.imageUrl());
                 }))
                 .toList();
+        if (tries.isEmpty()) log.debug("Không có món {} cùng thông số rẻ hơn \"{}\" trong {} kết quả", category, now.title(), group.size());
         for (var t : tries) {
             try {
                 var p = t.get(20, java.util.concurrent.TimeUnit.SECONDS);
@@ -2548,8 +2573,8 @@ public class ChatService {
                 java.util.function.Function<List<ProductSearch.Product>, List<ProductSearch.Product>> fit = found ->
                         linkable(category, pick, found, isKit).stream()
                                 .filter(c -> extra.applyAsLong(c) <= room && fitsCode(code, c.title()) && fits.test(c) && !recentlyNoLink(c))
+                                .filter(c -> stockOrder(c) < 2)
                                 .sorted(Comparator.comparing((ProductSearch.Product c) -> extra.applyAsLong(c) > allowance)
-                                        .thenComparingInt(this::stockOrder)
                                         .thenComparingLong(c -> c.priceVnd() == null ? Long.MAX_VALUE : c.priceVnd()))
                                 .toList();
                 best = bestLinked(fit.apply(siblings.getOrDefault(code, List.of())), null, 8);
@@ -2602,10 +2627,12 @@ public class ChatService {
                                 .filter(c -> !wrongKind(code, c) && !recentlyNoLink(c) && fitsWith(picks, code, c, issuesNow))
                                 // Card: giữ đúng chip trợ lý ghi (RTX 4060 hãng nào cũng được, không thành 4060 Ti / 3050)
                                 .filter(c -> !"gpu".equals(lineCategory) || lineChip == null || lineChip.equals(gpuChip(c.title())))
-                                // Người dùng thích kính: vỏ ghi rõ có kính trước (tên vỏ mATX ở cửa hàng hiếm khi ghi "kính", nên
-                                // không bắt buộc); rồi hàng đã biết còn (một hãng hết hàng hay chiếm hết lượt thử), rồi rẻ trước
+                                // Bỏ hàng đã biết hết (một hãng hết hàng hay chiếm hết lượt thử). Người dùng thích kính: vỏ ghi rõ có
+                                // kính trước (tên vỏ mATX hiếm khi ghi "kính", nên không bắt buộc); rồi RẺ trước, bestLinked ưu tiên
+                                // món còn hàng trong các món rẻ (ca thật v14: tản 1,59 triệu "còn hàng" được chọn trước tản 350 nghìn)
+                                .filter(c -> stockOrder(c) < 2)
                                 .sorted(Comparator.comparingInt((ProductSearch.Product c) -> needGlass && !glass(c.title()) ? 1 : 0)
-                                        .thenComparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
+                                        .thenComparingLong(ProductSearch.Product::priceVnd))
                                 .toList();
                         var best = bestLinked(list, null, 8);
                         // Hàng xác nhận còn bán thì xong; chưa rõ tình trạng thì giữ dự phòng, tìm tiếp các từ khoá sau
