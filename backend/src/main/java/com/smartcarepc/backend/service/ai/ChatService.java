@@ -87,7 +87,10 @@ public class ChatService {
             (song song), mỗi lần một tier:
                - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, phải rẻ hơn rõ rệt: tổng TỐI ĐA 90% ngân sách. Bạn \
             chỉ cần chọn thông số tối thiểu đủ dùng (vd RAM 8 GB, SSD 256 GB, nguồn 450W) và vỏ rẻ: app tự đổi từng món \
-            sang hàng rẻ nhất cùng thông số trong kết quả tìm kiếm (xem cheap_swaps). Vỏ theo \
+            sang hàng rẻ nhất cùng thông số trong kết quả tìm kiếm (xem cheap_swaps). Máy game / đồ họa có card rời: tier \
+            cheap ưu tiên vỏ Tower nhỏ gọn (bo Micro-ATX như B760M / B650M / B550M, tản khí, card 2 quạt, nguồn ATX) vì bo \
+            Micro-ATX rẻ hơn bo ATX 1 - 2 triệu; người dùng thích kính thì tìm vỏ Micro-ATX CÓ kính (vd "vỏ mATX kính cường lực"). \
+            Tier balanced bị over_budget hay thiếu hàng bo ATX thì cũng chuyển sang cấu hình nhỏ gọn đó. Vỏ theo \
             ý người dùng (vd có kính) mà làm vượt mức này thì ĐƯỢC chọn vỏ khác có món đi kèm rẻ hơn (tản khí, card 2 \
             quạt), và nói rõ trong câu trả lời đã bỏ điều gì để rẻ hơn (vd "bỏ mặt kính");
                - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng sát ngân sách nhưng TUYỆT ĐỐI không \
@@ -723,7 +726,7 @@ public class ChatService {
                 Integer target = ("ram".equals(category) ? RAM_STEPS : SSD_STEPS).stream()
                         .filter(t -> t < have * 0.95 && t >= floor).findFirst().orElse(null);
                 if (target == null) continue;
-                var found = lowerTier(code, category, now, target, picks, was);
+                var found = lowerTier(code, category, now, target, picks, was, c.siblings().getOrDefault(code, List.of()), floor);
                 if (found == null || found.priceVnd() == null) continue;
                 long save = was - found.priceVnd();
                 if (save > bestSave) {
@@ -749,18 +752,26 @@ public class ChatService {
         return new Checked(req, c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
+    /** Bộ lọc bỏ món trùng link (kết quả tìm và nhóm của trợ lý hay trùng nhau) */
+    private static java.util.function.Predicate<ProductSearch.Product> distinctUrl() {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        return p -> p.url() == null || seen.add(p.url());
+    }
+
     private static String label(int gb) {
         return gb >= 1000 ? gb / 1000 + "TB" : gb + "GB";
     }
 
     /** Món RAM / SSD dung lượng target rẻ hơn món đang chọn, có link mua, đúng loại / cỡ / DDR, qua phép kiểm chung */
     private ProductSearch.Product lowerTier(String code, String category, ProductSearch.Product now, int target,
-            Map<String, ProductSearch.Product> picks, long lineCost) {
+            Map<String, ProductSearch.Product> picks, long lineCost, List<ProductSearch.Product> siblings, int floor) {
         String ddr = "ram".equals(category) ? ProductRules.read("ram", now.title()).ramType() : null;
         String query = "ram".equals(category) ? "RAM " + (ddr == null ? "" : ddr + " ") + target + "GB" : "SSD NVMe M.2 " + label(target);
         List<ProductSearch.Product> pool = new ArrayList<>();
-        // Chính món đang chọn cũng là ứng viên: RAM 2 thanh 16GB hạ xuống 16GB là bỏ bớt một thanh cùng sản phẩm
+        // Chính món đang chọn cũng là ứng viên: RAM 2 thanh 16GB hạ xuống 16GB là bỏ bớt một thanh cùng sản phẩm. Thêm cả
+        // kết quả trợ lý đã tìm cho dòng này (thường có sẵn bản dung lượng nhỏ hơn, giá đã xác minh)
         pool.add(now);
+        pool.addAll(siblings);
         try {
             pool.addAll(search.search(query));
             pool.addAll(search.engineSearch(query));
@@ -776,12 +787,18 @@ public class ChatService {
                         ? ramFits(p.title(), target, null) && Integer.valueOf(target).equals(amount("ram", p.title()))
                                 && !serverRam(p.title()) && !ProductRules.read("ram", p.title()).laptopRam()
                                 && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType()))
-                        : amount("ssd", p.title()) != null && Math.abs(amount("ssd", p.title()) - target) <= target * 0.07)
+                        // SSD đúng nấc (500GB tính như 512GB) và không dưới mức tối thiểu theo nhu cầu
+                        : amount("ssd", p.title()) != null && Math.abs(amount("ssd", p.title()) - target) <= target * 0.07
+                                && amount("ssd", p.title()) >= floor * 0.97)
                 .filter(p -> p == now || swapOk(code, p, picks))
-                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
+                .filter(distinctUrl())
+                .sorted(Comparator.comparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
                 .toList();
         if (list.contains(now)) return now;
-        return bestLinked(list, null);
+        var found = bestLinked(list, null, 8);
+        if (found == null) log.info("Hạ {} xuống {}: {} món trong {} kết quả tìm \"{}\", không món nào có link mua", code,
+                "ram".equals(category) ? target + "GB" : label(target), list.size(), pool.size(), query);
+        return found;
     }
 
     /** Phương án hiện được cho người dùng: không vượt trần, lắp chung được (danh mục, mô hình 3D và sản phẩm thật) */
@@ -1089,6 +1106,13 @@ public class ChatService {
                     }
                     // CPU: tên ở mỗi cửa hàng kèm thông số khác nhau ("Box", "Socket 1700/ 4 Cores"), so đúng mã model
                     if ("cpu".equals(category)) return cpuModel(now.title()) != null && cpuModel(now.title()).equals(cpuModel(s.title()));
+                    // Card: hãng khác được nếu cùng chip (giữ Ti / Super / XT) và cùng VRAM khi cả hai tên ghi; cỡ mẫu 3D do
+                    // phép kiểm chung (swapOk / fitsCode) xét lúc gắn
+                    if ("gpu".equals(category)) {
+                        String a = gpuChip(now.title()), b = gpuChip(s.title());
+                        Integer va = vram(now.title()), vb = vram(s.title());
+                        return a != null && a.equals(b) && (va == null || vb == null || va.equals(vb));
+                    }
                     // Vỏ, tản, quạt: model khác được nếu cùng lớp (vỏ chứa được bo cùng cỡ và vẫn có kính nếu vỏ cũ có;
                     // tản cùng kiểu; quạt cùng cỡ)
                     if ("case".equals(category)) {
@@ -1540,13 +1564,15 @@ public class ChatService {
     }
 
     /** Phương án Rẻ (và phương án vượt trần): loại món được tìm thêm bằng từ khoá chung để có hàng rẻ hơn cùng thông số */
-    private static final java.util.Set<String> CHEAP_WIDEN = java.util.Set.of("case", "cooler", "psu", "ram", "ssd", "fans", "motherboard");
+    private static final java.util.Set<String> CHEAP_WIDEN = java.util.Set.of("case", "cooler", "psu", "ram", "ssd", "fans", "motherboard", "gpu");
 
     /**
      * Từ khoá tìm thêm hàng rẻ hơn cho một dòng: bo theo socket CPU đã chọn + loại DDR (vd "mainboard LGA1700 DDR4", ra cả
      * H610 lẫn B760 đúng cỡ sau bước lọc), món khác theo từ khoá chung của mã
      */
     private String widenQuery(String code, String category, ProductSearch.Product now, Map<String, ProductSearch.Product> picks) {
+        // Card: tìm đúng chip ở mọi hãng ("VGA RTX 4060"), không tìm chung chung
+        if ("gpu".equals(category)) return now == null ? null : coreQuery("gpu", now.title());
         if (!"motherboard".equals(category)) return GENERIC_QUERY.get(code);
         String socket = ProductRules.read("cpu", productTitles(picks).getOrDefault("cpu", "")).socket();
         if (socket == null) return GENERIC_QUERY.get(code);
@@ -2021,6 +2047,14 @@ public class ChatService {
             case "fans" -> fanSize(now) == null || fanSize(now).equals(fanSize(other));
             default -> true;
         };
+    }
+
+    private static final java.util.regex.Pattern VRAM = java.util.regex.Pattern.compile("\\b(4|6|8|10|12|16|20|24)\\s*g(b)?\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** Dung lượng bộ nhớ card ghi trên tên ("8GB", "8G"), null nếu không ghi */
+    static Integer vram(String title) {
+        var m = title == null ? null : VRAM.matcher(title);
+        return m != null && m.find() ? Integer.parseInt(m.group(1)) : null;
     }
 
     private static final java.util.regex.Pattern GPU_CHIP = java.util.regex.Pattern.compile(

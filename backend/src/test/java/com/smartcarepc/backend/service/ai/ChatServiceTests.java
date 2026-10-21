@@ -1239,6 +1239,38 @@ class ChatServiceTests {
         assertThat((String) messages(2).get(5).get("content")).contains("not_shown").contains("gpu_280");
     }
 
+    // ---- Hồi quy câu game (review Sol 6.1, 21/10/2026) ---------------
+
+    @Test
+    void ssdMotTbHaXuong512GbTuKetQuaTroLyDaTim() {
+        // v10c game: SSD 1TB 4,79 triệu không lần nào hạ xuống 512GB (lowerTier không xét nhóm kết quả của trợ lý)
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("Ổ Cứng SSD WD Green SN3000 1TB M.2 NVMe", "A", 4_790_000L, "https://a.vn/1tb", null),
+                new ProductSearch.Product("Ổ Cứng SSD WD Green SN3000 500GB M.2 NVMe", "A", 2_390_000L, "https://a.vn/500", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":3000000,"items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var ssd = service.reply(new ChatRequest(List.of(new Message("user", "chơi game, có 3 triệu")), null, null, "advice"))
+                .build().items().getFirst();
+
+        assertThat(ssd.productName()).isEqualTo("Ổ Cứng SSD WD Green SN3000 500GB M.2 NVMe");
+    }
+
+    @Test
+    void cardCungChipCungVramMoiLaTuongDuong() {
+        var now = new ProductSearch.Product("Card ASUS Dual GeForce RTX 4060 8GB", "A", 9_200_000L, "https://a.vn/1", null);
+        var msi = new ProductSearch.Product("Card MSI GeForce RTX 4060 Ventus 2X 8G", "B", 7_790_000L, "https://b.vn/1", null);
+        var ti = new ProductSearch.Product("Card MSI GeForce RTX 4060 Ti Ventus 2X 8G", "B", 8_990_000L, "https://b.vn/2", null);
+        var r3060 = new ProductSearch.Product("Card Gigabyte GeForce RTX 3060 12GB", "C", 7_000_000L, "https://c.vn/1", null);
+        assertThat(ChatService.equivalents("gpu", now, List.of(msi, ti, r3060), false, false, false)).containsExactly(msi);
+        assertThat(ChatService.vram("Card MSI GeForce RTX 4060 Ventus 2X 8G")).isEqualTo(8);
+    }
+
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
 
     private static Map<String, Object> answer(String text) {
