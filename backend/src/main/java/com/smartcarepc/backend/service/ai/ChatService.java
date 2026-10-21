@@ -2987,6 +2987,23 @@ public class ChatService {
         return null;
     }
 
+    /**
+     * Nguồn thay cho dòng nguồn không có link (ca thật n14: trợ lý chọn nguồn SFX 600W không còn bán, nguồn SFX 550W có link
+     * bị coi khác thông số): cùng kiểu SFX / ATX, công suất thấp hơn được nếu vẫn đủ mức hãng chip khuyên dùng cho card đang chọn
+     * (GPU_PSU, mặc định 550W) và không dưới 450W
+     */
+    private List<ProductSearch.Product> enoughPsu(ProductSearch.Product now, List<ProductSearch.Product> found, Map<String, ProductSearch.Product> picks) {
+        if (now == null || now.title() == null) return List.of();
+        String gpu = productTitles(picks).get("gpu");
+        int need = Math.max(450, gpu == null ? 450 : GPU_PSU.getOrDefault(gpuChip(gpu), 550));
+        boolean small = sfx(now.title());
+        return found.stream()
+                .filter(p -> p.title() != null && p.priceVnd() != null && plausible("psu", p.priceVnd()) && !JUNK.matcher(p.title()).find())
+                .filter(p -> ofKind("psu", p.title()) && sfx(p.title()) == small)
+                .filter(p -> amount("psu", p.title()) != null && amount("psu", p.title()) >= need)
+                .toList();
+    }
+
     /** Từ khoá tìm card theo chip ("rtx4060ti" -> "VGA RTX 4060 TI") */
     static String chipQuery(String chip) {
         var m = java.util.regex.Pattern.compile("^(rtx|gtx|rx|arc)([a-z]?\\d{3,4})(.*)$").matcher(chip);
@@ -3423,7 +3440,9 @@ public class ChatService {
                 //    Tìm lại theo thông số / tên ngắn, qua Google Shopping rồi thẳng trên web cửa hàng (link sẵn là trang sản phẩm)
                 boolean isKit = kit(req, details, code);
                 java.util.function.Function<List<ProductSearch.Product>, List<ProductSearch.Product>> fit = found ->
-                        linkable(category, pick, found, isKit).stream()
+                        Stream.concat(linkable(category, pick, found, isKit).stream(),
+                                noLink && "psu".equals(category) ? enoughPsu(pick, found, picks).stream() : Stream.<ProductSearch.Product>empty())
+                                .filter(distinctUrl())
                                 // Dòng chưa có link: không giới hạn bằng phần dư (lúc lấy link phương án có thể đang vượt trần, các bước
                                 // hạ CPU / card chạy sau mới kéo tổng về; ca thật n13: vỏ ITX có link rẻ nhất 2,25tr bị loại vì phần dư âm,
                                 // dòng vỏ trống, cả phương án ẩn). Vẫn xếp món rẻ trước
