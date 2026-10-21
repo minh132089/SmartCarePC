@@ -3424,7 +3424,10 @@ public class ChatService {
                 boolean isKit = kit(req, details, code);
                 java.util.function.Function<List<ProductSearch.Product>, List<ProductSearch.Product>> fit = found ->
                         linkable(category, pick, found, isKit).stream()
-                                .filter(c -> extra.applyAsLong(c) <= room && fitsCode(code, c.title()) && fits.test(c) && !recentlyNoLink(c))
+                                // Dòng chưa có link: không giới hạn bằng phần dư (lúc lấy link phương án có thể đang vượt trần, các bước
+                                // hạ CPU / card chạy sau mới kéo tổng về; ca thật n13: vỏ ITX có link rẻ nhất 2,25tr bị loại vì phần dư âm,
+                                // dòng vỏ trống, cả phương án ẩn). Vẫn xếp món rẻ trước
+                                .filter(c -> (noLink || extra.applyAsLong(c) <= room) && fitsCode(code, c.title()) && fits.test(c) && !recentlyNoLink(c))
                                 .filter(c -> stockOrder(c) < 2)
                                 .sorted(Comparator.comparing((ProductSearch.Product c) -> extra.applyAsLong(c) > allowance)
                                         .thenComparingLong(c -> c.priceVnd() == null ? Long.MAX_VALUE : c.priceVnd()))
