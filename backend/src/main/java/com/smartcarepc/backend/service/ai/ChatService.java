@@ -520,9 +520,9 @@ public class ChatService {
             if (turn.advice && !showable(c, cap)) {
                 // Lý do từng phương án bị ẩn, để đo được nguyên nhân (vượt trần do món nào, lỗi lắp nào, dòng nào thiếu hàng)
                 var noProduct = c.request().items().stream().map(BuildCheckRequest.Item::code).filter(code -> c.picks().get(code) == null).toList();
-                log.warn("Phương án {} không hiện: tổng {} / trần {}, lắp chung {} {}, lỗi sản phẩm {}, dòng chưa có hàng {}, món đắt nhất {}", t,
+                log.warn("Phương án {} không hiện: tổng {} / trần {}, lắp chung {} {}, lỗi sản phẩm {}, dòng chưa có hàng {}, dòng chưa mua được {}, món đắt nhất {}", t,
                         total(c.request(), c.details(), c.picks()), cap, c.result().compatible(),
-                        c.result().errors().stream().map(Issue::rule).toList(), productIssues(c.picks()), noProduct,
+                        c.result().errors().stream().map(Issue::rule).toList(), productIssues(c.picks()), noProduct, missingBuy(c),
                         c.picks().entrySet().stream().filter(e -> e.getValue().priceVnd() != null)
                                 .sorted(Comparator.comparingLong((Map.Entry<String, ProductSearch.Product> e) -> -e.getValue().priceVnd())).limit(3)
                                 .map(e -> e.getKey() + "=" + e.getValue().priceVnd()).toList());
@@ -781,7 +781,21 @@ public class ChatService {
     /** Phương án hiện được cho người dùng: không vượt trần, lắp chung được (danh mục, mô hình 3D và sản phẩm thật) */
     private boolean showable(Checked c, Long cap) {
         return (cap == null || total(c.request(), c.details(), c.picks()) <= cap) && c.result().compatible()
-                && productIssues(c.picks()).isEmpty();
+                && productIssues(c.picks()).isEmpty() && (!search.enabled() || missingBuy(c).isEmpty());
+    }
+
+    /**
+     * Dòng chưa mua được: chưa có sản phẩm, không có link thẳng tới trang sản phẩm, hoặc trang báo hết hàng (MVP: dòng nào
+     * cũng phải có link mua hàng mới còn bán). Hàng có link mà trang không ghi tình trạng thì vẫn hiện, thẻ ghi "hỏi cửa
+     * hàng còn hàng không" (CONDITIONAL).
+     */
+    private List<String> missingBuy(Checked c) {
+        return c.request().items().stream().map(BuildCheckRequest.Item::code).filter(code -> {
+            var p = c.picks().get(code);
+            var link = c.links().get(code);
+            String url = p == null || link == null ? null : link.join();
+            return url == null || ProductSearch.homePage(url) || soldOut(url);
+        }).distinct().toList();
     }
 
     /** Dòng mua theo bộ (buy_qty nhỏ hơn số lượng, vd RAM 2x8GB là 1 sản phẩm cho 2 thanh) */
@@ -814,9 +828,14 @@ public class ChatService {
      * phẩm. now: link món đang chọn; món đang chọn ngang bằng thì trả về null (giữ nguyên).
      */
     private ProductSearch.Product bestLinked(List<ProductSearch.Product> candidates, String now) {
+        return bestLinked(candidates, now, 4);
+    }
+
+    /** Như trên, thử tối đa limit món (dòng bắt buộc phải có link được thử nhiều hơn) */
+    private ProductSearch.Product bestLinked(List<ProductSearch.Product> candidates, String now, int limit) {
         int nowRank = rank(now);
         // Thử song song (mỗi lần thử có thể phải tìm và mở trang cửa hàng), rồi lấy món hạng cao nhất, gần giá nhất
-        var tries = candidates.stream().limit(4)
+        var tries = candidates.stream().limit(limit)
                 .map(c -> Io.async(() -> {
                     String l = search.directLink(c.title(), c.shop(), c.url());
                     return l == null ? null : new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
@@ -2113,14 +2132,14 @@ public class ChatService {
 
     private boolean recentlyNoLink(ProductSearch.Product p) {
         if (p == null || p.title() == null) return false;
-        Long until = noLinkUntil.get(ProductSearch.shortTitle(p.title()).toLowerCase());
+        Long until = noLinkUntil.get(com.smartcarepc.backend.service.price.PriceEngine.norm(p.title()));
         return until != null && until > System.currentTimeMillis();
     }
 
     private void rememberNoLink(ProductSearch.Product p) {
         if (p == null || p.title() == null) return;
         if (noLinkUntil.size() > 2000) noLinkUntil.clear();
-        noLinkUntil.put(ProductSearch.shortTitle(p.title()).toLowerCase(), System.currentTimeMillis() + NO_LINK_TTL.toMillis());
+        noLinkUntil.put(com.smartcarepc.backend.service.price.PriceEngine.norm(p.title()), System.currentTimeMillis() + NO_LINK_TTL.toMillis());
     }
 
     /** Thêm món p vào dòng code không làm tăng số lỗi lắp chung giữa các sản phẩm thật đã chọn */
@@ -2141,6 +2160,38 @@ public class ChatService {
             Map.entry("case_showcase_dual_chamber", "vỏ máy tính bể cá 2 khoang"), Map.entry("case_full_tower", "vỏ máy tính full tower"),
             Map.entry("ram_ddr4", "RAM máy bàn 8GB"),
             Map.entry("ssd_m2_2280", "SSD NVMe M.2 512GB"), Map.entry("fan120", "quạt case 120mm"));
+
+    private static final java.util.regex.Pattern GPU_CORE = java.util.regex.Pattern.compile(
+            "\\b(rtx|gtx|rx|arc)\\s*([a-z]?\\d{3,4})(\\s*(ti\\s*super|ti|super|xtx|xt|gre))?", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern BOARD_CORE = java.util.regex.Pattern.compile("\\b([abhzx]\\d{3})m?\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Từ khoá lõi của một dòng (bậc giữa thông số đầy đủ và từ khoá chung): card "VGA RTX 4060", bo "mainboard B550 DDR4",
+     * CPU đúng mã model; null nếu không đọc ra (dùng các bậc khác)
+     */
+    static String coreQuery(String category, String text) {
+        if (text == null || category == null) return null;
+        switch (category) {
+            case "gpu" -> {
+                var m = GPU_CORE.matcher(text);
+                return m.find() ? "VGA " + m.group(1).toUpperCase() + " " + m.group(2).toUpperCase()
+                        + (m.group(4) == null ? "" : " " + m.group(4).replaceAll("\\s+", " ").toUpperCase()) : null;
+            }
+            case "motherboard" -> {
+                var m = BOARD_CORE.matcher(text);
+                if (!m.find()) return null;
+                String t = text.toUpperCase();
+                return "mainboard " + m.group(1).toUpperCase() + (t.contains("DDR5") ? " DDR5" : t.contains("DDR4") ? " DDR4" : "");
+            }
+            case "cpu" -> {
+                String model = cpuModel(text);
+                return model == null ? null : "CPU " + model;
+            }
+            default -> {
+                return null;
+            }
+        }
+    }
 
     /** CPU Intel bản Box không đuôi K: có kèm quạt tản Intel (thấp, ~47 mm) */
     static boolean stockCooler(String cpuTitle) {
@@ -2193,10 +2244,14 @@ public class ChatService {
                 //    có trang sản phẩm. Món đang chọn không thua món thay thế thì giữ nguyên
                 var best = bestLinked(candidates, same != null ? same.url() : now);
                 if (best == null) best = same;
-                if (best != null || !noLink) return best;
-                // 3. Vẫn chưa có link: link là bắt buộc. Cùng model ở cửa hàng khác dù đắt hơn phần chia đều (trong phần dư tới trần)
-                best = bestLinked(elsewhere.stream().filter(c -> extra.applyAsLong(c) <= room).toList(), null);
-                if (best != null) return best;
+                // Đã có hàng xác nhận còn bán thì xong; chưa xác nhận (trang không ghi tình trạng hàng) thì giữ làm dự phòng
+                // và tìm tiếp ở các bước sau như dòng chưa có link (MVP: hàng phải còn bán)
+                if (best != null && rank(best.url()) == 3) return best;
+                ProductSearch.Product fallback = best;
+                // 3. Cùng model ở cửa hàng khác dù đắt hơn phần chia đều (trong phần dư tới trần)
+                best = bestLinked(elsewhere.stream().filter(c -> extra.applyAsLong(c) <= room).toList(), null, 8);
+                if (best != null && rank(best.url()) == 3) return best;
+                if (fallback == null || best != null && rank(best.url()) > rank(fallback.url())) fallback = best;
                 // 4. Sản phẩm khác cùng loại, cùng thông số (bỏ giới hạn khoảng giá; món vừa phần dư được thử trước).
                 //    Tìm lại theo thông số / tên ngắn, qua Google Shopping rồi thẳng trên web cửa hàng (link sẵn là trang sản phẩm)
                 boolean isKit = kit(req, details, code);
@@ -2206,16 +2261,26 @@ public class ChatService {
                                 .sorted(Comparator.comparing((ProductSearch.Product c) -> extra.applyAsLong(c) > allowance)
                                         .thenComparingLong(c -> c.priceVnd() == null ? Long.MAX_VALUE : c.priceVnd()))
                                 .toList();
-                best = bestLinked(fit.apply(siblings.getOrDefault(code, List.of())), null);
-                if (best != null) return best;
+                best = bestLinked(fit.apply(siblings.getOrDefault(code, List.of())), null, 8);
+                if (best != null && rank(best.url()) == 3) return best;
+                if (fallback == null || best != null && rank(best.url()) > rank(fallback.url())) fallback = best;
                 List<String> queries = new ArrayList<>();
                 if (spec != null) queries.add(spec);
                 queries.add(ProductSearch.shortTitle(pick.title()));
+                String core = coreQuery(category, spec != null ? spec : pick.title());
+                if (core != null) queries.add(core);
                 for (String q : queries.stream().distinct().toList()) {
-                    best = bestLinked(fit.apply(search.search(q)), null);
-                    if (best == null) best = bestLinked(fit.apply(search.engineSearch(q)), null);
-                    if (best != null) return best;
+                    best = bestLinked(fit.apply(search.search(q)), null, 8);
+                    if (best == null || rank(best.url()) < 3) {
+                        var engine = bestLinked(fit.apply(search.engineSearch(q)), null, 8);
+                        if (engine != null && (best == null || rank(engine.url()) > rank(best.url()))) best = engine;
+                    }
+                    if (best != null && rank(best.url()) == 3) return best;
+                    if (fallback == null || best != null && rank(best.url()) > rank(fallback.url())) fallback = best;
                 }
+                // Dòng đang có link (chưa rõ còn hàng / chưa kiểm giá trang): chỉ đổi khi món tìm được hạng cao hơn
+                if (fallback != null && (noLink || rank(fallback.url()) > rank(now))) return fallback;
+                if (!noLink) return null;
                 log.info("Không tìm được link mua cho dòng {} (\"{}\") dù đã thử cửa hàng khác và sản phẩm khác", code, pick.title());
                 rememberNoLink(pick);
                 return null;
@@ -2231,15 +2296,17 @@ public class ChatService {
             mustLink.add(code);
             String lineSpec = text(details.getOrDefault(code, Map.of()).get("spec"));
             String lineName = partName(code);
+            String lineCore = coreQuery(lineCategory, lineSpec);
             fixes.put(code, Io.async(() -> {
-                for (String q : Stream.of(lineSpec, lineName, GENERIC_QUERY.get(code)).filter(Objects::nonNull).distinct().toList()) {
+                // Thang từ khoá: thông số trợ lý ghi -> lõi model (vd "VGA RTX 4060", "mainboard B550 DDR4") -> tên danh mục -> chung
+                for (String q : Stream.of(lineSpec, lineCore, lineName, GENERIC_QUERY.get(code)).filter(Objects::nonNull).distinct().toList()) {
                     for (var source : List.<java.util.function.Function<String, List<ProductSearch.Product>>>of(search::search, search::engineSearch)) {
                         var list = source.apply(q).stream()
                                 .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
                                 .filter(c -> plausible(lineCategory, c.priceVnd()) && ofKind(lineCategory, c.title()) && fitsCode(code, c.title()))
                                 .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                                 .toList();
-                        var best = bestLinked(list, null);
+                        var best = bestLinked(list, null, 8);
                         if (best != null) return best;
                     }
                 }
@@ -2261,7 +2328,17 @@ public class ChatService {
                 Thread.currentThread().interrupt();
                 return;
             }
-            if (p == null) return;
+            if (p == null) {
+                // Không có món thay mà món đang chọn đã hết hàng: không giữ hàng hết (MVP: hàng phải còn bán), dòng thành
+                // chưa có sản phẩm và phương án không được hiện nếu vẫn vậy (showable)
+                String l = links.containsKey(code) ? links.get(code).join() : null;
+                if (l != null && soldOut(l)) {
+                    log.info("Dòng {}: \"{}\" hết hàng và không tìm được món thay, bỏ", code, picks.get(code) == null ? null : picks.get(code).title());
+                    picks.remove(code);
+                    links.remove(code);
+                }
+                return;
+            }
             // Dòng chưa có sản phẩm thì chỉ cần không thêm lỗi lắp; dòng đang có món thì món thay qua phép kiểm chung
             if (picks.containsKey(code) ? !swapOk(code, p, picks) : !fitsWith(picks, code, p, productIssues(picks).size())) return;
             picks.put(code, p);
@@ -2586,6 +2663,7 @@ public class ChatService {
             };
             return json.writeValueAsString(out);
         } catch (RuntimeException e) {
+            log.warn("Công cụ {} lỗi", function.get("name"), e);
             return "Lỗi: " + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName());
         }
     }
@@ -2721,7 +2799,8 @@ public class ChatService {
             String generic = "motherboard".equals(category) && cpuSocket != null
                     ? "mainboard " + cpuSocket + (spec != null && spec.toUpperCase().contains("DDR5") ? " DDR5" : spec != null && spec.toUpperCase().contains("DDR4") ? " DDR4" : "")
                     : GENERIC_QUERY.get(i.code());
-            jobs.put(i.code(), Io.async(() -> findFor(spec, name, generic, lo, hi, ok, list -> siblings.put(i.code(), list))));
+            String core = coreQuery(category, spec);
+            jobs.put(i.code(), Io.async(() -> findFor(spec, core, name, generic, lo, hi, ok, list -> siblings.put(i.code(), list))));
         }
         Map<String, ProductSearch.Product> out = new LinkedHashMap<>();
         jobs.forEach((code, job) -> {
@@ -2731,9 +2810,9 @@ public class ChatService {
         return out;
     }
 
-    private ProductSearch.Product findFor(String spec, String name, String generic, Long lo, Long hi,
+    private ProductSearch.Product findFor(String spec, String core, String name, String generic, Long lo, Long hi,
             java.util.function.Predicate<ProductSearch.Product> ok, java.util.function.Consumer<List<ProductSearch.Product>> found) {
-        for (String query : Stream.of(spec, name, generic).filter(Objects::nonNull).distinct().toList()) {
+        for (String query : Stream.of(spec, core, name, generic).filter(Objects::nonNull).distinct().toList()) {
             try {
                 var list = search.search(query).stream().filter(ok).toList();
                 var p = choose(list, lo, hi);

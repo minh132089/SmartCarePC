@@ -110,7 +110,13 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM DDR4 16GB")).thenReturn(List.of(new ProductSearch.Product(
                 "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://www.google.com/search?ibp=oshop&q=ram", "https://img/ram.jpg")));
-        when(search.directLink(any(), any(), any())).thenReturn("https://shop-a.vn/ram-16gb");
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> {
+            String link = inv.getArgument(2);
+            return link.contains("google") ? "https://shop-a.vn/ram-16gb" : link;
+        });
+        // Id vỏ không có trong kết quả tìm kiếm: app tự tìm vỏ theo spec trợ lý ghi (mọi dòng phải có hàng kèm link)
+        when(search.search("Vỏ mATX nhỏ")).thenReturn(List.of(new ProductSearch.Product(
+                "Vỏ máy tính Xigmatek XA-22 Micro-ATX", "Shop B", 800_000L, "https://shop-b.vn/vo", null)));
         reply(toolCall("s1", "search_products", "{\"query\":\"RAM DDR4 16GB\"}"),
                 toolCall("p1", "propose_build", """
                 {"summary":"Học online, máy nhỏ gọn","budget_vnd":12000000,"items":[
@@ -130,14 +136,13 @@ class ChatServiceTests {
         assertThat(ram.sourceUrl()).as("đã đổi sang link cửa hàng").isEqualTo("https://shop-a.vn/ram-16gb");
         assertThat(ram.imageUrl()).isEqualTo("https://img/ram.jpg");
         var vo = card.items().getFirst();
-        assertThat(vo.productName()).as("id không có trong kết quả tìm kiếm").isNull();
-        assertThat(vo.sourceUrl()).isNull();
-        assertThat(vo.priceMinVnd()).as("không có sản phẩm thì dùng giá ước tính").isEqualTo(700_000L);
+        assertThat(vo.productName()).as("id không có trong kết quả tìm kiếm: app tự tìm").isEqualTo("Vỏ máy tính Xigmatek XA-22 Micro-ATX");
+        assertThat(vo.sourceUrl()).isEqualTo("https://shop-b.vn/vo");
         // Trợ lý chỉ thấy id, tên, cửa hàng, giá; không thấy link dài
         String toolResult = (String) messages(1).get(3).get("content");
         assertThat(toolResult).contains("s1-1").contains("1050000").doesNotContain("google.com");
-        // Tổng do backend cộng: 700k-1tr ước tính + 1,05tr giá cửa hàng
-        assertThat((String) messages(2).get(5).get("content")).contains("\"total_min_vnd\":1750000").contains("\"total_max_vnd\":2050000");
+        // Tổng do backend cộng: vỏ app tự tìm 800k + 1,05tr giá cửa hàng
+        assertThat((String) messages(2).get(5).get("content")).contains("\"total_min_vnd\":1850000").contains("\"total_max_vnd\":1850000");
     }
 
     @Test
@@ -706,7 +711,9 @@ class ChatServiceTests {
         assertThat(ProductSearch.shortTitle("CPU Intel Core i5-12400F (Up to 4.4GHz, 6 nhân 12 luồng) - Chính hãng"))
                 .isEqualTo("CPU Intel Core i5-12400F");
         assertThat(ProductSearch.shortTitle("Card màn hình MSI GeForce RTX 4060 Ventus 2X Black 8G OC"))
-                .isEqualTo("Card màn hình MSI GeForce RTX 4060 Ventus");
+                .isEqualTo("MSI GeForce RTX 4060 Ventus 2X Black 8G");
+        // v7: tên dài mất mã model 4060 khi cắt 8 từ
+        assertThat(ProductSearch.shortTitle("Card màn hình/ VGA Asus Dual GeForce RTX 4060 OC Edition 8GB GDDR6")).contains("4060");
         assertThat(ProductSearch.shortTitle("(Hot) RAM")).isEqualTo("(Hot) RAM");
         assertThat(ProductSearch.homePage("https://hotgear.vn/")).isTrue();
         assertThat(ProductSearch.homePage("https://hotgear.vn")).isTrue();
@@ -1054,8 +1061,8 @@ class ChatServiceTests {
 
         var card = service.reply(new ChatRequest(List.of(new Message("user", "game, RAM 2x8GB")), null, null, "advice")).build();
 
-        // Không có thanh 8GB nào trong kết quả: dòng RAM không còn hàng 16GB một thanh (trái lời người dùng)
-        assertThat(card.items().getFirst().productName()).isNull();
+        // Không có thanh 8GB nào trong kết quả: dòng RAM không có hàng đúng lời người dùng nên phương án không hiện
+        assertThat(card).isNull();
     }
 
     @Test
@@ -1160,6 +1167,38 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học online, 3,7 triệu")), null, null, "advice"));
 
         assertThat(res.build().items()).extracting(Line::code).containsExactly("cpu_std");
+    }
+
+    // ---- Hồi quy vòng đo v7 (review Sol 6.1, 21/10/2026) ---------------
+
+    @Test
+    void tuKhoaLoiChoDongTrong() {
+        assertThat(ChatService.coreQuery("gpu", "RTX 4060 8GB, 2 quạt")).isEqualTo("VGA RTX 4060");
+        assertThat(ChatService.coreQuery("gpu", "RTX 4060 Ti 16GB")).isEqualTo("VGA RTX 4060 TI");
+        assertThat(ChatService.coreQuery("motherboard", "Mainboard b550 ATX DDR4")).isEqualTo("mainboard B550 DDR4");
+        assertThat(ChatService.coreQuery("motherboard", "B760M, DDR5")).isEqualTo("mainboard B760 DDR5");
+        assertThat(ChatService.coreQuery("ssd", "SSD 512GB")).isNull();
+    }
+
+    @Test
+    void monHetHangKhongTimDuocMonThayThiKhongHien() {
+        // v7 game-2 quality: bo MSI B550 GAMING PLUS hết hàng vẫn được hiện vì tìm món thay thất bại
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("mb_atx")).thenReturn(part("mb_atx", "motherboard", "Bo mạch chủ ATX"));
+        when(search.enabled()).thenReturn(true);
+        var board = new ProductSearch.Product("Bo mạch chủ MSI MPG B550 GAMING PLUS DDR4", "A", 3_000_000L, "https://a.vn/b550", null);
+        when(search.search("bo")).thenReturn(List.of(board));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        when(search.offer(board.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                board.title(), "A", 3_000_000L, null, board.url(), null, false, null, null));
+        reply(toolCall("s", "search_products", "{\"query\":\"bo\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","items":[{"code":"mb_atx","spec":"B550 ATX","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
+
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("Phương án Phù hợp: chưa tìm được");
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------

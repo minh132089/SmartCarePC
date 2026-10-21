@@ -258,17 +258,26 @@ public class ProductSearch {
     /** Link cửa hàng đã đổi, theo tên + cửa hàng: build 2 / 3 và các phương án hay trùng sản phẩm, khỏi tìm lại */
     private final Map<String, String> linkCache = new ConcurrentHashMap<>();
 
+    /** Tên + cửa hàng không tìm ra link -> hạn thử lại */
+    private final Map<String, Long> linkMiss = new ConcurrentHashMap<>();
+    static final Duration LINK_MISS_TTL = Duration.ofMinutes(10);
+
     public String directLink(String title, String shop, String link) {
         // Link thẳng (engine, kết quả Google thường): engine đã đọc trang thì dùng; không thì phải xác minh trang
         if (link != null && !isGoogle(link)) return engine.readPage(link, title) != null ? link : null;
         if (!enabled() || title == null) return null;
         String key = title + "|" + shop;
         String hit = linkCache.get(key);
-        if (hit != null) return hit.isEmpty() ? null : hit;
+        if (hit != null) return hit;
+        // Lần không tìm ra được nhớ LINK_MISS_TTL (cùng sản phẩm hay xuất hiện ở nhiều option), sau đó thử lại: lỗi có thể
+        // chỉ là tạm thời (mạng, cửa hàng chậm, SearXNG đang nghỉ)
+        Long miss = linkMiss.get(key);
+        if (miss != null && miss > System.currentTimeMillis()) return null;
         String found = resolve(title, shop);
-        // Nhớ cả lần không tìm ra (chuỗi rỗng): cùng sản phẩm hay xuất hiện ở nhiều option, khỏi tìm và mở trang lại
         if (linkCache.size() > 2000) linkCache.clear();
-        linkCache.put(key, found == null ? "" : found);
+        if (linkMiss.size() > 2000) linkMiss.clear();
+        if (found != null) linkCache.put(key, found);
+        else linkMiss.put(key, System.currentTimeMillis() + LINK_MISS_TTL.toMillis());
         return found;
     }
 
@@ -306,11 +315,29 @@ public class ProductSearch {
     }
 
     /** "CPU Intel Core i5-12400F (Up to 4.4GHz, 6 nhân 12 luồng) - Chính hãng" -> "CPU Intel Core i5-12400F" (tối đa 8 chữ) */
+    /** Chữ chỉ loại hàng đứng đầu tên ở cửa hàng ("Card màn hình/ VGA", "Bo mạch chủ/ Mainboard"): bỏ khi rút gọn tên */
+    private static final Pattern LEADING_KIND = Pattern.compile(
+            "^((card\\s+màn\\s+hình|vga|bo\\s+mạch\\s+(chủ|chính)|mainboard|motherboards?|bộ\\s+nhớ(\\s+trong)?|ram(\\s+desktop)?|ổ\\s+cứng|"
+                    + "cpu|bộ\\s+vi\\s+xử\\s+lý|nguồn(\\s+máy\\s+tính)?|vỏ(\\s+case)?(\\s+máy\\s+tính)?|case|tản\\s+nhiệt(\\s+khí|\\s+nước)?)[\\s/:,-]*)+",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    /**
+     * Tên rút gọn để tìm lại cùng sản phẩm: bỏ phần trong ngoặc / sau " - ", bỏ chữ chỉ loại hàng ở đầu, giữ 8 từ; mã model
+     * (từ có chữ số, vd 4060, B550M, 12400F) nằm sau từ thứ 8 vẫn được giữ, để "Card màn hình/ VGA Asus Dual GeForce RTX
+     * 4060" không thành "... GeForce RTX" (mất 4060)
+     */
     static String shortTitle(String title) {
         String t = title.replaceAll("[(\\[|].*$", "").replaceAll("\\s+-\\s+.*$", "").strip();
         if (t.isEmpty()) return title;
+        if (t.split("\\s+").length > 8) {
+            String rest = LEADING_KIND.matcher(t).replaceFirst("").strip();
+            if (rest.split("\\s+").length >= 2) t = rest;
+        }
         String[] w = t.split("\\s+");
-        return w.length <= 8 ? t : String.join(" ", java.util.Arrays.copyOf(w, 8));
+        if (w.length <= 8) return t;
+        List<String> out = new ArrayList<>(java.util.Arrays.asList(w).subList(0, 8));
+        for (int i = 8; i < w.length && out.size() < 10; i++) if (w[i].matches(".*\\d.*")) out.add(w[i]);
+        return String.join(" ", out);
     }
 
     /** Link chỉ là trang chủ cửa hàng (tìm không ra trang sản phẩm): người dùng còn phải tự tìm lại */
