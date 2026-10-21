@@ -51,6 +51,8 @@ class ChatServiceTests {
     @BeforeEach
     void setUp() {
         when(builds.findPresets()).thenReturn(List.of());
+        // Mặc định: link có offer là đã đọc trang sản phẩm (test riêng cho trường hợp chỉ thấy trên trang tìm kiếm)
+        when(search.pageChecked(any())).thenReturn(true);
         service = new ChatService(client, search, components, compatibility, builds, new ModelMatchService(builds, components),
                 JsonMapper.builder().build(), "test-model", 512, false);
     }
@@ -979,6 +981,102 @@ class ChatServiceTests {
         assertThat(ChatService.fitsCode("gpu_240", "Card ASUS Dual RTX 4060 EVO OC 8GB")).isTrue();
         assertThat(ChatService.gpuFans("Card Gigabyte RTX 4060 WINDFORCE 2X OC 8G")).isEqualTo(2);
         assertThat(ChatService.gpuFans("Card Gigabyte RTX 4070 WINDFORCE 3X OC")).isEqualTo(3);
+    }
+
+    // ---- Hồi quy vòng đo v5 (review Sol 6.1 + Astra, 21/10/2026) ---------------
+
+    @Test
+    void tuChonHangKhongLayMonDauBatKeGia() {
+        var godlike = new ProductSearch.Product("Mainboard MSI MEG X870E GODLIKE DDR5", "A", 29_900_000L, "https://a.vn/1", null);
+        var b650 = new ProductSearch.Product("Mainboard MSI PRO B650-P WIFI ATX", "B", 4_200_000L, "https://b.vn/1", null);
+        var b650m = new ProductSearch.Product("Mainboard ASUS B650M-A", "C", 3_500_000L, "https://c.vn/1", null);
+        assertThat(ChatService.choose(List.of(godlike, b650), null, null)).as("không ước tính: món rẻ nhất").isEqualTo(b650);
+        assertThat(ChatService.choose(List.of(godlike, b650, b650m), 3_500_000L, 3_500_000L)).isEqualTo(b650m);
+        assertThat(ChatService.choose(List.of(godlike, b650), 3_500_000L, 3_500_000L)).as("trong khoảng tới +15%").isEqualTo(b650);
+    }
+
+    @Test
+    void boMicroAtxThiDongBoTheoCoHangThat() {
+        // v5: trợ lý chọn B550M cho dòng mb_atx, app bỏ bo rồi tự tìm ra bo 29,9 triệu. Giờ: mã theo cỡ hàng thật
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("mb_atx")).thenReturn(part("mb_atx", "motherboard", "Bo mạch chủ ATX"));
+        when(components.findByCode("mb_matx")).thenReturn(part("mb_matx", "motherboard", "Bo mạch chủ Micro-ATX"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("bo")).thenReturn(List.of(
+                new ProductSearch.Product("Bo mạch chủ ASUS PRIME B550M-A", "A", 2_300_000L, "https://a.vn/b550m", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"bo\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","items":[{"code":"mb_atx","spec":"B550","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
+
+        assertThat(line.code()).isEqualTo("mb_matx");
+        assertThat(line.productName()).isEqualTo("Bo mạch chủ ASUS PRIME B550M-A");
+    }
+
+    @Test
+    void ramChiNoiDungLuongThiMotHayHaiThanhDeuDuocKemGhiChu() {
+        assertThat(ChatService.ramLayout(List.of("máy chơi game 16GB RAM, 25 triệu"))).isNull();
+        assertThat(ChatService.ramLayout(List.of("RAM 2x8GB nhé"))).isEqualTo("2x8GB");
+        assertThat(ChatService.ramLayout(List.of("mình muốn 1 thanh 16GB"))).isEqualTo("1x16GB");
+        assertThat(ChatService.ramLayout(List.of("16GB (2 thanh)"))).isEqualTo("2x8GB");
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","items":[{"code":"ram_ddr4","quantity":2,"spec":"2x8GB DDR4","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var card = service.reply(new ChatRequest(List.of(new Message("user", "học online, RAM 16GB")), null, null, "advice")).build();
+
+        var ram = card.items().getFirst();
+        assertThat(ram.quantity()).as("1 thanh 16GB: cùng dung lượng").isEqualTo(1);
+        assertThat(ram.spec()).startsWith("1x16GB");
+        assertThat(card.warnings()).noneSatisfy(i -> assertThat(i.rule()).isEqualTo("RAM_LAYOUT"));
+        assertThat(card.recommendations()).anySatisfy(i -> assertThat(i.message()).contains("1 thanh RAM"));
+    }
+
+    @Test
+    void nguoiDungNoiRoSoThanhMaHangKhacThiBaoRo() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","items":[{"code":"ram_ddr4","quantity":2,"spec":"2x8GB DDR4","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var card = service.reply(new ChatRequest(List.of(new Message("user", "game, RAM 2x8GB")), null, null, "advice")).build();
+
+        // Không có thanh 8GB nào trong kết quả: dòng RAM không còn hàng 16GB một thanh (trái lời người dùng)
+        assertThat(card.items().getFirst().productName()).isNull();
+    }
+
+    @Test
+    void nguoiDungNoiRoSoThanhThiChonDungCoThanh() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null),
+                new ProductSearch.Product("RAM Kingston Fury Beast 8GB DDR4 3200", "A", 800_000L, "https://a.vn/ram8", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","items":[{"code":"ram_ddr4","quantity":2,"spec":"16GB DDR4","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var ram = service.reply(new ChatRequest(List.of(new Message("user", "game, RAM 2x8GB")), null, null, "advice")).build()
+                .items().getFirst();
+
+        assertThat(ram.productName()).isEqualTo("RAM Kingston Fury Beast 8GB DDR4 3200");
+        assertThat(ram.quantity()).isEqualTo(2);
+        assertThat(ram.priceMaxVnd()).isEqualTo(1_600_000L);
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------

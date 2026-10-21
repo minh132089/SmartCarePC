@@ -114,7 +114,7 @@ public class PriceEngine {
      * null nếu không xác minh được. Kết quả được nhớ theo link, thẻ cấu hình dùng giá này thay giá Google Shopping.
      */
     public Offer readPage(String url, String expectTitle) {
-        if (url == null || !Shops.productLike(url) || rejected.contains(url) || rejected.contains(url + "|" + expectTitle)) return null;
+        if (url == null || !Shops.productLike(url) || blocked(url) || blocked(url + "|" + expectTitle)) return null;
         // Trang máy nguyên bộ không phải trang của một linh kiện (trừ khi đang tìm đúng một bộ)
         if (BUNDLE_PATH.matcher(url.toLowerCase().replaceFirst("[?#].*$", "")).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()) {
             return null;
@@ -122,44 +122,70 @@ public class PriceEngine {
         var known = byUrl.get(url);
         // Đã đọc chính trang sản phẩm: dùng lại. Chỉ mới thấy trên trang tìm kiếm / danh mục của cửa hàng (giá, còn hàng
         // ở đó có thể cũ hoặc của bản khác): mở trang sản phẩm để xác minh, không coi kết quả danh sách là đã kiểm trang
-        if (known != null && pageRead.contains(clean(url))) {
+        if (known != null && pageChecked(url)) {
             return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
                     ? known : null;
         }
-        var fetched = fetcher.page(url, Duration.ofSeconds(8));
-        if (fetched == null) {
-            // Tải không được (chậm, robots.txt): còn kết quả danh sách thì tạm dùng (giá chưa kiểm trang), lần sau thử lại
-            return known != null && samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock())
-                    && !usedGoods(known.title(), url) ? known : null;
+        var fetched = unreadable(url) ? null : fetcher.page(url, Duration.ofSeconds(8));
+        if (fetched != null) {
+            boolean product = Shops.productLike(fetched.finalUrl());
+            Offer page = product ? ProductPage.parseLoose(fetched.html(), url, Instant.now()) : null;
+            if (page == null && product) {
+                // Trang sản phẩm tải được mà không đọc ra tên / giá (cửa hàng vẽ trang bằng JavaScript...): CHƯA XÁC MINH, không
+                // phải bị loại. Thử lại sau UNREADABLE_TTL; trong lúc đó dùng tạm kết quả danh sách (pageChecked vẫn false)
+                log.debug("readPage {}: không đọc được nội dung trang sản phẩm", url);
+                unreadableUntil.put(url, System.currentTimeMillis() + UNREADABLE_TTL.toMillis());
+            } else {
+                String why = page == null ? "chuyển sang trang không phải sản phẩm (ngừng bán / danh mục)"
+                        : Boolean.FALSE.equals(page.inStock()) ? "hết hàng"
+                        : usedGoods(page.title(), fetched.finalUrl()) ? "hàng cũ / thanh lý"
+                        : page.priceVnd() != null && page.priceVnd() > MAX_PRICE ? "giá đọc sai đơn vị"
+                        : BUNDLE_PATH.matcher(fetched.finalUrl().toLowerCase()).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()
+                                ? "trang máy nguyên bộ" : null;
+                if (why != null) {
+                    // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option), có hạn REJECT_TTL
+                    log.debug("readPage {}: loại vì {}", url, why);
+                    remember(url);
+                    return null;
+                }
+                if (byUrl.size() > 5000) byUrl.clear();
+                if (pageRead.size() > 5000) pageRead.clear();
+                pageRead.put(clean(url), System.currentTimeMillis());
+                byUrl.put(url, page);
+                if (!samePage(expectTitle, page.title())) {
+                    log.debug("readPage {}: sai biến thể (trang \"{}\", cần \"{}\")", url, page.title(), expectTitle);
+                    remember(url + "|" + expectTitle);
+                    return null;
+                }
+                return page;
+            }
         }
-        // Sản phẩm ngừng bán hay bị web chuyển sang trang danh mục / trang chủ: không phải trang sản phẩm nữa
-        Offer page = Shops.productLike(fetched.finalUrl()) ? ProductPage.parseLoose(fetched.html(), url, Instant.now()) : null;
-        // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận.
-        // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option)
-        if (page == null || Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())
-                || page.priceVnd() != null && page.priceVnd() > MAX_PRICE
-                || BUNDLE_PATH.matcher(fetched.finalUrl().toLowerCase()).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()) {
-            remember(url);
-            return null;
-        }
-        if (byUrl.size() > 5000) byUrl.clear();
-        if (pageRead.size() > 5000) pageRead.clear();
-        pageRead.add(clean(url));
-        if (!samePage(expectTitle, page.title())) {
-            byUrl.put(url, page);
-            remember(url + "|" + expectTitle);
-            return null;
-        }
-        byUrl.put(url, page);
-        return page;
+        // Tải không được (chậm, robots.txt) hay không đọc được trang: còn kết quả danh sách thì tạm dùng làm link mua, giá
+        // và còn hàng vẫn là CHƯA kiểm trang (pageChecked false, thẻ ghi "xem lại giá"); lần sau thử lại
+        return known != null && samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock())
+                && !usedGoods(known.title(), url) ? known : null;
     }
 
-    /** Link đã đọc thẳng trang sản phẩm (không chỉ thấy trên trang tìm kiếm / danh mục), theo link đã làm gọn */
-    private final Set<String> pageRead = ConcurrentHashMap.newKeySet();
+    /** Trang sản phẩm tải được nhưng không đọc được nội dung: thử lại sau từng này */
+    static final Duration UNREADABLE_TTL = Duration.ofMinutes(10);
+    /** Trang bị loại (hết hàng, ngừng bán, sai biến thể, hàng cũ): không tải lại trong từng này */
+    static final Duration REJECT_TTL = Duration.ofMinutes(30);
+    /** Giá / tồn kho đọc trên trang sản phẩm chỉ coi là còn đúng trong từng này */
+    static final Duration VERIFIED_TTL = Duration.ofHours(2);
+    private final Map<String, Long> unreadableUntil = new ConcurrentHashMap<>();
 
-    /** Giá và tình trạng hàng của link được đọc trên chính trang sản phẩm */
+    private boolean unreadable(String url) {
+        Long until = unreadableUntil.get(url);
+        return until != null && until > System.currentTimeMillis();
+    }
+
+    /** Link đã đọc thẳng trang sản phẩm (không chỉ thấy trên trang tìm kiếm / danh mục), theo link đã làm gọn -> lúc đọc */
+    private final Map<String, Long> pageRead = new ConcurrentHashMap<>();
+
+    /** Giá và tình trạng hàng của link được đọc trên chính trang sản phẩm, trong VERIFIED_TTL gần đây */
     public boolean pageChecked(String url) {
-        return url != null && pageRead.contains(clean(url));
+        Long at = url == null ? null : pageRead.get(clean(url));
+        return at != null && System.currentTimeMillis() - at < VERIFIED_TTL.toMillis();
     }
 
     /** HTML một trang qua PoliteFetcher (UA trung thực, tôn trọng robots.txt, giãn cách theo cửa hàng); null nếu không tải được */
@@ -176,11 +202,16 @@ public class PriceEngine {
     }
 
     /** Link (hoặc link|tên mong đợi) đã bị loại khi xác minh, giữ tới khi quá nhiều thì xoá */
-    private final Set<String> rejected = ConcurrentHashMap.newKeySet();
+    private final Map<String, Long> rejected = new ConcurrentHashMap<>();
 
     private void remember(String key) {
         if (rejected.size() > 5000) rejected.clear();
-        rejected.add(key);
+        rejected.put(key, System.currentTimeMillis() + REJECT_TTL.toMillis());
+    }
+
+    private boolean blocked(String key) {
+        Long until = rejected.get(key);
+        return until != null && until > System.currentTimeMillis();
     }
 
     private static final Pattern CAPACITY = Pattern.compile("(\\d+)\\s?(gb|tb)\\b");
@@ -289,7 +320,7 @@ public class PriceEngine {
             Offer page = joinOne(f);
             if (page == null) continue;
             all.merge(clean(page.url()), page, (shop, p) -> shop.merge(p));
-            pageRead.add(clean(page.url()));
+            pageRead.put(clean(page.url()), System.currentTimeMillis());
         }
         var result = rank(query, all.values());
         result.forEach(o -> byUrl.put(o.url(), o));

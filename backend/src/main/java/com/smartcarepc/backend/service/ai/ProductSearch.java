@@ -106,6 +106,11 @@ public class ProductSearch {
         return engine.offer(url);
     }
 
+    /** Giá / còn hàng của link được đọc trên chính trang sản phẩm gần đây (không chỉ thấy trên trang tìm kiếm) */
+    public boolean pageChecked(String url) {
+        return engine.pageChecked(url);
+    }
+
     /** Kết quả tìm đúng tên model của từng món đã chọn (warmCompare), theo link món đó */
     private final Map<String, List<Offer>> sameModel = new ConcurrentHashMap<>();
 
