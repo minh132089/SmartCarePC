@@ -1650,16 +1650,29 @@ class ChatServiceTests {
     void mayHocAiCanCardNvidia12GbVaKhongPhaiMayVanPhong() {
         var n = ChatService.needs(List.of("Mình học AI, cần chạy mô hình deep learning nhỏ trên GPU, ngân sách khoảng 35 triệu."));
         assertThat(n.cuda()).isTrue();
+        assertThat(n.allowedVendor()).isEqualTo("nvidia");
         assertThat(n.office()).as("chữ \"học\" không làm thành máy văn phòng").isFalse();
         assertThat(n.vramMin()).isEqualTo(12);
         assertThat(n.ramMin()).isEqualTo(16);
         assertThat(n.ssdMin()).isEqualTo(512);
         assertThat(ChatService.needs(List.of("máy học online, ai trong nhà cũng dùng được, 12 triệu")).cuda())
                 .as("\"ai\" viết thường là đại từ").isFalse();
-        assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("cuda", true)), "gpu_280",
+        assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("gpu_vendor", "nvidia")), "gpu_280",
                 new ProductSearch.Product("Card ASUS Dual Radeon RX 7700 XT 12GB", "s", 12_000_000L, "https://a/b", null))).isFalse();
-        assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("cuda", true)), "gpu_280",
+        assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("gpu_vendor", "nvidia")), "gpu_280",
                 new ProductSearch.Product("Card ASUS Dual GeForce RTX 4070 12GB", "s", 15_000_000L, "https://a/b", null))).isTrue();
+    }
+
+    @Test
+    void hangCardNguoiDungDoi() {
+        assertThat(ChatService.gpuVendor(List.of("Đổi sang card AMD giúp mình", "Mình chơi game 25 triệu, CPU Intel"))).isEqualTo("amd");
+        assertThat(ChatService.gpuVendor(List.of("Thôi hãng nào cũng được", "Đổi sang card AMD"))).isNull();
+        assertThat(ChatService.gpuVendor(List.of("Mình muốn dùng CPU AMD Ryzen, chơi game 25 triệu"))).as("CPU AMD không phải card AMD").isNull();
+        assertThat(ChatService.gpuVendor(List.of("cần RTX 4060 cho game"))).isEqualTo("nvidia");
+        assertThat(ChatService.gpuVendor(List.of("RTX 4060 hay RX 7600 tốt hơn?"))).as("so sánh hai hãng").isNull();
+        var n = ChatService.needs(List.of("Đổi sang card AMD giúp mình", "Mình chơi game và livestream, 25 triệu, thích kính"));
+        assertThat(n.allowedVendor()).isEqualTo("amd");
+        assertThat(ChatService.needs(List.of("chơi game 25 triệu")).allowedVendor()).as("không nói hãng thì đổi khác hãng được").isNull();
     }
 
     @Test
@@ -1670,8 +1683,8 @@ class ChatServiceTests {
         assertThat(ChatService.gpuDowngrades("xyz", 5)).isEmpty();
         assertThat(ChatService.chipQuery("rtx4060ti")).isEqualTo("VGA RTX 4060 TI");
         assertThat(ChatService.chipQuery("rx6600")).isEqualTo("VGA RX 6600");
-        assertThat(ChatService.sameGpuVendor("rtx4060", "rtx5060")).isTrue();
-        assertThat(ChatService.sameGpuVendor("rtx4060", "rx7600")).isFalse();
+        assertThat(ChatService.vendorOf("rtx4060")).isEqualTo("nvidia");
+        assertThat(ChatService.vendorOf("rx7600")).isEqualTo("amd");
     }
 
     @Test

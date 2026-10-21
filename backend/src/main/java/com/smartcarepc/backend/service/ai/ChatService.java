@@ -416,7 +416,7 @@ public class ChatService {
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
         int searchRounds = 0, proposeRounds = 0;
-        boolean nudged = false;
+        boolean nudged = false, toolNudged = false;
         // Một lượt propose thêm khi ba phương án sai thứ tự (Chất lượng không hơn Phù hợp, Rẻ không rẻ hơn rõ rệt)
         boolean orderNudged = false;
         int proposeLimit = MAX_PROPOSE_ROUNDS;
@@ -461,11 +461,26 @@ public class ChatService {
                             + "mức phổ biến cho chi tiết còn thiếu (nói rõ giả định) và làm luôn ba phương án nhé."));
                     continue;
                 }
+                // Câu hỏi tiếp (vd "đổi sang card AMD") mà trợ lý viết luôn các phương án kèm giá, không gọi propose_build
+                // (ca thật n8: 0 thẻ). Chỉ khi người dùng đã nói ngân sách ở đâu đó trong hội thoại; chưa có ngân sách thì
+                // trợ lý được hỏi lại. Nhắc một lần
+                String draft = String.valueOf(message.getOrDefault("content", ""));
+                if (turn.advice && !toolNudged && turn.tiers.isEmpty() && !turn.userAmounts.isEmpty() && proposeRounds < proposeLimit
+                        && TIER_MENTION.matcher(draft).find() && MONEY_MENTION.matcher(draft).find()) {
+                    toolNudged = true;
+                    log.info("Chat vòng {}: AI viết phương án kèm giá mà chưa gọi propose_build, nhắc gọi công cụ", round + 1);
+                    messages.add(Map.of("role", "assistant", "content", draft));
+                    messages.add(Map.of("role", "user", "content", "Bạn chưa dựng phương án nào bằng công cụ. Dùng ngân sách mình đã nói "
+                            + "trong hội thoại, áp dụng yêu cầu mới nhất của mình, gọi search_products nếu cần rồi gọi propose_build cho "
+                            + "từng phương án trước khi trả lời. Đừng tự ghi giá hay tổng tiền khi chưa có kết quả từ công cụ."));
+                    continue;
+                }
                 // Ba phương án sai thứ tự (thường sau khi app đổi vỏ / hạ giá, Chất lượng thành bằng Phù hợp): nhắc một lần,
                 // cho thêm một lượt propose_build cho đúng tier đó trước khi viết câu trả lời
                 // Rẻ không rẻ hơn Phù hợp rõ rệt (thường do Phù hợp đã được hạ thông số): dựng lại Rẻ từ Phù hợp, ép xuống dưới
                 // Phù hợp ít nhất TIER_GAP, một lần, trước khi nhắc trợ lý
                 if (turn.advice && !orderNudged && search.enabled()) {
+                    balancedFromQuality(turn);
                     cheapFromBalanced(turn);
                     qualityFromBalanced(turn);
                 }
@@ -900,22 +915,54 @@ public class ChatService {
 
     /** Dung lượng tối thiểu (GB) app được hạ RAM / SSD xuống khi vượt trần; null là không hạ món đó */
     /** cuda: máy học AI / deep learning, card phải là NVIDIA (thư viện học máy cần CUDA) */
-    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass, boolean miniItx, boolean cuda) {
+    /** gpuVendor: hãng card người dùng đòi ("amd" / "nvidia" / "intel"), null nếu không nói (app được đổi khác hãng) */
+    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass, boolean miniItx, boolean cuda,
+            String gpuVendor) {
         Needs(Integer ramMin, Integer ssdMin) {
-            this(ramMin, ssdMin, null, false, false, false, false);
+            this(ramMin, ssdMin, null, false, false, false, false, null);
         }
 
         Needs(Integer ramMin, Integer ssdMin, Integer vramMin) {
-            this(ramMin, ssdMin, vramMin, false, false, false, false);
+            this(ramMin, ssdMin, vramMin, false, false, false, false, null);
         }
 
         Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass) {
-            this(ramMin, ssdMin, vramMin, office, glass, false, false);
+            this(ramMin, ssdMin, vramMin, office, glass, false, false, null);
         }
 
         Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass, boolean miniItx) {
-            this(ramMin, ssdMin, vramMin, office, glass, miniItx, false);
+            this(ramMin, ssdMin, vramMin, office, glass, miniItx, false, null);
         }
+
+        /** Hãng card được phép khi đổi / hạ card: máy AI chỉ NVIDIA; người dùng đòi hãng thì đúng hãng đó; null là hãng nào cũng được */
+        String allowedVendor() {
+            return cuda ? "nvidia" : gpuVendor;
+        }
+    }
+
+    private static final java.util.regex.Pattern ANY_VENDOR = java.util.regex.Pattern.compile("hãng nào cũng (được|ok)");
+    private static final java.util.regex.Pattern AMD_GPU = java.util.regex.Pattern.compile(
+            "(card|vga|gpu|đồ họa|đồ hoạ)[^.,;!?]{0,20}\\b(amd|radeon)\\b|\\bradeon\\b|\\brx\\s?\\d{4}");
+    private static final java.util.regex.Pattern NVIDIA_GPU = java.util.regex.Pattern.compile(
+            "(card|vga|gpu|đồ họa|đồ hoạ)[^.,;!?]{0,20}\\b(nvidia|geforce)\\b|\\b(nvidia|geforce)\\b|\\b[rg]tx\\s?\\d{4}");
+    private static final java.util.regex.Pattern INTEL_GPU = java.util.regex.Pattern.compile("\\b(intel\\s*)?arc\\s?[ab]\\d{3}|card[^.,;!?]{0,20}\\bintel\\b");
+
+    /** Hãng card người dùng đòi, đọc từ tin mới nhất trước (yêu cầu mới ghi đè cũ; "hãng nào cũng được" gỡ khoá) */
+    static String gpuVendor(List<String> userTextsNewestFirst) {
+        for (String raw : userTextsNewestFirst) {
+            if (raw == null) continue;
+            String t = raw.toLowerCase();
+            if (ANY_VENDOR.matcher(t).find()) return null;
+            boolean amd = AMD_GPU.matcher(t).find(), nv = NVIDIA_GPU.matcher(t).find(), intel = INTEL_GPU.matcher(t).find();
+            // Chỉ nhận khi tin nhắc đúng một hãng (nhắc cả hai thường là so sánh)
+            if ((amd ? 1 : 0) + (nv ? 1 : 0) + (intel ? 1 : 0) == 1) return amd ? "amd" : nv ? "nvidia" : "intel";
+        }
+        return null;
+    }
+
+    /** Hãng của chip card ("rx7600" -> amd) */
+    static String vendorOf(String chip) {
+        return chip == null ? null : chip.startsWith("rx") ? "amd" : chip.startsWith("arc") ? "intel" : "nvidia";
     }
 
     /** Người dùng nói rõ máy mini / ITX / SFF (không phải "nhỏ gọn": đó là vỏ Micro-ATX) */
@@ -952,14 +999,15 @@ public class ChatService {
         boolean heavy = creator || game || ai;
         boolean light = all.matches(".*(học|văn phòng|word|excel|online|lướt web|xem phim|kế toán).*");
         boolean mini = MINI_ITX.matcher(all).find();
-        if (!heavy && !light && ram == null && ssd == null && !mini) return null;
+        String vendor = gpuVendor(userTexts);
+        if (!heavy && !light && ram == null && ssd == null && !mini && vendor == null) return null;
         // Card: máy game Full HD đổi được sang chip ngang / mạnh hơn rẻ hơn nếu VRAM >= 8GB; máy đồ họa / dựng video không
         // giảm VRAM (null: chỉ đổi cùng chip, cùng VRAM)
         // office: chỉ học / văn phòng rõ ràng (được hạ CPU xuống dòng phổ thông); glass: người dùng nói thích kính
         // Máy AI: card ít nhất 12GB VRAM, chỉ NVIDIA (CUDA)
         return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256,
                 ai ? Integer.valueOf(12) : game && !creator ? Integer.valueOf(8) : null,
-                light && !heavy, all.matches(".*(kính|glass).*"), mini, ai);
+                light && !heavy, all.matches(".*(kính|glass).*"), mini, ai, vendor);
     }
 
     /**
@@ -1140,6 +1188,34 @@ public class ChatService {
     }
 
     /**
+     * Phù hợp không hiện được (vượt trần, thiếu link) mà Chất lượng hiện được (ca thật n8 itx 25tr: Rẻ / Phù hợp cùng bộ
+     * 26,35 triệu, chỉ Chất lượng hiện): dựng Phù hợp từ bản sao Chất lượng, chốt lại với trần min(trần Phù hợp, tổng Chất
+     * lượng - TIER_GAP) (finalizeTier: đổi hàng rẻ hơn, hạ card / RAM / SSD theo nhu cầu); nhận khi hiện được và khác Chất lượng.
+     */
+    private void balancedFromQuality(Turn turn) {
+        var q = turn.tiers.get("quality");
+        if (q == null || q.picks().isEmpty() || !showable(q, tierCap(q.budgetVnd(), "quality"))) return;
+        var b = turn.tiers.get("balanced");
+        if (b != null && showable(b, tierCap(b.budgetVnd(), "balanced"))) return;
+        long tq = total(q.request(), q.details(), q.picks());
+        Long capB = tierCap(q.budgetVnd(), "balanced");
+        long target = capB == null ? tq - TIER_GAP : Math.min(capB, tq - TIER_GAP);
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        q.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
+        var base = new Checked(q.request(), q.result(), details, q.summary(), q.budgetVnd(), new LinkedHashMap<>(q.picks()),
+                new LinkedHashMap<>(q.links()), q.siblings());
+        List<String> notes = new ArrayList<>();
+        var cand = finalizeTier(base, "balanced", target, Map.of(), turn.needs, notes);
+        long tc = total(cand.request(), cand.details(), cand.picks());
+        if (showable(cand, target) && !signature(cand.picks()).equals(signature(q.picks()))) {
+            log.info("Phù hợp dựng lại từ Chất lượng: {} (Chất lượng {}), {}", tc, tq, notes);
+            turn.tiers.put("balanced", cand);
+        } else {
+            log.info("Phù hợp dựng lại từ Chất lượng không đạt: {} / mức {} (Chất lượng {})", tc, target, tq);
+        }
+    }
+
+    /**
      * Chất lượng sai thứ tự / trùng / không hiện được mà Phù hợp hiện được (ca thật v20: Chất lượng 35,74 < Phù hợp 35,94
      * cả sau khi nhắc): dựng Chất lượng từ bản sao Phù hợp, nâng từng món theo nhu cầu trong trần Chất lượng; chỉ nhận khi
      * hiện được và đắt hơn Phù hợp ít nhất TIER_GAP. Không sửa Phù hợp.
@@ -1214,8 +1290,8 @@ public class ChatService {
             String chip = gpuChip(now.title());
             Integer v = vram(now.title());
             if (chip == null || v == null) return null;
-            var chips = gpuUpgrades(chip).stream().filter(x -> needs == null || !needs.cuda() || !x.startsWith("rx")).toList();
-            found = otherChip(code, now, chips, v, (was + room) / Math.max(1, item.qty()), c.picks());
+            found = otherChip(code, now, gpuUpgrades(chip), v, (was + room) / Math.max(1, item.qty()), c.picks(),
+                    needs == null ? null : needs.allowedVendor());
             if (found == null) return null;
             spec = coreQuery("gpu", found.title());
             note = "Card " + chipQuery(chip).substring(4) + " -> " + chipQuery(gpuChip(found.title())).substring(4);
@@ -2234,9 +2310,23 @@ public class ChatService {
             // Mã bo ITX theo chipset (chữ I sau chipset), tìm trúng hơn từ khoá chung
             for (String chip : ITX_CHIPSETS.getOrDefault(socket, List.of()).reversed()) out.addFirst("mainboard " + chip + (ddr == null ? "" : " " + ddr));
         }
+        // Bo ATX: tìm "mainboard B760 ATX" chỉ ra bo B760M (ca thật v22 / n8): tìm theo mã model ATX có thật
+        if (socket != null && "mb_atx".equals(code)) {
+            List<String> models = new ArrayList<>();
+            if (ddr != null) models.addAll(ATX_MODELS.getOrDefault(socket + " " + ddr, List.of()));
+            else ATX_MODELS.forEach((k, v) -> { if (k.startsWith(socket + " ")) models.addAll(v); });
+            for (String m : models.reversed()) out.addFirst("mainboard " + m);
+        }
         if (socket != null && "low_profile_47".equals(code)) out.add("tản nhiệt low profile " + socket);
         return out;
     }
+
+    /** Mã bo ATX phổ thông theo socket + DDR (chỉ là từ khoá tìm; món tìm được vẫn phải đúng cỡ, có link, còn hàng) */
+    private static final Map<String, List<String>> ATX_MODELS = Map.of(
+            "AM4 DDR4", List.of("MSI B550-A PRO", "ASUS PRIME B550-PLUS", "Gigabyte B550 AORUS ELITE V2"),
+            "LGA1700 DDR4", List.of("MSI PRO B760-P DDR4", "ASUS PRIME B760-PLUS D4", "Gigabyte B760 GAMING X DDR4"),
+            "LGA1700 DDR5", List.of("MSI PRO B760-P WIFI DDR5", "ASUS PRIME B760-PLUS", "Gigabyte B760 GAMING X AX"),
+            "AM5 DDR5", List.of("MSI PRO B650-S WIFI", "ASUS PRIME B650-PLUS", "Gigabyte B650 GAMING X AX"));
 
     /** Chipset bo Mini ITX hay có bán theo socket, rẻ trước */
     private static final Map<String, List<String>> ITX_CHIPSETS = Map.of("LGA1700", List.of("H610I", "B760I", "B760M-ITX", "B760-I"),
@@ -2820,18 +2910,14 @@ public class ChatService {
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()).map(Map.Entry::getKey).toList();
     }
 
-    /** Máy AI (dòng card ghi cuda): card thay phải là NVIDIA */
+    /** Dòng card ghi hãng bắt buộc (máy AI: NVIDIA; người dùng đòi hãng): card thay phải đúng hãng đó */
     static boolean cudaOk(Map<String, Map<String, Object>> details, String code, ProductSearch.Product p) {
-        if (!Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("cuda")) || p.title() == null) return true;
+        Object want = details.getOrDefault(code, Map.of()).get("gpu_vendor");
+        if (want == null || p.title() == null) return true;
         String chip = gpuChip(p.title());
-        return chip != null && (chip.startsWith("rtx") || chip.startsWith("gtx"));
+        return chip != null && want.equals(vendorOf(chip));
     }
 
-    /** Cùng hãng chip (NVIDIA / AMD / Intel): đổi khác hãng có thể làm hỏng phần mềm cần CUDA */
-    static boolean sameGpuVendor(String a, String b) {
-        java.util.function.Function<String, String> vendor = c -> c.startsWith("rx") ? "amd" : c.startsWith("arc") ? "intel" : "nvidia";
-        return a != null && b != null && vendor.apply(a).equals(vendor.apply(b));
-    }
 
     /** Chip card phổ thông hay có hàng, rẻ trước: dòng card trống không ghi chip thì tìm theo các chip này */
     static final List<String> POPULAR_CHIPS = List.of("rx7600", "rtx4060", "rtx5060", "rx9060xt", "rtx5060ti");
@@ -2871,12 +2957,12 @@ public class ChatService {
      * tìm), rẻ nhất trước trong mỗi chip. null nếu không có
      */
     private ProductSearch.Product otherChip(String code, ProductSearch.Product now, List<String> chips, int floor, long maxPrice,
-            Map<String, ProductSearch.Product> picks) {
+            Map<String, ProductSearch.Product> picks, String vendor) {
         String chip = gpuChip(now.title());
         int tried = 0;
         for (String other : chips) {
             if (tried >= 3) break;
-            if (!sameGpuVendor(chip, other) || !psuFor(other, chip, picks)) continue;
+            if (vendor != null && !vendor.equals(vendorOf(other)) || !psuFor(other, chip, picks)) continue;
             tried++;
             String q = chipQuery(other);
             List<ProductSearch.Product> pool = new ArrayList<>();
@@ -2885,10 +2971,12 @@ public class ChatService {
                 pool.addAll(search.engineSearch(q));
                 // Thêm từ khoá kèm VRAM ("VGA RX 6600 8GB"): tìm theo chip trơn hay ra ít kết quả
                 pool.addAll(search.search(q + " " + floor + "GB"));
+                if (floor > 8 && floor < 16) pool.addAll(search.search(q + " 16GB"));
             } catch (RuntimeException e) {
                 log.debug("Tìm \"{}\" lỗi: {}", q, e.getMessage());
             }
             Map<String, Integer> rejected = new java.util.TreeMap<>();
+            List<String> otherChips = new ArrayList<>();
             var list = pool.stream()
                     .filter(p -> {
                         String why = p.title() == null || p.priceVnd() == null ? "thiếu tên/giá" : JUNK.matcher(p.title()).find() ? "hàng cũ"
@@ -2897,6 +2985,7 @@ public class ChatService {
                                 : !ofKind("gpu", p.title()) ? "sai loại" : recentlyNoLink(p) ? "vừa không có link"
                                 : !swapOk(code, p, picks) ? "sai cỡ / lỗi lắp" : stockOrder(p) >= 2 ? "hết hàng" : null;
                         if (why != null) rejected.merge(why, 1, Integer::sum);
+                        if ("khác chip".equals(why) && otherChips.size() < 3) otherChips.add(p.title() + " -> " + gpuChip(p.title()));
                         return why == null;
                     })
                     .filter(distinctUrl())
@@ -2904,11 +2993,11 @@ public class ChatService {
                     .toList();
             var found = bestLinked(list, null, 8);
             log.info("Thử chip {} cho dòng {} (thay {}): {} kết quả, {} qua lọc (VRAM >= {}, giá <= {}), loại {}, {}", other, code, chip, pool.size(),
-                    list.size(), floor, maxPrice == Long.MAX_VALUE ? "-" : maxPrice, rejected,
+                    list.size(), floor, maxPrice == Long.MAX_VALUE ? "-" : maxPrice, otherChips.isEmpty() ? rejected : rejected + " " + otherChips,
                     found == null ? "không có link" : rank(found.url()) == 3 ? "có link còn hàng" : "link chưa rõ còn hàng");
             if (found != null && rank(found.url()) == 3) return found;
         }
-        if (tried == 0) log.info("Dòng {}: không có chip nào để thử thay {} (cùng hãng, nguồn đủ) trong {}", code, chip, chips);
+        if (tried == 0) log.info("Dòng {}: không có chip nào để thử thay {} (hãng {}, nguồn đủ) trong {}", code, chip, vendor == null ? "bất kỳ" : vendor, chips);
         return null;
     }
 
@@ -2933,8 +3022,7 @@ public class ChatService {
         long was = line != null ? line : now.priceVnd() * gpu.qty();
         ProductSearch.Product best = null;
         for (String other : gpuDowngrades(chip, 15)) {
-            if (needs != null && needs.cuda() && other.startsWith("rx")) continue;
-            var found = otherChip(code, now, List.of(other), floor, was / gpu.qty() - 1, c.picks());
+            var found = otherChip(code, now, List.of(other), floor, was / gpu.qty() - 1, c.picks(), needs == null ? null : needs.allowedVendor());
             if (found == null) continue;
             if (best == null || found.priceVnd() < best.priceVnd()) best = found;
             if (total - was + found.priceVnd() * gpu.qty() <= cap) break;
@@ -3321,7 +3409,8 @@ public class ChatService {
                     List<String> chips = new ArrayList<>(gpuUpgrades(chip));
                     chips.addAll(gpuDowngrades(chip, 5));
                     long maxPrice = was[1] == null || room == Long.MAX_VALUE ? Long.MAX_VALUE : (was[1] + room) / Math.max(1, qty);
-                    var other = otherChip(code, pick, chips, vram(pick.title()), maxPrice, picks);
+                    Object want = details.getOrDefault(code, Map.of()).get("gpu_vendor");
+                    var other = otherChip(code, pick, chips, vram(pick.title()), maxPrice, picks, want == null ? null : want.toString());
                     if (other != null) {
                         log.info("Dòng {}: chip {} không còn link mua, đổi sang \"{}\"", code, chip, other.title());
                         return other;
@@ -3352,10 +3441,10 @@ public class ChatService {
             // phổ thông đủ VRAM (VRAM ghi trong thông số, hoặc mức nhu cầu), cùng hãng NVIDIA nếu máy AI
             Integer lineVram = lineSpec != null ? vram(lineSpec) : null;
             if (lineVram == null && details.getOrDefault(code, Map.of()).get("vram_min") instanceof Number v) lineVram = v.intValue();
-            boolean lineCuda = Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("cuda"));
+            Object lineVendor = details.getOrDefault(code, Map.of()).get("gpu_vendor");
             final Integer needVram = lineVram;
             List<String> chipQueries = "gpu".equals(lineCategory) && lineChip == null
-                    ? POPULAR_CHIPS.stream().filter(x -> !lineCuda || !x.startsWith("rx")).map(ChatService::chipQuery).toList() : List.of();
+                    ? POPULAR_CHIPS.stream().filter(x -> lineVendor == null || lineVendor.equals(vendorOf(x))).map(ChatService::chipQuery).toList() : List.of();
             boolean needGlass = Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("need_glass"));
             int issuesNow = productIssues(picks).size();
             fixes.put(code, Io.async(() -> {
@@ -3363,8 +3452,9 @@ public class ChatService {
                 Map<String, Integer> rejected = new java.util.TreeMap<>();
                 List<String> passed = new ArrayList<>();
                 // Thang từ khoá: thông số trợ lý ghi -> lõi model (vd "VGA RTX 4060", "mainboard B550 DDR4") -> tên danh mục -> chung
-                for (String q : Stream.of(Stream.of(lineSpec, lineCore), chipQueries.stream(), Stream.of(lineName, GENERIC_QUERY.get(code)),
-                                lineQueries(code, picks).stream()).flatMap(x -> x)
+                // Từ khoá theo mã model (bo ATX / ITX, nguồn SFX...) đứng trước tên danh mục chung để không dừng sớm ở kết quả chung
+                for (String q : Stream.of(Stream.of(lineSpec, lineCore), chipQueries.stream(), lineQueries(code, picks).stream(),
+                                Stream.of(lineName, GENERIC_QUERY.get(code))).flatMap(x -> x)
                         .filter(Objects::nonNull).distinct().toList()) {
                     for (var source : List.<java.util.function.Function<String, List<ProductSearch.Product>>>of(search::search, search::engineSearch)) {
                         var found = source.apply(q);
@@ -3507,8 +3597,8 @@ public class ChatService {
                     if (turn.advice && turn.needs != null && turn.needs.vramMin() != null) {
                         details.forEach((code, d) -> { if ("gpu".equals(categoryOf(code))) d.put("vram_min", turn.needs.vramMin()); });
                     }
-                    if (turn.advice && turn.needs != null && turn.needs.cuda()) {
-                        details.forEach((code, d) -> { if ("gpu".equals(categoryOf(code))) d.put("cuda", true); });
+                    if (turn.advice && turn.needs != null && turn.needs.allowedVendor() != null) {
+                        details.forEach((code, d) -> { if ("gpu".equals(categoryOf(code))) d.put("gpu_vendor", turn.needs.allowedVendor()); });
                     }
                     // Sản phẩm đã chọn theo id; bắt đầu đổi link Google Shopping sang link cửa hàng ngay bây giờ,
                     // chạy song song trong lúc trợ lý viết câu trả lời
