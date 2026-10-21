@@ -271,6 +271,16 @@ class PriceEngineTests {
         assertThat(PriceEngine.relevance("CPU", "Macbook Pro Apple M5 chip with 10-core CPU and 10-core GPU, 16GB")).isZero();
     }
 
+    @Test
+    void trangMayNguyenBoKhongPhaiTrangLinhKien() {
+        // Ca thật: link CPU i3-12100 trỏ vào trang "PC Văn Phòng i3 12100" giá 6,99 triệu
+        assertThat(PriceEngine.samePage("Bộ vi xử lý/ CPU Intel Core i3-12100", "PC Văn Phòng i3 12100 / 8GB / SSD 256GB")).isFalse();
+        assertThat(PriceEngine.samePage("Bộ vi xử lý/ CPU Intel Core i3-12100", "Máy tính bộ Intel Core i3-12100")).isFalse();
+        assertThat(PriceEngine.samePage("Bộ vi xử lý/ CPU Intel Core i3-12100", "CPU Intel Core i3-12100 (Socket 1700)")).isTrue();
+        // Chữ PCIe không bị nhầm là máy bộ
+        assertThat(PriceEngine.samePage("SSD Kingston NV3 1TB PCIe Gen4", "SSD Kingston NV3 1TB M.2 PCIe Gen4 x4")).isTrue();
+    }
+
     private static Offer offer(String title, long price, Boolean inStock) {
         return new Offer(title, "Shop", price, null, "https://gearvn.com/products/" + title.hashCode(), null, inStock, null, AT);
     }

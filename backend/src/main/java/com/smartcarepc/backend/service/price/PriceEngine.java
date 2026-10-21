@@ -109,6 +109,10 @@ public class PriceEngine {
      */
     public Offer readPage(String url, String expectTitle) {
         if (url == null || !Shops.productLike(url) || rejected.contains(url) || rejected.contains(url + "|" + expectTitle)) return null;
+        // Trang máy nguyên bộ không phải trang của một linh kiện (trừ khi đang tìm đúng một bộ)
+        if (BUNDLE_PATH.matcher(url.toLowerCase().replaceFirst("[?#].*$", "")).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()) {
+            return null;
+        }
         var known = byUrl.get(url);
         if (known != null) {
             return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
@@ -120,7 +124,8 @@ public class PriceEngine {
         Offer page = Shops.productLike(fetched.finalUrl()) ? ProductPage.parseLoose(fetched.html(), url, Instant.now()) : null;
         // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận.
         // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option)
-        if (page == null || Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())) {
+        if (page == null || Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())
+                || BUNDLE_PATH.matcher(fetched.finalUrl().toLowerCase()).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()) {
             remember(url);
             return null;
         }
@@ -179,7 +184,12 @@ public class PriceEngine {
 
     /** Dấu hiệu trang bán cả bộ: "Bộ PC ...", "Combo ...", "PC Gaming ...", "CPU ... + Mainboard ..." */
     private static final Pattern BUNDLE = Pattern.compile(
-            "(?iuU)\\bbộ\\s+pc\\b|\\bcombo\\b|\\bpc\\s+gaming\\b|\\bbộ\\s+máy\\b|\\+\\s*(mainboard|main|bo mạch|ram|vga|card|cpu|ssd|nguồn)\\b");
+            "(?iuU)\\bbộ\\s+pc\\b|\\bcombo\\b|\\bpc\\s+gaming\\b|\\bbộ\\s+máy\\b|\\+\\s*(mainboard|main|bo mạch|ram|vga|card|cpu|ssd|nguồn)\\b"
+            // Máy nguyên bộ: "PC Văn Phòng i3 12100", "Máy tính bộ ...", tên bắt đầu bằng "PC"
+            + "|^\\s*pc\\b|\\bpc\\s+(văn\\s+phòng|đồ\\s+họa|học\\s+tập|giá\\s+rẻ|streaming|livestream)\\b|\\bmáy\\s+(tính\\s+)?bộ\\b");
+    /** Link trang máy nguyên bộ (vd maytinhtsc.com/pc-van-phong-i3-12100): tên Google Shopping có khi ghi như linh kiện lẻ */
+    private static final Pattern BUNDLE_PATH = Pattern.compile(
+            "/(bo-)?pc-|/may-tinh-bo|/may-bo-|/combo-|/bo-may-tinh");
 
     /** Dung lượng lớn nhất ghi trong tên, theo GB (1TB = 1000GB); null nếu không ghi */
     static Long maxCapacity(String normalized) {

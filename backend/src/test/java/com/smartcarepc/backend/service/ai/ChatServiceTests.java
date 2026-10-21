@@ -251,7 +251,8 @@ class ChatServiceTests {
         assertThat(res.options()).hasSize(3);
         assertThat(res.options()).extracting(ChatResponse.BuildCard::tier).containsExactly("cheap", "balanced", "quality");
         assertThat(res.options()).extracting(ChatResponse.BuildCard::variant).containsOnly(1);
-        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsOnly("SSD A 1TB");
+        // Phương án Rẻ do code chọn hàng: cùng 1TB nhưng rẻ hơn
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB", "SSD A 1TB", "SSD A 1TB");
         assertThat(res.build().variant()).isEqualTo(1);
         assertThat(res.build().tier()).isEqualTo("balanced");
     }
@@ -304,11 +305,11 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        // Ngân sách 1 triệu nhưng trợ lý chọn món 1,1 triệu cho phương án Rẻ (và không sửa dù được báo)
+        // Ngân sách 1 triệu nhưng trợ lý chọn món 1,1 triệu cho phương án Rẻ: code đổi sang món rẻ nhất cùng dung lượng
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A", "A", 1_100_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B", "B", 950_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD C", "C", 900_000L, "https://c.vn/1", null)));
+                new ProductSearch.Product("SSD A 512GB", "A", 1_100_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 512GB", "B", 950_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 512GB", "C", 900_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
@@ -322,7 +323,7 @@ class ChatServiceTests {
         // Build vượt ngân sách bị bỏ, option đánh số lại từ 1
         var cheap = res.options().stream().filter(o -> "cheap".equals(o.tier())).toList();
         // Rẻ tối đa 90% ngân sách (900 nghìn): chỉ SSD C còn hợp lệ
-        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C");
+        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 512GB");
         assertThat(cheap).extracting(ChatResponse.BuildCard::variant).containsExactly(1);
         assertThat(cheap).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(900_000L));
         // Phù hợp: option 1 không vượt ngân sách, option sau được đắt hơn tối đa 2 triệu
@@ -800,6 +801,78 @@ class ChatServiceTests {
             sent.add(copy);
             return queue.removeFirst();
         });
+    }
+
+    @Test
+    void phuongAnReChonHangReNhatCungThongSo() {
+        var ram8 = product("Ram Kingmax Blade X 1x8GB DDR4 Bus 3200Mhz", 1_990_000L);
+        var group = List.of(
+                product("RAM Klevv 8GB DDR4 Udimm 3200 CL22", 1_250_000L),
+                product("Ram Kingston 4GB DDR4 3200", 600_000L), // dung lượng thấp hơn: không lấy
+                product("Ram Laptop Crucial 8GB DDR4 3200", 700_000L), // RAM laptop: không lấy
+                product("RAM Corsair 8GB DDR5 5600", 900_000L), // khác loại DDR: không lấy
+                product("Ram 8GB DDR4 cũ bóc máy", 400_000L), // hàng cũ: không lấy
+                product("Bo mạch chủ GIGABYTE B760M GAMING PLUS WIFI DDR4", 800_000L)); // sai loại: không lấy
+        assertThat(ChatService.cheaperEquivalent("ram", ram8, group, false).title()).isEqualTo("RAM Klevv 8GB DDR4 Udimm 3200 CL22");
+
+        // SSD: 512GB thay được bằng 1TB rẻ hơn, không thay bằng 256GB
+        var ssd = product("Ổ Cứng SSD SSTC Oceanic Whitetip E130 512GB M.2 NVMe", 2_390_000L);
+        assertThat(ChatService.cheaperEquivalent("ssd", ssd, List.of(product("SSD Kingston NV3 256GB NVMe", 800_000L),
+                product("SSD Lexar NM620 1TB NVMe", 2_100_000L)), false).title()).isEqualTo("SSD Lexar NM620 1TB NVMe");
+
+        // Nguồn: không lấy công suất thấp hơn
+        var psu = product("Nguồn Deepcool PF550 - 80 Plus (550W)", 990_000L);
+        assertThat(ChatService.cheaperEquivalent("psu", psu, List.of(product("Nguồn Jetek 450W", 450_000L)), false)).isNull();
+        // Ca thật: nguồn SFX của vỏ Mini-ITX không được đổi sang nguồn ATX dù cùng 450W
+        var sfx = product("Nguồn Thermaltake Toughpower SFX 450W Gold", 2_450_000L);
+        assertThat(ChatService.cheaperEquivalent("psu", sfx, List.of(product("Nguồn máy tính/ PSU Aigo VK450 450W", 449_000L),
+                product("Nguồn Cooler Master V550 SFX Gold 550W", 2_000_000L)), false).title()).isEqualTo("Nguồn Cooler Master V550 SFX Gold 550W");
+
+        // CPU / vỏ / tản: chỉ cùng model ở cửa hàng rẻ hơn
+        var cpu = product("CPU Intel Core i3 12100 Box (Socket 1700/ 4 Cores/ 8 Threads)", 4_199_000L);
+        assertThat(ChatService.cheaperEquivalent("cpu", cpu, List.of(product("Bộ vi xử lý Intel Core i3-12100F", 2_000_000L),
+                product("Bộ vi xử lý/ CPU Intel Core i3 12100", 2_890_000L)), false).title()).isEqualTo("Bộ vi xử lý/ CPU Intel Core i3 12100");
+        var cooler = product("Tản nhiệt Cooler Master Hyper 612 Apex", 1_590_000L);
+        assertThat(ChatService.cheaperEquivalent("cooler", cooler, List.of(product("Tản nhiệt khí Jonsbo CR-1200E", 190_000L)), false)).isNull();
+
+        // Dòng mua bộ kit thì món thay cũng phải là kit
+        var kit = product("RAM Corsair Vengeance 16GB (2x8GB) DDR4 3200", 2_500_000L);
+        assertThat(ChatService.cheaperEquivalent("ram", kit, List.of(product("RAM Klevv 16GB DDR4 3200", 1_500_000L),
+                product("RAM TeamGroup 16GB (2x8GB) DDR4 3200", 2_000_000L)), true).title()).isEqualTo("RAM TeamGroup 16GB (2x8GB) DDR4 3200");
+    }
+
+    @Test
+    void docDungLuongVaCongSuatTuTen() {
+        assertThat(ChatService.amount("ram", "Ram SSTC 16GB DDR4 3200MHz (U3200A-C22-16GB)")).isEqualTo(16);
+        assertThat(ChatService.amount("ram", "RAM Corsair 32GB (2x16GB) DDR5")).isEqualTo(32);
+        assertThat(ChatService.amount("ssd", "SSD WD Green SN3000 1TB M.2 NVMe")).isEqualTo(1000);
+        assertThat(ChatService.amount("ssd", "SSD Kingston 512GB")).isEqualTo(512);
+        assertThat(ChatService.amount("psu", "Nguồn máy tính Jetek Revolve B550 (550W) 80 plus Bronze")).isEqualTo(550);
+        assertThat(ChatService.amount("psu", "Nguồn máy tính KENOO ATX")).isNull();
+        // Đổi món lấy link: không nhận món sai loại
+        assertThat(ChatService.sameKind("Ram Kingmax 8GB DDR4", "Bo mạch chủ GIGABYTE B760M DDR4")).isFalse();
+        assertThat(ChatService.sameKind("Ram Kingmax 8GB DDR4", "Ram Klevv 8GB DDR4")).isTrue();
+        assertThat(ChatService.cpuModel("CPU Intel Core i3 12100 Box (Socket 1700/ 4 Cores/ 8 Threads)")).isEqualTo("i3-12100");
+        assertThat(ChatService.cpuModel("Bộ vi xử lý Intel Core i3-12100F")).isEqualTo("i3-12100f");
+        assertThat(ChatService.cpuModel("CPU Intel Core Ultra 5 225F")).isEqualTo("ultra5-225f");
+        assertThat(ChatService.cpuModel("CPU AMD Ryzen 7 7800X3D")).isEqualTo("ryzen7-7800x3d");
+    }
+
+    @Test
+    void doiMonLayLinkGiuDungThongSo() {
+        // Ca thật: dòng RAM 8GB bị thay bằng bộ 32GB, CPU i3-12100 có thể thành bản F
+        var ram = product("Ram Kingmax Blade X 1x8GB DDR4 Bus 3200Mhz", 1_000_000L);
+        var group = List.of(product("Silicon Power XPOWER Zenith RGB RAM 32GB DDR4", 900_000L),
+                product("RAM Klevv 8GB DDR4 3200", 950_000L));
+        assertThat(ChatService.candidates("ram", ram, group, false, "cheap")).extracting(ProductSearch.Product::title)
+                .containsExactly("RAM Klevv 8GB DDR4 3200");
+        assertThat(ChatService.sameSpec("cpu", "CPU Intel Core i3 12100 Box", "Bộ vi xử lý Intel Core i3-12100F")).isFalse();
+        assertThat(ChatService.sameSpec("psu", "Nguồn 550W", "Nguồn 450W")).isFalse();
+        assertThat(ChatService.sameSpec("ssd", "SSD 512GB", "SSD 512GB NVMe Gen4")).isTrue();
+    }
+
+    private static ProductSearch.Product product(String title, long price) {
+        return new ProductSearch.Product(title, "GEARVN", price, "https://gearvn.com/products/" + Math.abs(title.hashCode()), null);
     }
 
     @SuppressWarnings("unchecked")
