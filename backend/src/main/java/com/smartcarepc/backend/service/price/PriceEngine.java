@@ -71,7 +71,12 @@ public class PriceEngine {
             Map.entry("cpu", Pattern.compile("\\bcpu\\b|\\bvi xu ly\\b|\\bbo xu ly\\b|\\bprocessor\\b")),
             // Quạt case: "Bộ 3 quạt ...", "Fan case ...". Tản / vỏ / nguồn có chữ "quạt" thì chữ loại kia đứng trước nên vẫn đúng loại
             Map.entry("fans", Pattern.compile("\\bquat\\b|\\bfan\\b")));
-    /** Chữ phân biệt phiên bản: phải trùng nhau mới là cùng model (RTX 4060 khác 4060 Ti, B760M khác B760M WiFi) */
+    /** Giá cao nhất hợp lý của một linh kiện lẻ: cao hơn là trang ghi / đọc nhầm đơn vị (725.000đ thành 725.000.000đ) */
+    static final long MAX_PRICE = 150_000_000L;
+
+    /** Hậu tố làm card / CPU thành sản phẩm khác hẳn (đắt hơn): trang có mà tên mong đợi không có thì là trang khác */
+    private static final Set<String> TIER_VARIANTS = Set.of("ti", "super", "xt", "xtx", "gre");
+        /** Chữ phân biệt phiên bản: phải trùng nhau mới là cùng model (RTX 4060 khác 4060 Ti, B760M khác B760M WiFi) */
     private static final Set<String> VARIANTS = Set.of("ti", "super", "xt", "xtx", "gre", "oc", "pro", "plus", "max", "wifi", "ii", "v2", "v3");
     /** Chữ chung chung, không giúp phân biệt model */
     private static final Set<String> FILLER = Set.of("card", "man", "hinh", "vga", "do", "hoa", "chinh", "hang", "may", "tinh",
@@ -126,6 +131,7 @@ public class PriceEngine {
         // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận.
         // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option)
         if (page == null || Boolean.FALSE.equals(page.inStock()) || usedGoods(page.title(), fetched.finalUrl())
+                || page.priceVnd() != null && page.priceVnd() > MAX_PRICE
                 || BUNDLE_PATH.matcher(fetched.finalUrl().toLowerCase()).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()) {
             remember(url);
             return null;
@@ -171,6 +177,11 @@ public class PriceEngine {
         if (ek != null && pk != null && !ek.equals(pk)) return false;
         Long ec = maxCapacity(e), pc = maxCapacity(p);
         if (ec != null && pc != null && !ec.equals(pc)) return false;
+        // Phiên bản khác của cùng mã: trang "RTX 4060 Ti" không phải trang của "RTX 4060", "i3-12100F" không phải "i3-12100"
+        Set<String> et = new HashSet<>(Arrays.asList(e.split(" "))), pt = new HashSet<>(Arrays.asList(p.split(" ")));
+        for (String v : TIER_VARIANTS) if (pt.contains(v) && !et.contains(v)) return false;
+        List<String> expectCodes = Arrays.stream(e.split(" ")).filter(w -> w.matches(".*\\d.*")).toList();
+        if (noIgpuVariant(expectCodes, p)) return false;
         // Mã có số (h51e, 16gb, ddr4, 3200mhz, snv2s, 12400f) nói lên đúng sản phẩm; chữ mô tả ("vỏ máy cao cấp kính")
         // mỗi cửa hàng viết một kiểu nên không dùng để so
         List<String> codes = Arrays.stream(e.split(" ")).filter(w -> w.length() >= 2 && w.matches(".*\\d.*")).distinct().toList();
@@ -295,7 +306,7 @@ public class PriceEngine {
      */
     static List<Offer> rank(String query, java.util.Collection<Offer> offers) {
         var ok = offers.stream()
-                .filter(o -> o.priceVnd() != null && o.title() != null && !JUNK.matcher(o.title()).find())
+                .filter(o -> o.priceVnd() != null && o.priceVnd() <= MAX_PRICE && o.title() != null && !JUNK.matcher(o.title()).find())
                 .filter(o -> relevance(query, o.title()) > 0)
                 .sorted(Comparator.comparingDouble((Offer o) -> -relevance(query, o.title()))
                         .thenComparingInt(o -> o.inStock() == null ? 1 : o.inStock() ? 0 : 2)

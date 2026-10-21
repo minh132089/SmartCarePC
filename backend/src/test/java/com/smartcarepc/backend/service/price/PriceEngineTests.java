@@ -281,6 +281,15 @@ class PriceEngineTests {
         assertThat(PriceEngine.samePage("SSD Kingston NV3 1TB PCIe Gen4", "SSD Kingston NV3 1TB M.2 PCIe Gen4 x4")).isTrue();
     }
 
+    @Test
+    void trangPhienBanKhacKhongPhaiTrangCuaMonDaChon() {
+        // Ca thật: "RTX 4060" mở ra trang "RTX 4060 Ti Gaming X 16G" giá 14,3 triệu
+        assertThat(PriceEngine.samePage("MSI NVIDIA GeForce RTX 4060 Graphic Card", "MSI GeForce RTX 4060 Ti GAMING X 16G")).isFalse();
+        assertThat(PriceEngine.samePage("Card MSI RTX 4060 Ventus 2X 8G", "Card màn hình MSI GeForce RTX 4060 VENTUS 2X BLACK 8G OC")).isTrue();
+        assertThat(PriceEngine.samePage("Bộ vi xử lý Intel Core i3-12100", "CPU Intel Core i3-12100F")).isFalse();
+        assertThat(PriceEngine.samePage("Card Sapphire RX 7600 8GB", "Card Sapphire PULSE RX 7600 XT 16GB")).isFalse();
+    }
+
     private static Offer offer(String title, long price, Boolean inStock) {
         return new Offer(title, "Shop", price, null, "https://gearvn.com/products/" + title.hashCode(), null, inStock, null, AT);
     }

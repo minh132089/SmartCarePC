@@ -525,21 +525,60 @@ class ChatServiceTests {
     }
 
     @Test
-    void sauHaiVongDeXuatThiChiConVietCauTraLoi() {
+    void sauBaVongDeXuatThiChiConVietCauTraLoi() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         String propose = """
                 {"tier":"balanced","summary":"Học","items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ"}]}
                 """;
         reply(toolCall("p1", "propose_build", propose), toolCall("p2", "propose_build", propose),
-                toolCall("p3", "propose_build", propose), answer("Xong."));
+                toolCall("p3", "propose_build", propose), toolCall("p4", "propose_build", propose), answer("Xong."));
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
         assertThat(res.reply()).isEqualTo("Xong.");
-        // Vòng 3: không cho gọi công cụ nữa; lời gọi thứ 3 bị từ chối
-        assertThat(sent.get(2).get("tool_choice")).isEqualTo("none");
-        assertThat(sent.get(3).get("messages").toString()).contains("Đã chốt đủ phương án");
+        // Vòng 4: không cho gọi công cụ nữa; lời gọi thứ 4 bị từ chối
+        assertThat(sent.get(3).get("tool_choice")).isEqualTo("none");
+        assertThat(sent.get(4).get("messages").toString()).contains("Đã chốt đủ phương án");
+    }
+
+    @Test
+    void lanSuaChiGuiVaiMonThiGiuCacMonCon() {
+        // Ca thật: lần sửa trợ lý chỉ gửi món đã đổi, phương án mất nguồn
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(components.findByCode("psu_atx")).thenReturn(part("psu_atx", "psu", "Nguồn"));
+        reply(toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","items":[{"code":"ssd_m2_2280","spec":"SSD 512GB","reason":"Đủ"},
+                {"code":"psu_atx","spec":"450W","reason":"Đủ"}]}
+                """), toolCall("p2", "propose_build", """
+                {"tier":"balanced","summary":"Học","items":[{"code":"ssd_m2_2280","spec":"SSD 256GB","reason":"Rẻ hơn"}]}
+                """), answer("Xong."));
+
+        var items = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice")).build().items();
+
+        assertThat(items).extracting(Line::category).containsExactlyInAnyOrder("ssd", "psu");
+        assertThat(items).filteredOn(i -> i.category().equals("ssd")).extracting(Line::spec).containsExactly("SSD 256GB");
+    }
+
+    @Test
+    void phuongAnVuotTranThiCodeDoiHangCungThongSoReHon() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD Samsung 990 EVO 1TB", "A", 2_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD Kingston NV3 1TB", "B", 1_600_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD Kingston NV3 512GB", "C", 900_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":2000000,"items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var line = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice")).build().items().getFirst();
+
+        // Vượt ngân sách 2 triệu: đổi sang SSD cùng 1TB rẻ hơn, không hạ xuống 512GB
+        assertThat(line.productName()).isEqualTo("SSD Kingston NV3 1TB");
     }
 
     @Test
@@ -828,12 +867,14 @@ class ChatServiceTests {
         assertThat(ChatService.cheaperEquivalent("psu", sfx, List.of(product("Nguồn máy tính/ PSU Aigo VK450 450W", 449_000L),
                 product("Nguồn Cooler Master V550 SFX Gold 550W", 2_000_000L)), false).title()).isEqualTo("Nguồn Cooler Master V550 SFX Gold 550W");
 
-        // CPU / vỏ / tản: chỉ cùng model ở cửa hàng rẻ hơn
+        // CPU: chỉ cùng mã ở cửa hàng rẻ hơn
         var cpu = product("CPU Intel Core i3 12100 Box (Socket 1700/ 4 Cores/ 8 Threads)", 4_199_000L);
         assertThat(ChatService.cheaperEquivalent("cpu", cpu, List.of(product("Bộ vi xử lý Intel Core i3-12100F", 2_000_000L),
                 product("Bộ vi xử lý/ CPU Intel Core i3 12100", 2_890_000L)), false).title()).isEqualTo("Bộ vi xử lý/ CPU Intel Core i3 12100");
         var cooler = product("Tản nhiệt Cooler Master Hyper 612 Apex", 1_590_000L);
-        assertThat(ChatService.cheaperEquivalent("cooler", cooler, List.of(product("Tản nhiệt khí Jonsbo CR-1200E", 190_000L)), false)).isNull();
+        // Tản cùng kiểu (tháp) rẻ hơn thì được đổi model khác
+        assertThat(ChatService.cheaperEquivalent("cooler", cooler, List.of(product("Tản nhiệt khí Jonsbo CR-1200E", 190_000L)), false).title())
+                .isEqualTo("Tản nhiệt khí Jonsbo CR-1200E");
 
         // Dòng mua bộ kit thì món thay cũng phải là kit
         var kit = product("RAM Corsair Vengeance 16GB (2x8GB) DDR4 3200", 2_500_000L);
@@ -893,6 +934,81 @@ class ChatServiceTests {
         assertThat(ChatService.plausible("cooler", 30_000L)).isFalse();
         assertThat(ChatService.plausible("cooler", 190_000L)).isTrue();
         assertThat(ChatService.plausible("cpu", 2_890_000L)).isTrue();
+    }
+
+    @Test
+    void docDungLuongTrongSpecVaMaSsd() {
+        // Ca thật: spec "1TB" nhưng chọn Kingston NV2 bản SNV2S/4000G (4TB, 5,79 triệu)
+        assertThat(ChatService.amount("ssd", "Kingston NV2 M.2 2280 PCIe 4.0 x4 NVMe SSD SNV2S/4000G")).isEqualTo(4000);
+        assertThat(ChatService.specAmount("ssd", "SSD NVMe 1TB")).isEqualTo(1000);
+        assertThat(ChatService.specAmount("ram", "8 GB DDR4 3200")).isEqualTo(8);
+        // Spec RAM nói nhiều thanh: không chắc là tổng hay mỗi thanh
+        assertThat(ChatService.specAmount("ram", "16 GB, 2 thanh, DDR4 3200")).isNull();
+        assertThat(ChatService.specAmount("ram", "2x8GB DDR4")).isNull();
+    }
+
+    @Test
+    void cpuCanLinkThiDuocLayBanCungSocketDoiCaoHon() {
+        // Ca thật: Ryzen 7 7700 không cửa hàng nào có trang xác minh được, bản 7700X thì có
+        assertThat(ChatService.cpuUpgrade("CPU AMD Ryzen 7 7700", "CPU AMD Ryzen 7 7700X / AM5")).isTrue();
+        assertThat(ChatService.cpuUpgrade("Bộ vi xử lý Intel Core i3-12100", "Bộ vi xử lý Intel Core i5-12400")).isTrue();
+        // Không thành bản F (mất đồ họa tích hợp), không sang socket khác, không đời thấp hơn
+        assertThat(ChatService.cpuUpgrade("Bộ vi xử lý Intel Core i3-12100", "Bộ vi xử lý Intel Core i5-12400F")).isFalse();
+        assertThat(ChatService.cpuUpgrade("CPU AMD Ryzen 7 7700", "CPU AMD Ryzen 7 5700X")).isFalse();
+        assertThat(ChatService.cpuUpgrade("CPU AMD Ryzen 7 7700", "CPU AMD Ryzen 5 7600")).isFalse();
+    }
+
+    @Test
+    void sanPhamPhaiKhopMaDanhMuc() {
+        // Ca thật: dòng bo Mini-ITX là bo A520M (Micro-ATX); dòng tản khí thấp của vỏ Mini là tản tháp Hyper 612
+        assertThat(ChatService.fitsCode("mb_itx", "Bo Mạch Chủ Gigabyte A520M-K V2")).isFalse();
+        assertThat(ChatService.fitsCode("mb_itx", "Mainboard ASUS ROG STRIX B550-I GAMING")).isTrue();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt Cooler Master Hyper 612 Apex")).isFalse();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt ID-COOLING IS-40X V3 low profile")).isTrue();
+        assertThat(ChatService.fitsCode("aio_240", "Tản nhiệt khí Jonsbo CR-1200E")).isFalse();
+        assertThat(ChatService.fitsCode("psu_sfx", "Nguồn máy tính Jetek J400 (400W)")).isFalse();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Xigmatek Gaming X II ATX")).isFalse();
+        // Vỏ rẻ hơn: cùng cỡ, giữ kính
+        var glassCase = product("Vỏ máy tính Montech AIR 903 ATX kính cường lực", 2_000_000L);
+        assertThat(ChatService.cheaperEquivalent("case", glassCase, List.of(product("Vỏ Jetek EM4 ATX hông kín", 330_000L),
+                product("Vỏ Xigmatek Gaming X II ATX mặt kính", 790_000L)), false).title()).isEqualTo("Vỏ Xigmatek Gaming X II ATX mặt kính");
+        var tower = product("Tản nhiệt Cooler Master Hyper 612 Apex", 1_590_000L);
+        assertThat(ChatService.cheaperEquivalent("cooler", tower, List.of(product("Tản nhiệt khí Jonsbo CR-1200E", 190_000L),
+                product("Tản nhiệt ID-COOLING IS-40X low profile", 300_000L)), false).title()).isEqualTo("Tản nhiệt khí Jonsbo CR-1200E");
+    }
+
+    @Test
+    void phuongAnReDuocNoiBoVaNguon() {
+        var b760 = product("Bo mạch chủ MSI PRO B760M-E DDR4", 2_390_000L);
+        var group = List.of(product("Mainboard Colorful H610M-D V20A DDR4", 1_550_000L),
+                product("Mainboard ASUS PRIME H610M-E D5", 1_400_000L), // DDR5: không lấy
+                product("Mainboard ASUS H610I-PLUS D4", 1_300_000L)); // Mini-ITX: không lấy
+        assertThat(ChatService.equivalents("motherboard", b760, group, false, true, true)).extracting(ProductSearch.Product::title)
+                .containsExactly("Mainboard Colorful H610M-D V20A DDR4");
+        // Phương án khác: bo chỉ đổi đúng model
+        assertThat(ChatService.equivalents("motherboard", b760, group, false, false, true)).isEmpty();
+        // Máy không card rời: nguồn 400W thay được 550W ở phương án Rẻ
+        var psu = product("Nguồn Deepcool PF550 (550W)", 990_000L);
+        assertThat(ChatService.equivalents("psu", psu, List.of(product("Nguồn Jetek J400 (400W)", 590_000L)), false, true, true))
+                .hasSize(1);
+        assertThat(ChatService.equivalents("psu", psu, List.of(product("Nguồn Jetek J400 (400W)", 590_000L)), false, true, false))
+                .isEmpty();
+    }
+
+    @Test
+    void giaVoLyVaRamSaiLoaiBiLoai() {
+        // Ca thật: nguồn 725.000đ đọc thành 725.000.000đ; RAM DDR5 ở dòng RAM DDR4
+        assertThat(ChatService.plausible("psu", 725_000_000L)).isFalse();
+        assertThat(ChatService.fitsCode("ram_ddr4", "RAM Corsair Dominator Titanium 32GB (2x16GB) DDR5 6000")).isFalse();
+        assertThat(ChatService.fitsCode("ram_ddr4", "Ram SSTC 16GB DDR4 3200MHz")).isTrue();
+    }
+
+    @Test
+    void cpuBoxIntelKemQuatTan() {
+        assertThat(ChatService.stockCooler("CPU Intel Core i3 12100 Box (Socket 1700/ 4 Cores)")).isTrue();
+        assertThat(ChatService.stockCooler("CPU Intel Core i5-14600K Box")).isFalse();
+        assertThat(ChatService.stockCooler("CPU Intel Core i3 12100 Tray")).isFalse();
+        assertThat(ChatService.stockCooler("CPU AMD Ryzen 5 5600 Box")).isFalse();
     }
 
     private static ProductSearch.Product product(String title, long price) {

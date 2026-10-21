@@ -109,6 +109,19 @@ class ModelMatchServiceTests {
     }
 
     @Test
+    void timVoMauKhopMonDaChon() {
+        // Ca thật: vỏ Gaming (tản nước) nhưng chọn tản khí tháp: vỏ Tower tiêu chuẩn dựng đúng các món này
+        assertThat(service.matchingCase(request("case_gaming", "mb_atx", "cpu_std", "tower_air_155", "gpu_280", "psu_atx")))
+                .contains("case_standard_tower");
+        // Không có card rời vẫn tìm được
+        assertThat(service.matchingCase(request("case_gaming", "mb_atx", "cpu_std", "tower_air_155", "psu_atx")))
+                .contains("case_standard_tower");
+        // Không vỏ nào khớp: rỗng
+        assertThat(service.matchingCase(request("case_gaming", "mb_matx", "cpu_std", "aio_240", "gpu_280", "psu_atx"))).isEmpty();
+        assertThat(service.fixedCodes("case_gaming")).containsEntry("cooler", "aio_240").containsEntry("motherboard", "mb_atx");
+    }
+
+    @Test
     void lietKeMonDiKemTungVoChoTroLy() {
         assertThat(service.presetParts())
                 .contains("[case_standard_tower] Tower tiêu chuẩn: bo mạch Bo mạch ATX [mb_atx], tản nhiệt Tản khí tháp [tower_air_155]")

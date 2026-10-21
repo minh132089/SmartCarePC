@@ -64,16 +64,56 @@ public class ModelMatchService {
             ComponentResponse want = fixed.get(category);
             ComponentResponse have = chosen.get(category);
             if (want == null || (have != null && have.code().equals(want.code()))) continue;
-            // Không có card rời: máy dùng đồ họa tích hợp (kiểm tra tương thích báo lỗi nếu CPU không có), bỏ bước lắp card
-            if (have == null && "gpu".equals(category)) continue;
+            // Không có card rời: máy dùng đồ họa tích hợp (kiểm tra tương thích báo lỗi nếu CPU không có), bỏ bước lắp card.
+            // Không có tản thấp: dùng quạt tản kèm CPU bản Box (app chỉ bỏ dòng này khi CPU đã kèm tản)
+            if (have == null && ("gpu".equals(category) || "cooler".equals(category))) continue;
             errors.add(new Issue("model." + category, mismatch(pcCase, category, want, have)));
         }
         String note = note(model.get(), chosenQty);
-        if (fixed.containsKey("gpu") && !chosen.containsKey("gpu")) {
+        if (fixed.containsKey("cooler") && !chosen.containsKey("cooler")) {
+            String stock = "Máy mẫu 3D có tản nhiệt rời; cấu hình này dùng quạt tản đi kèm CPU (bản Box) nên bạn lắp quạt đó thay cho tản rời.";
+            note = note == null ? stock : note + " " + stock;
+        }
+                if (fixed.containsKey("gpu") && !chosen.containsKey("gpu")) {
             String noGpu = "Máy mẫu 3D có card đồ họa rời; cấu hình này dùng đồ họa tích hợp của CPU nên bạn bỏ qua bước lắp card.";
             note = note == null ? noGpu : note + " " + noGpu;
         }
         return new Result(errors, note);
+    }
+
+    /**
+     * Vỏ có máy mẫu dựng đúng các món cố định đã chọn (bo, tản, card, nguồn; không có card thì bỏ qua card), khác vỏ
+     * đang chọn. Dùng để tự sửa khi trợ lý chọn vỏ không khớp món: đổi vỏ mẫu thì không phải mua thêm gì.
+     */
+    public Optional<String> matchingCase(BuildCheckRequest request) {
+        Map<String, ComponentResponse> catalog = componentService.findAll(null).stream()
+                .collect(Collectors.toMap(ComponentResponse::code, c -> c, (a, b) -> a));
+        Map<String, String> chosen = new LinkedHashMap<>();
+        for (var i : request.items()) {
+            ComponentResponse c = catalog.get(i.code());
+            if (c != null) chosen.putIfAbsent(c.category(), c.code());
+        }
+        String now = chosen.get("case");
+        for (var p : pcBuildService.findPresets()) {
+            String code = "case_" + p.code();
+            if (code.equals(now)) continue;
+            var fixed = modelOf(code).map(ModelMatchService::fixedParts).orElse(null);
+            if (fixed == null) continue;
+            boolean all = FIXED.stream().allMatch(cat -> {
+                String want = codeOf(fixed.get(cat));
+                String have = chosen.get(cat);
+                return want == null || (have == null ? "gpu".equals(cat) : have.equals(want));
+            });
+            if (all) return Optional.of(code);
+        }
+        return Optional.empty();
+    }
+
+    /** Món cố định của vỏ: loại linh kiện -> mã trong danh mục (rỗng nếu vỏ chưa có mô hình) */
+    public Map<String, String> fixedCodes(String caseCode) {
+        Map<String, String> out = new LinkedHashMap<>();
+        modelOf(caseCode).ifPresent(b -> fixedParts(b).forEach((cat, c) -> out.put(cat, c.code())));
+        return out;
     }
 
     /** Gộp lỗi lệch máy mẫu vào kết quả kiểm tra tương thích */
