@@ -1647,6 +1647,43 @@ class ChatServiceTests {
     }
 
     @Test
+    void mayHocAiCanCardNvidia12GbVaKhongPhaiMayVanPhong() {
+        var n = ChatService.needs(List.of("Mình học AI, cần chạy mô hình deep learning nhỏ trên GPU, ngân sách khoảng 35 triệu."));
+        assertThat(n.cuda()).isTrue();
+        assertThat(n.office()).as("chữ \"học\" không làm thành máy văn phòng").isFalse();
+        assertThat(n.vramMin()).isEqualTo(12);
+        assertThat(n.ramMin()).isEqualTo(16);
+        assertThat(n.ssdMin()).isEqualTo(512);
+        assertThat(ChatService.needs(List.of("máy học online, ai trong nhà cũng dùng được, 12 triệu")).cuda())
+                .as("\"ai\" viết thường là đại từ").isFalse();
+        assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("cuda", true)), "gpu_280",
+                new ProductSearch.Product("Card ASUS Dual Radeon RX 7700 XT 12GB", "s", 12_000_000L, "https://a/b", null))).isFalse();
+        assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("cuda", true)), "gpu_280",
+                new ProductSearch.Product("Card ASUS Dual GeForce RTX 4070 12GB", "s", 15_000_000L, "https://a/b", null))).isTrue();
+    }
+
+    @Test
+    void chipCardYeuHonVaTuKhoaTheoChip() {
+        assertThat(ChatService.GPU_RANK).containsKey("rtx5070");
+        assertThat(ChatService.gpuDowngrades("rtx4060", 5)).containsExactly("rx6650xt", "rx7600", "rtx3060");
+        assertThat(ChatService.gpuDowngrades("rtx5070", 15).getFirst()).isEqualTo("rtx4070super");
+        assertThat(ChatService.gpuDowngrades("xyz", 5)).isEmpty();
+        assertThat(ChatService.chipQuery("rtx4060ti")).isEqualTo("VGA RTX 4060 TI");
+        assertThat(ChatService.chipQuery("rx6600")).isEqualTo("VGA RX 6600");
+        assertThat(ChatService.sameGpuVendor("rtx4060", "rtx5060")).isTrue();
+        assertThat(ChatService.sameGpuVendor("rtx4060", "rx7600")).isFalse();
+    }
+
+    @Test
+    void voMiniItxGhiNguonAtxVanLaVoItx() {
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ case Cooler Master NR200P Mini-ITX, hỗ trợ nguồn SFX/ATX")).isTrue();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Case Lian Li Q58 Mini ITX (PSU ATX)")).isTrue();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Xigmatek Gaming X II ATX")).isFalse();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ case mATX Mini-ITX VSP")).isFalse();
+        assertThat(ChatService.fitsCode("case_gaming", "Vỏ case Montech AIR 903 ATX")).isTrue();
+    }
+
+    @Test
     void nhanRaNganSachTrongCauNguoiDung() {
         assertThat(ChatService.hasBudget("ngân sách khoảng 40 triệu")).isTrue();
         assertThat(ChatService.hasBudget("có 25tr, thích máy có kính")).isTrue();
