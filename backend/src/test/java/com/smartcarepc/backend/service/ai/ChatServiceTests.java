@@ -52,7 +52,7 @@ class ChatServiceTests {
     void setUp() {
         when(builds.findPresets()).thenReturn(List.of());
         service = new ChatService(client, search, components, compatibility, builds, new ModelMatchService(builds, components),
-                JsonMapper.builder().build(), "test-model", 512);
+                JsonMapper.builder().build(), "test-model", 512, false);
     }
 
     @Test
@@ -996,11 +996,11 @@ class ChatServiceTests {
     }
 
     @Test
-    void giaVoLyVaRamSaiLoaiBiLoai() {
+    void giaVoLyBiLoai() {
         // Ca thật: nguồn 725.000đ đọc thành 725.000.000đ; RAM DDR5 ở dòng RAM DDR4
         assertThat(ChatService.plausible("psu", 725_000_000L)).isFalse();
-        assertThat(ChatService.fitsCode("ram_ddr4", "RAM Corsair Dominator Titanium 32GB (2x16GB) DDR5 6000")).isFalse();
-        assertThat(ChatService.fitsCode("ram_ddr4", "Ram SSTC 16GB DDR4 3200MHz")).isTrue();
+        // Mã ram_ddr4 là mô hình 3D chung cho mọi thanh RAM: DDR5 vẫn hợp lệ (loại DDR so với bo ở ProductRules)
+        assertThat(ChatService.fitsCode("ram_ddr4", "RAM Corsair Dominator Titanium 32GB (2x16GB) DDR5 6000")).isTrue();
     }
 
     @Test
@@ -1009,6 +1009,34 @@ class ChatServiceTests {
         assertThat(ChatService.stockCooler("CPU Intel Core i5-14600K Box")).isFalse();
         assertThat(ChatService.stockCooler("CPU Intel Core i3 12100 Tray")).isFalse();
         assertThat(ChatService.stockCooler("CPU AMD Ryzen 5 5600 Box")).isFalse();
+    }
+
+    @Test
+    void ssdKhongGhiDungLuongKhongCoiLaCungThongSo() {
+        // Ca thật: "Kingston KC3000 2 2280 NVMe PCIe Gen4" là bản 4TB 9,45 triệu
+        assertThat(ChatService.sameSpec("ssd", "SSD Kingston NV3 1TB", "Ổ cứng SSD Kingston KC3000 2 2280 NVMe PCIe Gen4")).isFalse();
+        assertThat(ChatService.sameSpec("ssd", "SSD Kingston NV3 1TB", "SSD Lexar NM620 1TB")).isTrue();
+    }
+
+    @Test
+    void docDungLuongMoiThanhRamTuSpec() {
+        // Ca thật: spec "16 GB, 2 thanh" mà chọn 2 thanh 16GB (32GB, 6,78 triệu)
+        assertThat(ChatService.ramWant("16 GB, 2 thanh, DDR4 3200", 2, false)).isEqualTo(8);
+        assertThat(ChatService.ramWant("2x8GB DDR4", 2, false)).isEqualTo(8);
+        assertThat(ChatService.ramWant("8GB x 2 DDR4", 2, false)).isEqualTo(8);
+        assertThat(ChatService.ramWant("16 GB (2x8GB)", 2, true)).isEqualTo(16);
+        assertThat(ChatService.ramWant("8 GB DDR4 3200", 1, false)).isEqualTo(8);
+        assertThat(ChatService.ramWant("32 GB DDR5", 2, false)).isEqualTo(16);
+    }
+
+    @Test
+    void voMiniPhaiGhiItxVaKhongNhanDeTanLaptop() {
+        // Ca thật: dòng vỏ Mini là Xigmatek QUANTUM 4AF; dòng tản thấp là đế tản laptop X-Slim II
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Xigmatek QUANTUM 4AF")).isFalse();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Jonsbo A4 Mini-ITX")).isTrue();
+        assertThat(ChatService.fitsCode("low_profile_47", "Đế Tản Nhiệt Cooler Master X-Slim II")).isFalse();
+        assertThat(ChatService.fitsCode("tower_air_155", "Đế tản nhiệt laptop Deepcool N80")).isFalse();
+        assertThat(ChatService.specAmount("psu", "650W, 80 Plus, bảo hành 5 năm")).isEqualTo(650);
     }
 
     private static ProductSearch.Product product(String title, long price) {

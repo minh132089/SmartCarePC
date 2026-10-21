@@ -67,7 +67,10 @@ public class ChatService {
             Vì vậy chọn vỏ trước theo nhu cầu (kích thước, kính, tản khí hay tản nước, card dài hay ngắn), rồi dùng đúng \
             bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do. \
             Riêng card đồ họa: máy không cần card rời (học, văn phòng) và CPU có đồ họa tích hợp thì BỎ HẲN dòng card, \
-            app tự ghi chú để người dùng bỏ qua bước lắp card.
+            app tự ghi chú để người dùng bỏ qua bước lắp card. \
+            Người dùng nói "nhỏ gọn", "gọn", "bàn chật" thì chọn vỏ Tower nhỏ gọn (Micro-ATX); CHỈ chọn vỏ Mini / SFF \
+            (Mini-ITX) khi người dùng nói rõ muốn máy rất nhỏ / mini / ITX, vì bo Mini-ITX, tản thấp và nguồn SFX đắt \
+            và hiếm hàng hơn nhiều.
             4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
             check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá ngắn, mỗi lần một loại hoặc một model, vd \
             "RAM DDR4 16GB 3200", "RTX 3050 8GB"; muốn so hai model thì gọi hai lần. Mỗi kết quả có một id ngắn (vd "s3-2"). Kết quả có nhiều mức giá: dùng chúng cho cả \
@@ -278,11 +281,17 @@ public class ChatService {
     private final JsonMapper json;
     private final String model;
     private final int maxTokens;
+    /**
+     * Tắt chế độ suy nghĩ của model (DeepSeek: thinking = disabled). Bật suy nghĩ thì với lời dặn dài model có thể dùng
+     * hết max_tokens cho phần suy nghĩ và trả lời rỗng, mỗi vòng cũng chậm hơn nhiều.
+     */
+    private final boolean disableThinking;
 
     public ChatService(LlmClient client, ProductSearch search, ComponentService componentService,
             CompatibilityService compatibilityService, PcBuildService pcBuildService, ModelMatchService modelMatch, JsonMapper json,
             @Value("${app.ai.model:deepseek-v4-flash}") String model,
-            @Value("${app.ai.max-tokens:2048}") int maxTokens) {
+            @Value("${app.ai.max-tokens:2048}") int maxTokens,
+            @Value("${app.ai.disable-thinking:false}") boolean disableThinking) {
         this.client = client;
         this.search = search;
         this.componentService = componentService;
@@ -292,6 +301,7 @@ public class ChatService {
         this.json = json;
         this.model = model;
         this.maxTokens = maxTokens;
+        this.disableThinking = disableThinking;
     }
 
     /**
@@ -368,6 +378,7 @@ public class ChatService {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", maxTokens);
+            if (disableThinking) body.put("thinking", Map.of("type", "disabled"));
             body.put("messages", messages);
             // Đã tìm đủ MAX_SEARCH_ROUNDS vòng: bỏ công cụ tìm để trợ lý chốt với kết quả đã có (mỗi vòng tìm thêm tốn
             // 15 - 35 giây; món chưa ưng thì app tự đổi lúc dựng thẻ)
@@ -837,7 +848,12 @@ public class ChatService {
         var tries = equivalents(category, now, group, kit, cheap, noGpu).stream().limit(4)
                 .map(c -> Io.async(() -> {
                     String l = search.directLink(c.title(), c.shop(), c.url());
-                    return l == null || rank(l) < 1 ? null : new ProductSearch.Product(c.title(), c.shop(), c.priceVnd(), l, c.imageUrl());
+                    if (l == null || rank(l) < 1) return null;
+                    // Giá Google có thể cũ (vd SSD 920 nghìn, trang ghi 2,05 triệu): so bằng giá đọc trên trang
+                    var page = search.offer(l);
+                    Long price = page != null && page.priceVnd() != null && page.priceVnd() <= MAX_PRICE ? page.priceVnd() : c.priceVnd();
+                    if (now.priceVnd() != null && price != null && price >= now.priceVnd()) return null;
+                    return new ProductSearch.Product(c.title(), c.shop(), price, l, c.imageUrl());
                 }))
                 .toList();
         for (var t : tries) {
@@ -1241,6 +1257,12 @@ public class ChatService {
         modelMatch.fixedCodes(String.valueOf(pcCase.get("code"))).forEach((category, code) -> {
             var item = byCategory.get(category);
             if (item == null || code.equals(item.get("code"))) return;
+            // Card: mã 240 / 280 chỉ là cỡ trong mô hình 3D; giữ đúng card trợ lý chọn (chip quyết định hiệu năng)
+            if ("gpu".equals(category)) {
+                log.info("propose_build: đổi mã {} -> {} cho khớp mô hình 3D, giữ nguyên card đã chọn", item.get("code"), code);
+                item.put("code", code);
+                return;
+            }
             String spec = "motherboard".equals(category) ? boardQuery(item, code, turn) : partName(code);
             log.info("propose_build: đổi {} -> {} cho khớp mô hình 3D của vỏ {}", item.get("code"), code, pcCase.get("code"));
             item.put("code", code);
@@ -1278,21 +1300,27 @@ public class ChatService {
             String category = categoryOf(code);
             var pick = picks.get(code);
             var d = details.getOrDefault(code, Map.of());
-            // RAM nhiều thanh: "16 GB" trong spec có thể là tổng, không tự đổi
-            if ("ram".equals(category) && (d.get("quantity") instanceof Number q && q.intValue() > 1
-                    || d.get("buy_qty") instanceof Number b && b.intValue() > 1)) continue;
-            Integer want = specAmount(category, text(d.get("spec")));
+            int qty = d.get("quantity") instanceof Number q ? q.intValue() : 1;
+            boolean isKit = d.get("buy_qty") instanceof Number b && b.intValue() < qty;
+            // RAM: so dung lượng mỗi thanh (hoặc cả bộ kit) với spec ("16 GB, 2 thanh" là 2 thanh 8GB)
+            Integer want = "ram".equals(category) ? ramWant(text(d.get("spec")), qty, isKit) : specAmount(category, text(d.get("spec")));
             Integer has = pick == null || category == null ? null : amount(category, pick.title());
-            if (want == null || has == null || want.equals(has)) continue;
+            // Nguồn yếu hơn công suất trợ lý ghi trong spec (vd spec 650W mà chọn 350W): đổi sang nguồn đủ công suất
+            if ("psu".equals(category) && want != null && has != null && has >= want) continue;
+            // Tên không ghi dung lượng (vd "Kingston KC3000 2 2280 NVMe"): cùng tên có nhiều bản, giá và trang có thể là
+            // bản 4TB; coi như lệch spec để đổi sang món ghi rõ đúng dung lượng
+            if (want == null || want.equals(has)) continue;
             var fix = siblings.getOrDefault(code, List.of()).stream()
                     .filter(s -> s.title() != null && s.priceVnd() != null && !JUNK.matcher(s.title()).find())
                     .filter(s -> sameKind(pick.title(), s.title()) && plausible(category, s.priceVnd()))
-                    .filter(s -> want.equals(amount(category, s.title())))
+                    .filter(s -> "psu".equals(category) ? amount(category, s.title()) != null && amount(category, s.title()) >= want
+                            && (!sfx(pick.title()) || sfx(s.title())) : want.equals(amount(category, s.title())))
                     .filter(s -> !"ram".equals(category) || sameSpecIgnoringSize(pick.title(), s.title()))
                     .min(Comparator.comparingLong(s -> Math.abs(s.priceVnd() - (pick.priceVnd() == null ? 0 : pick.priceVnd()))))
                     .orElse(null);
             log.info("propose_build: dòng {} chọn \"{}\" ({} GB) khác spec ({} GB) -> {}", code, pick.title(), has, want,
-                    fix == null ? "bỏ để app tự tìm" : fix.title());
+                    fix == null ? (has == null ? "giữ (không có món ghi rõ dung lượng)" : "bỏ để app tự tìm") : fix.title());
+            if (fix == null && has == null) continue;
             if (fix == null) {
                 picks.remove(code);
                 links.remove(code);
@@ -1310,13 +1338,41 @@ public class ChatService {
         return !y.laptopRam() && (x.ramType() == null || y.ramType() == null || x.ramType().equals(y.ramType()));
     }
 
+    private static final java.util.regex.Pattern RAM_SPLIT = java.util.regex.Pattern.compile(
+            "(\\d)\\s*x\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*x\\s*(\\d)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.Set<Integer> STICK_SIZES = java.util.Set.of(4, 8, 16, 24, 32, 48, 64);
+
+    /**
+     * Dung lượng RAM cần theo spec: mỗi thanh khi mua thanh lẻ, cả bộ khi mua kit. "2x8GB" / "8GB x 2" là thanh 8GB;
+     * "16 GB, 2 thanh" (hay quantity 2) là tổng 16GB, mỗi thanh 8GB. null nếu không chắc.
+     */
+    static Integer ramWant(String spec, int qty, boolean kit) {
+        if (spec == null) return null;
+        String t = spec.toLowerCase();
+        var split = RAM_SPLIT.matcher(t);
+        if (split.find()) {
+            int n = Integer.parseInt(split.group(1) != null ? split.group(1) : split.group(4));
+            int per = Integer.parseInt(split.group(2) != null ? split.group(2) : split.group(3));
+            return kit ? n * per : per;
+        }
+        var g = GB.matcher(t);
+        if (!g.find()) return null;
+        int total = Integer.parseInt(g.group(1));
+        if (g.find()) return null;
+        var sticks = java.util.regex.Pattern.compile("(\\d)\\s*thanh").matcher(t);
+        int n = sticks.find() ? Integer.parseInt(sticks.group(1)) : qty;
+        if (kit || n <= 1) return total;
+        int per = total / n;
+        return total % n == 0 && STICK_SIZES.contains(per) ? per : null;
+    }
+
     /**
      * Dung lượng chính trợ lý ghi trong spec, chỉ khi rõ ràng: SSD; RAM chỉ khi spec ghi đúng một con số GB và không nói
      * nhiều thanh ("2 thanh", "2x8GB", "kit") để không hiểu nhầm tổng với mỗi thanh. null nếu không chắc.
      */
     static Integer specAmount(String category, String spec) {
         if (spec == null || category == null) return null;
-        if ("ssd".equals(category)) return amount("ssd", spec);
+        if ("ssd".equals(category) || "psu".equals(category)) return amount(category, spec);
         if ("ram".equals(category)) {
             String t = spec.toLowerCase();
             if (t.matches(".*(thanh|kit|bộ|\\d\\s*x\\s*\\d|\\bx\\s*\\d|\\d\\s*x\\b).*")) return null;
@@ -1340,25 +1396,27 @@ public class ChatService {
             case "mb_itx" -> size == null || size == 1;
             case "mb_matx" -> size == null || size == 2;
             case "mb_atx" -> size == null || size >= 2;
-            case "case_mini_sff" -> size == null || size == 1;
+            case "case_mini_sff" -> size != null && size == 1;
             case "low_profile_47" -> lowProfile(title) && !liquid(title);
-            case "tower_air_155" -> !liquid(title) && !lowProfile(title);
+            case "tower_air_155" -> !liquid(title) && !lowProfile(title) && !LAPTOP_COOLER.matcher(title).find();
             case "aio_240" -> liquid(title) && (radiator(title) == null || radiator(title) == 240);
             case "aio_360" -> liquid(title) && (radiator(title) == null || radiator(title) == 360);
             case "psu_sfx" -> sfx(title);
-            case "ram_ddr4" -> !"DDR5".equals(ProductRules.read("ram", title).ramType());
-            case "ram_ddr5" -> !"DDR4".equals(ProductRules.read("ram", title).ramType());
             default -> true;
         };
     }
 
     private static final java.util.regex.Pattern LOW_PROFILE = java.util.regex.Pattern.compile(
-            "low[\\s-]*profile|\\bthấp\\b|\\bslim\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "low[\\s-]*profile|\\bthấp\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /** Tản khí thấp (low-profile, top-flow) cho vỏ nhỏ */
     static boolean lowProfile(String title) {
-        return title != null && LOW_PROFILE.matcher(title).find();
+        return title != null && LOW_PROFILE.matcher(title).find() && !LAPTOP_COOLER.matcher(title).find();
     }
+
+    /** Đế / quạt tản cho laptop: không phải tản CPU máy bàn */
+    private static final java.util.regex.Pattern LAPTOP_COOLER =
+            java.util.regex.Pattern.compile("đế\\s+tản|laptop|notebook|cooling\\s+pad", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /** Vỏ có kính (người dùng thích kính thì đổi vỏ rẻ hơn vẫn phải có kính) */
     static boolean glass(String title) {
@@ -1390,6 +1448,8 @@ public class ChatService {
             case "ram", "ssd" -> {
                 Integer a = amount(category, now), b = amount(category, other);
                 if (a != null && b != null && !a.equals(b)) yield false;
+                // Món thay không ghi dung lượng: có thể là bản khác hẳn (SSD 4TB cùng tên)
+                if (a != null && b == null) yield false;
                 if (!"ram".equals(category)) yield true;
                 var x = ProductRules.read("ram", now);
                 var y = ProductRules.read("ram", other);
@@ -1487,14 +1547,25 @@ public class ChatService {
         String cpu = productTitles(picks).get("cpu");
         var request = c.request();
         if (stockCooler(cpu)) {
-            var dropped = request.items().stream().filter(i -> "low_profile_47".equals(i.code()) && picks.get(i.code()) == null).toList();
+            var dropped = request.items().stream()
+                    .filter(i -> ("low_profile_47".equals(i.code()) || "tower_air_155".equals(i.code())) && picks.get(i.code()) == null).toList();
             if (!dropped.isEmpty()) {
-                log.info("Không có tản khí thấp có link mua; dùng quạt tản kèm CPU \"{}\"", cpu);
+                log.info("Không có tản khí có link mua; dùng quạt tản kèm CPU \"{}\"", cpu);
                 request = new BuildCheckRequest(request.items().stream().filter(i -> !dropped.contains(i)).toList());
             }
         }
         return new Checked(request, c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
+
+    /** Từ khoá chung theo mã danh mục, dùng khi tìm theo spec / tên danh mục không ra (tên hàng ở cửa hàng viết khác) */
+    private static final Map<String, String> GENERIC_QUERY = Map.ofEntries(
+            Map.entry("tower_air_155", "tản nhiệt khí CPU"), Map.entry("low_profile_47", "tản nhiệt low profile"),
+            Map.entry("aio_240", "tản nhiệt nước AIO 240"), Map.entry("aio_360", "tản nhiệt nước AIO 360"),
+            Map.entry("psu_atx", "nguồn máy tính 80 Plus"), Map.entry("psu_sfx", "nguồn SFX"),
+            Map.entry("mb_atx", "mainboard ATX"), Map.entry("mb_matx", "mainboard micro ATX"), Map.entry("mb_itx", "mainboard mini ITX"),
+            Map.entry("case_mini_sff", "vỏ máy tính mini ITX"), Map.entry("case_compact_tower", "vỏ máy tính micro ATX"),
+            Map.entry("ram_ddr4", "RAM máy bàn 8GB"),
+            Map.entry("ssd_m2_2280", "SSD NVMe M.2 512GB"), Map.entry("fan120", "quạt case 120mm"));
 
     /** CPU Intel bản Box không đuôi K: có kèm quạt tản Intel (thấp, ~47 mm) */
     static boolean stockCooler(String cpuTitle) {
@@ -1579,7 +1650,7 @@ public class ChatService {
             String lineSpec = text(details.getOrDefault(code, Map.of()).get("spec"));
             String lineName = partName(code);
             fixes.put(code, Io.async(() -> {
-                for (String q : Stream.of(lineSpec, lineName).filter(Objects::nonNull).distinct().toList()) {
+                for (String q : Stream.of(lineSpec, lineName, GENERIC_QUERY.get(code)).filter(Objects::nonNull).distinct().toList()) {
                     for (var source : List.<java.util.function.Function<String, List<ProductSearch.Product>>>of(search::search, search::engineSearch)) {
                         var list = source.apply(q).stream()
                                 .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
@@ -1933,12 +2004,14 @@ public class ChatService {
             Long lo = vnd(d.get("price_min_vnd")), hi = vnd(d.get("price_max_vnd"));
             // App tự chọn thì chỉ lấy hàng nhận ra đúng loại và giá hợp lý (tìm "Micro-ATX DDR4" có thể ra RAM, tìm
             // "tản khí 155" có thể ra cái pát 30 nghìn)
-            Integer want = specAmount(category, spec);
+            boolean isKit = d.get("buy_qty") instanceof Number b && b.intValue() < i.qty();
+            Integer want = "ram".equals(category) ? ramWant(spec, i.qty(), isKit) : specAmount(category, spec);
             java.util.function.Predicate<ProductSearch.Product> ok = p -> p.title() != null && !JUNK.matcher(p.title()).find()
                     && plausible(category, p.priceVnd()) && ofKind(category, p.title()) && !wrongKind(i.code(), p)
                     && fitsCode(i.code(), p.title())
-                    && (want == null || amount(category, p.title()) == null || want.equals(amount(category, p.title())));
-            jobs.put(i.code(), Io.async(() -> findFor(spec, name, lo, hi, ok, list -> siblings.put(i.code(), list))));
+                    && (want == null || want.equals(amount(category, p.title())));
+            String generic = GENERIC_QUERY.get(i.code());
+            jobs.put(i.code(), Io.async(() -> findFor(spec, name, generic, lo, hi, ok, list -> siblings.put(i.code(), list))));
         }
         Map<String, ProductSearch.Product> out = new LinkedHashMap<>();
         jobs.forEach((code, job) -> {
@@ -1948,9 +2021,9 @@ public class ChatService {
         return out;
     }
 
-    private ProductSearch.Product findFor(String spec, String name, Long lo, Long hi,
+    private ProductSearch.Product findFor(String spec, String name, String generic, Long lo, Long hi,
             java.util.function.Predicate<ProductSearch.Product> ok, java.util.function.Consumer<List<ProductSearch.Product>> found) {
-        for (String query : Stream.of(spec, name).filter(Objects::nonNull).distinct().toList()) {
+        for (String query : Stream.of(spec, name, generic).filter(Objects::nonNull).distinct().toList()) {
             try {
                 var list = search.search(query).stream().filter(ok).toList();
                 var p = choose(list, lo, hi);
