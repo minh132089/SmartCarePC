@@ -313,31 +313,29 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        // Ngân sách 1 triệu nhưng trợ lý chọn món 1,1 triệu cho phương án Rẻ: code đổi sang món rẻ nhất cùng dung lượng
+        // Ngân sách 1,5 triệu nhưng trợ lý chọn món 1,6 triệu cho phương án Rẻ: code đổi sang món rẻ nhất cùng dung lượng
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 512GB", "A", 1_100_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 512GB", "B", 950_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD A 512GB", "A", 1_600_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 512GB", "B", 1_400_000L, "https://b.vn/1", null),
                 new ProductSearch.Product("SSD C 512GB", "C", 900_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
-                {"tier":"cheap","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
+                {"tier":"cheap","summary":"Học","budget_vnd":1500000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
                 """), toolCall("p2", "propose_build", """
-                {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-2"}]}
+                {"tier":"balanced","summary":"Học","budget_vnd":1500000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-2"}]}
                 """), answer("Xong."), answer("Xong."));
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        // Build vượt ngân sách bị bỏ, option đánh số lại từ 1
+        // Rẻ tối đa 90% ngân sách (1,35 triệu): code đổi sang SSD C
         var cheap = res.options().stream().filter(o -> "cheap".equals(o.tier())).toList();
-        // Rẻ tối đa 90% ngân sách (900 nghìn): chỉ SSD C còn hợp lệ
         assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 512GB");
         assertThat(cheap).extracting(ChatResponse.BuildCard::variant).containsExactly(1);
-        assertThat(cheap).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(900_000L));
-        // Phù hợp: option 1 không vượt ngân sách, option sau được đắt hơn tối đa 2 triệu
+        assertThat(cheap).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_350_000L));
+        // Phù hợp không vượt ngân sách
         var balanced = res.options().stream().filter(o -> "balanced".equals(o.tier())).toList();
-        assertThat(balanced.getFirst().items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_000_000L);
-        assertThat(balanced).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(3_000_000L));
+        assertThat(balanced.getFirst().items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_500_000L);
     }
 
     @Test
@@ -1343,6 +1341,54 @@ class ChatServiceTests {
         assertThat(res.options()).isNull();
         assertThat(res.build().tier()).isEqualTo("balanced");
         assertThat(res.reply()).contains("Phương án Chất lượng trùng cấu hình với Phù hợp");
+    }
+
+    @Test
+    void nguoiDungMuonMiniItxThiGiuVoMini() {
+        assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 20 triệu."))
+                .miniItx()).isTrue();
+        assertThat(ChatService.needs(List.of("máy nhỏ gọn để học, 12 triệu")).miniItx()).as("nhỏ gọn là Micro-ATX, không phải mini").isFalse();
+        // Trợ lý chọn vỏ nhỏ gọn cho câu "mini ITX": app đổi về vỏ Mini, bỏ vỏ mATX để tìm vỏ ITX
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("case_compact_tower")).thenReturn(part("case_compact_tower", "case", "Vỏ nhỏ gọn"));
+        when(components.findByCode("case_mini_sff")).thenReturn(part("case_mini_sff", "case", "Vỏ Mini / SFF"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("vỏ")).thenReturn(List.of(new ProductSearch.Product("Vỏ máy tính EDRA ECS1105 Micro-ATX", "A", 290_000L, "https://a.vn/v", null)));
+        when(search.search("vỏ máy tính mini ITX")).thenReturn(List.of(new ProductSearch.Product("Vỏ máy tính Jonsbo A4 Mini-ITX", "B", 2_500_000L, "https://b.vn/itx", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"vỏ\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Mini","budget_vnd":20000000,"items":[{"code":"case_compact_tower","spec":"vỏ nhỏ","reason":"Gọn","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var card = service.reply(new ChatRequest(List.of(new Message("user", "máy mini ITX chơi game nhẹ 20 triệu")), null, null, "advice")).build();
+
+        assertThat(card.items().getFirst().code()).isEqualTo("case_mini_sff");
+        assertThat(card.items().getFirst().productName()).isEqualTo("Vỏ máy tính Jonsbo A4 Mini-ITX");
+    }
+
+    @Test
+    void chatLuongVanReHonPhuHopSauKhiNhacThiAnKemGhiChu() {
+        // n1 ai-2: Chất lượng 29,4tr rẻ hơn Phù hợp 30,3tr dù đã nhắc một lần
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A 1TB", "A", 1_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 1TB", "B", 1_400_000L, "https://b.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        var calls = new ArrayList<Map<String, Object>>();
+        for (String[] t : List.of(new String[] { "balanced", "s1-1" }, new String[] { "quality", "s1-2" })) {
+            calls.add(Map.of("id", "p-" + t[0], "type", "function", "function", Map.of("name", "propose_build",
+                    "arguments", "{\"tier\":\"" + t[0] + "\",\"summary\":\"Học\",\"budget_vnd\":2000000,\"items\":[{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ\",\"product_id\":\"" + t[1] + "\"}]}")));
+        }
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
+                Map.of("choices", List.of(Map.of("finish_reason", "tool_calls", "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))),
+                answer("Xong."), answer("Vẫn vậy."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 2 triệu")), null, null, "advice"));
+
+        assertThat(res.options()).isNull();
+        assertThat(res.reply()).contains("Phương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp");
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------

@@ -72,6 +72,8 @@ public class ChatService {
             app tự ghi chú để người dùng bỏ qua bước lắp card. \
             Bo mạch chọn đúng cỡ mẫu của vỏ: vỏ Tower nhỏ gọn dùng bo Micro-ATX (tên có chữ M sau chipset, vd B760M, B550M); \
             các vỏ tower khác dùng bo ATX (không có chữ M, vd B760, B550). Card 3 quạt chỉ dùng cho vỏ có mẫu card 280 mm. \
+            Người dùng nói rõ "mini", "ITX", "SFF" thì MỌI tier (cả Rẻ) dùng vỏ Mini / SFF với bo Mini-ITX, tản thấp, nguồn SFX; \
+            không chuyển sang vỏ nhỏ gọn để rẻ hơn. \
             Người dùng nói "nhỏ gọn", "gọn", "bàn chật" thì chọn vỏ Tower nhỏ gọn (Micro-ATX); CHỈ chọn vỏ Mini / SFF \
             (Mini-ITX) khi người dùng nói rõ muốn máy rất nhỏ / mini / ITX, vì bo Mini-ITX, tản thấp và nguồn SFX đắt \
             và hiếm hàng hơn nhiều.
@@ -90,7 +92,7 @@ public class ChatService {
             512 GB, card hiệu năng trên giá tốt nhất trong kết quả tìm, vd RTX 4060 thường rẻ hơn mà mạnh hơn RTX 3060 12GB) và vỏ rẻ: app tự đổi từng món \
             sang hàng rẻ nhất cùng thông số trong kết quả tìm kiếm (xem cheap_swaps). Máy game / đồ họa có card rời: tier \
             cheap ưu tiên vỏ Tower nhỏ gọn (bo Micro-ATX như B760M / B650M / B550M, tản khí, card 2 quạt, nguồn ATX) vì bo \
-            Micro-ATX rẻ hơn bo ATX 1 - 2 triệu; người dùng thích kính thì tìm vỏ Micro-ATX CÓ kính (vd "vỏ mATX kính cường lực"). \
+            Micro-ATX rẻ hơn bo ATX 1 - 2 triệu (trừ khi người dùng muốn máy mini / ITX); người dùng thích kính thì tìm vỏ Micro-ATX CÓ kính (vd "vỏ mATX kính cường lực"). \
             Tier balanced bị over_budget hay thiếu hàng bo ATX thì cũng chuyển sang cấu hình nhỏ gọn đó. Vỏ theo \
             ý người dùng (vd có kính) mà làm vượt mức này thì ĐƯỢC chọn vỏ khác có món đi kèm rẻ hơn (tản khí, card 2 \
             quạt), và nói rõ trong câu trả lời đã bỏ điều gì để rẻ hơn (vd "bỏ mặt kính");
@@ -550,20 +552,30 @@ public class ChatService {
             }
             chosen.put(t, List.of(c));
         }
-        // Hai phương án trùng y hệt cấu hình (cùng sản phẩm mọi dòng): chỉ giữ Phù hợp, không hiện cùng một máy hai lần
+        // Ba phương án sai thứ tự sau khi đã nhắc trợ lý (orderProblem): trùng y cấu hình Phù hợp, Chất lượng không đắt hơn
+        // Phù hợp ít nhất TIER_GAP, hay Rẻ không rẻ hơn rõ rệt -> không hiện bản đó, nói rõ (không đổi nhãn, không tự nâng món)
         var balancedChosen = chosen.get("balanced");
+        Map<String, String> outOfOrder = new LinkedHashMap<>();
         for (String t : List.of("cheap", "quality")) {
             var mine = chosen.get(t);
             if (balancedChosen == null || mine == null || mine.getFirst().picks().isEmpty()) continue;
-            if (signature(mine.getFirst().picks()).equals(signature(balancedChosen.getFirst().picks()))) {
-                log.warn("Phương án {} trùng cấu hình Phù hợp, không hiện", t);
+            var a = mine.getFirst();
+            var b = balancedChosen.getFirst();
+            long ta = total(a.request(), a.details(), a.picks()), tb = total(b.request(), b.details(), b.picks());
+            boolean same = signature(a.picks()).equals(signature(b.picks()));
+            boolean wrong = "quality".equals(t) ? ta < tb + TIER_GAP : ta > tb - TIER_GAP;
+            if (same || wrong) {
+                log.warn("Phương án {} {} Phù hợp ({} / {}), không hiện", t, same ? "trùng cấu hình" : "sai thứ tự với", ta, tb);
                 chosen.remove(t);
                 duplicate.add(t);
+                outOfOrder.put(t, same ? "trùng cấu hình với Phù hợp trong mức tiền này, nên app chỉ hiện Phù hợp."
+                        : "quality".equals(t) ? "chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp trong mức tiền này, nên app không hiển thị."
+                        : "chưa tìm được cấu hình rẻ hơn Phù hợp rõ rệt, nên app không hiển thị.");
             }
         }
-        if (!duplicate.isEmpty()) {
-            reply += "\n\n" + duplicate.stream().map(t -> "Phương án " + TIER_NAME.get(t) + " trùng cấu hình với Phù hợp trong mức tiền này, "
-                    + "nên app chỉ hiện Phù hợp.").collect(Collectors.joining("\n"));
+        if (!outOfOrder.isEmpty()) {
+            reply += "\n\n" + outOfOrder.entrySet().stream().map(e -> "Phương án " + TIER_NAME.get(e.getKey()) + " " + e.getValue())
+                    .collect(Collectors.joining("\n"));
         }
         if (!missing.isEmpty()) {
             Long budget = turn.tiers.get(missing.getFirst()).budgetVnd();
@@ -691,6 +703,11 @@ public class ChatService {
                 }
             }
         }
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) {
+            log.info("finalize {}: còn vượt {} sau ép giá; vỏ nhỏ gọn: nhu cầu card {}, mini {}, vỏ {}", tier,
+                    total(c.request(), c.details(), c.picks()) - cap, needs == null ? null : needs.vramMin(),
+                    needs != null && needs.miniItx(), c.request().items().stream().map(BuildCheckRequest.Item::code).filter(ATX_CASES::contains).findFirst().orElse("-"));
+        }
         // Chỉ khi vượt không quá COMPACT_GAP (bo mATX + tản khí rẻ hơn bo ATX + tản nước cỡ 1 - 4 triệu): vượt xa hơn thì đổi
         // vỏ cũng không vào trần, khỏi tốn vài chục lượt tìm
         if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap
@@ -717,6 +734,7 @@ public class ChatService {
      * trên bản sao; chỉ nhận khi bản mới hiện được (trần, link, lắp chung, khớp 3D), không thì giữ bản cũ.
      */
     private Checked compactSwitch(Checked c, String tier, Long cap, Needs needs, Map<String, String> aiTitles, List<String> notes) {
+        if (needs.miniItx()) return c;
         String caseCode = c.request().items().stream().map(BuildCheckRequest.Item::code).filter(ATX_CASES::contains).findFirst().orElse(null);
         if (caseCode == null) return c;
         var fixed = modelMatch.fixedCodes("case_compact_tower");
@@ -847,15 +865,23 @@ public class ChatService {
     }
 
     /** Dung lượng tối thiểu (GB) app được hạ RAM / SSD xuống khi vượt trần; null là không hạ món đó */
-    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass) {
+    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass, boolean miniItx) {
         Needs(Integer ramMin, Integer ssdMin) {
-            this(ramMin, ssdMin, null, false, false);
+            this(ramMin, ssdMin, null, false, false, false);
         }
 
         Needs(Integer ramMin, Integer ssdMin, Integer vramMin) {
-            this(ramMin, ssdMin, vramMin, false, false);
+            this(ramMin, ssdMin, vramMin, false, false, false);
+        }
+
+        Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass) {
+            this(ramMin, ssdMin, vramMin, office, glass, false);
         }
     }
+
+    /** Người dùng nói rõ máy mini / ITX / SFF (không phải "nhỏ gọn": đó là vỏ Micro-ATX) */
+    private static final java.util.regex.Pattern MINI_ITX = java.util.regex.Pattern.compile(
+            "\\bitx\\b|\\bmini\\b|\\bsff\\b|siêu nhỏ|rất nhỏ", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private static final java.util.regex.Pattern RAM_ASKED = java.util.regex.Pattern.compile(
             "ram\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*ram", java.util.regex.Pattern.CASE_INSENSITIVE);
@@ -881,12 +907,13 @@ public class ChatService {
         boolean game = all.matches(".*(game|chơi|stream).*");
         boolean heavy = creator || game;
         boolean light = all.matches(".*(học|văn phòng|word|excel|online|lướt web|xem phim|kế toán).*");
-        if (!heavy && !light && ram == null && ssd == null) return null;
+        boolean mini = MINI_ITX.matcher(all).find();
+        if (!heavy && !light && ram == null && ssd == null && !mini) return null;
         // Card: máy game Full HD đổi được sang chip ngang / mạnh hơn rẻ hơn nếu VRAM >= 8GB; máy đồ họa / dựng video không
         // giảm VRAM (null: chỉ đổi cùng chip, cùng VRAM)
         // office: chỉ học / văn phòng rõ ràng (được hạ CPU xuống dòng phổ thông); glass: người dùng nói thích kính
         return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256, game && !creator ? 8 : null,
-                light && !heavy, all.matches(".*(kính|glass).*"));
+                light && !heavy, all.matches(".*(kính|glass).*"), mini);
     }
 
     /**
@@ -1846,7 +1873,20 @@ public class ChatService {
     private static final Map<String, List<String>> BUDGET_QUERIES = Map.of(
             "tower_air_155", List.of("tản nhiệt ID-COOLING SE-214", "tản nhiệt Jonsbo CR-1200", "tản nhiệt Deepcool AG400"),
             "psu_atx", List.of("nguồn máy tính 550W 80 Plus Bronze", "nguồn máy tính 650W 80 Plus"),
-            "case_compact_tower", List.of("vỏ máy tính mATX", "vỏ case micro ATX giá rẻ"));
+            "case_compact_tower", List.of("vỏ máy tính mATX", "vỏ case micro ATX giá rẻ"),
+            "case_mini_sff", List.of("vỏ máy tính mini ITX", "case ITX SFX", "vỏ case ITX"),
+            "low_profile_47", List.of("tản nhiệt low profile", "tản nhiệt CPU thấp", "tản nhiệt Noctua NH-L9", "tản nhiệt ID-COOLING IS-40X"),
+            "psu_sfx", List.of("nguồn SFX", "nguồn SFX 80 Plus", "PSU SFX 600W"),
+            "mb_itx", List.of("mainboard mini ITX", "bo mạch chủ ITX"));
+
+    /** Từ khoá tìm thêm cho một dòng chưa có link: hàng phổ thông (BUDGET_QUERIES) và bo ITX / mATX theo socket CPU đã chọn */
+    private List<String> lineQueries(String code, Map<String, ProductSearch.Product> picks) {
+        List<String> out = new ArrayList<>(BUDGET_QUERIES.getOrDefault(code, List.of()));
+        String socket = ProductRules.read("cpu", productTitles(picks).getOrDefault("cpu", "")).socket();
+        if (socket != null && "mb_itx".equals(code)) out.addFirst("mainboard mini ITX " + socket);
+        if (socket != null && "low_profile_47".equals(code)) out.add("tản nhiệt low profile " + socket);
+        return out;
+    }
 
     /** Bo chipset phổ thông thấp nhất theo socket (vd B760M -> H610M) để tìm bo rẻ hơn cùng socket / DDR / cỡ */
     private static final Map<String, String> ENTRY_CHIPSET = Map.of("LGA1700", "H610M", "AM4", "A520M", "AM5", "A620M");
@@ -2017,7 +2057,8 @@ public class ChatService {
         }
         var pcCase = byCategory.get("case");
         if (pcCase == null) return;
-        var other = modelMatch.matchingCase(req);
+        // Khoá Mini ITX: không chọn vỏ mẫu khác theo các món đã chọn, sửa các món theo mẫu vỏ Mini
+        var other = turn.needs != null && turn.needs.miniItx() ? java.util.Optional.<String>empty() : modelMatch.matchingCase(req);
         if (other.isPresent()) {
             log.info("propose_build: vỏ {} lệch món đã chọn, đổi sang vỏ mẫu {}", pcCase.get("code"), other.get());
             pcCase.put("code", other.get());
@@ -2074,6 +2115,8 @@ public class ChatService {
             var pick = turn.results.get(String.valueOf(item.get("product_id")).strip());
             if (code == null || pick == null || pick.title() == null) continue;
             String category = categoryOf(code), want = null;
+            // Người dùng muốn máy Mini ITX: không đổi mã bo theo bo trợ lý chọn (bo mATX bị bỏ ở fitsCode, app tìm bo ITX)
+            if ("motherboard".equals(category) && turn.needs != null && turn.needs.miniItx()) continue;
             if ("motherboard".equals(category)) {
                 Integer size = boardSize(pick.title());
                 want = size == null ? null : size == 1 ? "mb_itx" : size == 2 ? "mb_matx" : "mb_atx";
@@ -2083,6 +2126,27 @@ public class ChatService {
             if (want != null && !want.equals(code)) {
                 log.info("propose_build: dòng {} chọn \"{}\": đổi mã -> {} theo cỡ hàng thật", code, pick.title(), want);
                 item.put("code", want);
+            }
+        }
+    }
+
+    /**
+     * Người dùng nói rõ máy mini / ITX: mọi tier dùng vỏ Mini / SFF (case_mini_sff). Vỏ trợ lý chọn khác thì đổi mã; sản
+     * phẩm vỏ không phải Mini-ITX thì bỏ (giữ giá tham chiếu) để app tìm vỏ ITX. alignModel sau đó đổi các món đi kèm
+     * (bo ITX, tản thấp, nguồn SFX) theo mẫu vỏ Mini.
+     */
+    @SuppressWarnings("unchecked")
+    private void lockMiniCase(Map<String, Object> input, Turn turn) {
+        for (var item : (List<Map<String, Object>>) input.getOrDefault("items", List.of())) {
+            String code = item.get("code") == null ? null : String.valueOf(item.get("code"));
+            if (code == null || !"case".equals(categoryOf(code)) || "case_mini_sff".equals(code)) continue;
+            log.info("propose_build: người dùng muốn máy Mini ITX, đổi vỏ {} -> case_mini_sff", code);
+            item.put("code", "case_mini_sff");
+            var pick = turn.results.get(String.valueOf(item.get("product_id")).strip());
+            if (pick != null && !fitsCode("case_mini_sff", pick.title())) {
+                keepPriceRef(item, pick);
+                item.remove("product_id");
+                item.put("spec", "vỏ máy tính mini ITX");
             }
         }
     }
@@ -2679,6 +2743,7 @@ public class ChatService {
                 queries.add(ProductSearch.shortTitle(pick.title()));
                 String core = coreQuery(category, spec != null ? spec : pick.title());
                 if (core != null) queries.add(core);
+                queries.addAll(lineQueries(code, picks));
                 for (String q : queries.stream().distinct().toList()) {
                     best = bestLinked(fit.apply(search.search(q)), null, 8);
                     if (best == null || rank(best.url()) < 3) {
@@ -2713,7 +2778,8 @@ public class ChatService {
             fixes.put(code, Io.async(() -> {
                 ProductSearch.Product fallback = null;
                 // Thang từ khoá: thông số trợ lý ghi -> lõi model (vd "VGA RTX 4060", "mainboard B550 DDR4") -> tên danh mục -> chung
-                for (String q : Stream.of(lineSpec, lineCore, lineName, GENERIC_QUERY.get(code)).filter(Objects::nonNull).distinct().toList()) {
+                for (String q : Stream.concat(Stream.of(lineSpec, lineCore, lineName, GENERIC_QUERY.get(code)), lineQueries(code, picks).stream())
+                        .filter(Objects::nonNull).distinct().toList()) {
                     for (var source : List.<java.util.function.Function<String, List<ProductSearch.Product>>>of(search::search, search::engineSearch)) {
                         var list = source.apply(q).stream()
                                 .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
@@ -2828,6 +2894,7 @@ public class ChatService {
                 case "propose_build" -> {
                     // Cấu hình lệch máy mẫu 3D của vỏ (vd vỏ Gaming dùng tản nước mà chọn tản khí): app tự sửa trước khi kiểm tra
                     if (turn.advice) withEarlierItems(input, turn);
+                    if (turn.advice && turn.needs != null && turn.needs.miniItx()) lockMiniCase(input, turn);
                     if (turn.advice) codesFromProducts(input, turn);
                     if (turn.advice) alignModel(input, turn);
                     var req = checkRequest(input);
