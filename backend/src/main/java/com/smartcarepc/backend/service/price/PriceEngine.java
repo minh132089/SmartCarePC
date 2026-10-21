@@ -120,12 +120,18 @@ public class PriceEngine {
             return null;
         }
         var known = byUrl.get(url);
-        if (known != null) {
+        // Đã đọc chính trang sản phẩm: dùng lại. Chỉ mới thấy trên trang tìm kiếm / danh mục của cửa hàng (giá, còn hàng
+        // ở đó có thể cũ hoặc của bản khác): mở trang sản phẩm để xác minh, không coi kết quả danh sách là đã kiểm trang
+        if (known != null && pageRead.contains(clean(url))) {
             return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
                     ? known : null;
         }
         var fetched = fetcher.page(url, Duration.ofSeconds(8));
-        if (fetched == null) return null; // tải không được (chậm, robots.txt): lần sau thử lại
+        if (fetched == null) {
+            // Tải không được (chậm, robots.txt): còn kết quả danh sách thì tạm dùng (giá chưa kiểm trang), lần sau thử lại
+            return known != null && samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock())
+                    && !usedGoods(known.title(), url) ? known : null;
+        }
         // Sản phẩm ngừng bán hay bị web chuyển sang trang danh mục / trang chủ: không phải trang sản phẩm nữa
         Offer page = Shops.productLike(fetched.finalUrl()) ? ProductPage.parseLoose(fetched.html(), url, Instant.now()) : null;
         // Trang báo hết hàng, hoặc là hàng cũ / 2nd / thanh lý (tên Google Shopping có khi không ghi): không nhận.
@@ -136,14 +142,29 @@ public class PriceEngine {
             remember(url);
             return null;
         }
+        if (byUrl.size() > 5000) byUrl.clear();
+        if (pageRead.size() > 5000) pageRead.clear();
+        pageRead.add(clean(url));
         if (!samePage(expectTitle, page.title())) {
             byUrl.put(url, page);
             remember(url + "|" + expectTitle);
             return null;
         }
-        if (byUrl.size() > 5000) byUrl.clear();
         byUrl.put(url, page);
         return page;
+    }
+
+    /** Link đã đọc thẳng trang sản phẩm (không chỉ thấy trên trang tìm kiếm / danh mục), theo link đã làm gọn */
+    private final Set<String> pageRead = ConcurrentHashMap.newKeySet();
+
+    /** Giá và tình trạng hàng của link được đọc trên chính trang sản phẩm */
+    public boolean pageChecked(String url) {
+        return url != null && pageRead.contains(clean(url));
+    }
+
+    /** HTML một trang qua PoliteFetcher (UA trung thực, tôn trọng robots.txt, giãn cách theo cửa hàng); null nếu không tải được */
+    public String html(String url, Duration maxWait) {
+        return fetcher.get(url, maxWait);
     }
 
     /** Đường dẫn của trang hàng cũ: "/2nd-nguon-...", "/like-new-...", "/da-qua-su-dung" */
@@ -268,6 +289,7 @@ public class PriceEngine {
             Offer page = joinOne(f);
             if (page == null) continue;
             all.merge(clean(page.url()), page, (shop, p) -> shop.merge(p));
+            pageRead.add(clean(page.url()));
         }
         var result = rank(query, all.values());
         result.forEach(o -> byUrl.put(o.url(), o));

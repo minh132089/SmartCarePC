@@ -48,7 +48,6 @@ public class ProductSearch {
             "(?:\"price\"\\s*:\\s*\"?|product:price:amount[\"'][^>]*content=[\"'])([0-9][0-9.,]{3,})", Pattern.CASE_INSENSITIVE);
 
     private final RestClient serper;
-    private final RestClient web;
     /** Khoá Serper theo thứ tự dùng: khoá chính, rồi khoá dự phòng khi khoá chính hết lượt */
     private final List<String> keys;
     private final java.util.concurrent.atomic.AtomicInteger keyIndex = new java.util.concurrent.atomic.AtomicInteger();
@@ -62,14 +61,6 @@ public class ProductSearch {
         // Ba phương án và build tham khảo tìm link cùng lúc nên Serper có lúc trả chậm; 8 giây làm đứt giữa chừng
         factory.setReadTimeout(Duration.ofSeconds(15));
         this.serper = RestClient.builder().baseUrl("https://google.serper.dev").requestFactory(factory).build();
-        // Trang cửa hàng chậm thì bỏ qua sớm: chờ tối đa 4 giây, thà thiếu ảnh còn hơn bắt người dùng chờ
-        var pageFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NORMAL).build());
-        pageFactory.setReadTimeout(Duration.ofSeconds(4));
-        this.web = RestClient.builder().requestFactory(pageFactory)
-                .defaultHeader("User-Agent", "Mozilla/5.0 (compatible; PCSmartCare/1.0; +product-preview)")
-                .defaultHeader("Accept-Language", "vi-VN,vi;q=0.9")
-                .build();
         this.keys = java.util.stream.Stream.of(apiKey, backupKey)
                 .filter(k -> k != null && !k.isBlank()).map(String::trim).distinct().toList();
     }
@@ -126,7 +117,18 @@ public class ProductSearch {
         if (!engine.enabled()) return;
         var jobs = picks.stream()
                 .filter(p -> p.title() != null && p.url() != null && !sameModel.containsKey(p.url()))
-                .map(p -> Io.run(() -> sameModel.put(p.url(), engine.search(shortTitle(p.title())))))
+                .map(p -> Io.run(() -> {
+                    var found = engine.search(shortTitle(p.title()));
+                    sameModel.put(p.url(), found);
+                    // Mở trang sản phẩm của 2 nơi bán rẻ nhất cùng model (compare chỉ hiện nơi đã kiểm trang, còn hàng)
+                    String self = PriceEngine.clean(p.url());
+                    found.stream()
+                            .filter(o -> o.priceVnd() != null && o.shop() != null && !o.shop().equalsIgnoreCase(p.shop())
+                                    && !PriceEngine.clean(o.url()).equals(self) && PriceEngine.samePage(p.title(), o.title()))
+                            .sorted(java.util.Comparator.comparingLong(Offer::priceVnd))
+                            .limit(2)
+                            .forEach(o -> engine.readPage(o.url(), p.title()));
+                }))
                 .toArray(CompletableFuture[]::new);
         try {
             CompletableFuture.allOf(jobs).get(6, java.util.concurrent.TimeUnit.SECONDS);
@@ -140,7 +142,9 @@ public class ProductSearch {
 
     /**
      * Cùng model ở cửa hàng khác (để so giá): trong nhóm tìm kiếm của món và trong lần tìm đúng tên model
-     * (warmCompare), rẻ nhất trước, mỗi cửa hàng một giá, tối đa 3. Không tính chính cửa hàng của món đó.
+     * (warmCompare), rẻ nhất trước, mỗi cửa hàng một giá, tối đa 3. Không tính chính cửa hàng của món đó. Chỉ hiện nơi
+     * đã đọc chính trang sản phẩm, trang ghi còn hàng và đúng biến thể (samePage: 4060 khác 4060 Ti, 1TB khác 4TB):
+     * không hiện link Google Shopping hay kết quả trang tìm kiếm chưa kiểm.
      */
     public List<Offer> compare(Product pick, List<Product> group) {
         if (pick == null || pick.title() == null) return List.of();
@@ -149,12 +153,17 @@ public class ProductSearch {
         List<Offer> pool = new ArrayList<>();
         group.forEach(p -> {
             var o = engine.offer(p.url());
-            pool.add(o != null ? o : new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), p.imageUrl(), null, null, null));
+            if (o != null) pool.add(o);
         });
-        pool.addAll(sameModel.getOrDefault(pick.url(), List.of()));
+        sameModel.getOrDefault(pick.url(), List.of()).forEach(o -> {
+            var read = engine.offer(o.url());
+            pool.add(read != null ? read : o);
+        });
         pool.stream()
-                .filter(o -> o.title() != null && o.priceVnd() != null && !PriceEngine.clean(o.url()).equals(self))
-                .filter(o -> PriceEngine.sameModel(pick.title(), o.title()))
+                .filter(o -> o.title() != null && o.priceVnd() != null && o.url() != null && !isGoogle(o.url())
+                        && !PriceEngine.clean(o.url()).equals(self))
+                .filter(o -> engine.pageChecked(o.url()) && Boolean.TRUE.equals(o.inStock()))
+                .filter(o -> PriceEngine.sameModel(pick.title(), o.title()) && PriceEngine.samePage(pick.title(), o.title()))
                 .filter(o -> o.shop() != null && !o.shop().equalsIgnoreCase(pick.shop()))
                 .sorted(java.util.Comparator.comparingLong(Offer::priceVnd))
                 .forEach(o -> best.putIfAbsent(o.shop(), o));
@@ -448,10 +457,13 @@ public class ProductSearch {
         return Map.of();
     }
 
-    /** [ảnh og:image, giá] đọc từ HTML trang sản phẩm; lỗi thì trả rỗng */
+    /**
+     * [ảnh og:image, giá] đọc từ HTML trang sản phẩm; lỗi thì trả rỗng. Tải qua PoliteFetcher như mọi trang cửa hàng
+     * khác (UA SmartCarePC trung thực, tôn trọng robots.txt, giãn cách theo tên miền); chờ tối đa 4 giây.
+     */
     private String[] pageMeta(String url) {
         try {
-            String html = web.get().uri(URI.create(url)).retrieve().body(String.class);
+            String html = engine.html(url, Duration.ofSeconds(4));
             if (html == null) return new String[2];
             String head = html.length() > 400_000 ? html.substring(0, 400_000) : html;
             return new String[] { find(OG_IMAGE, head, OG_IMAGE_REV), find(PRICE, head, null) };

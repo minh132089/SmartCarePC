@@ -91,8 +91,9 @@ public class ChatService {
                - tier "balanced" (Phù hợp cho bạn): cân bằng giá và chất lượng, tổng sát ngân sách nhưng TUYỆT ĐỐI không \
             vượt; đây là gợi ý chính;
                - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, chỉ vượt ngân sách một chút: TỐI ĐA 3 triệu.
-            LUÔN gọi đủ ba propose_build rồi mới trả lời, kể cả khi không vừa ngân sách: khi đó chốt bộ rẻ nhất có thể \
-            cho tier đó và nói rõ trong câu trả lời là vượt bao nhiêu, vì sao. Không được trả lời mà chưa chốt phương án. \
+            LUÔN gọi đủ ba propose_build rồi mới trả lời. Phương án vượt mức tối đa của tier sẽ KHÔNG được hiển thị: \
+            báo over_budget thì hạ thông số bằng cheaper_options; báo over_budget_final thì trong câu trả lời nói rõ chưa \
+            tìm được phương án đó có link mua trong mức tiền, không giới thiệu cấu hình ấy. Không được trả lời mà chưa chốt phương án. \
             Mỗi phương án đều theo luật vỏ ở bước 3 (có thể khác vỏ nhau). propose_build tự kiểm tra lắp chung; không gọi \
             check_build thêm lần nữa. Phương án nào báo lỗi hoặc over_budget thì sửa đúng chỗ đó rồi gọi lại propose_build với cùng tier. \
             Xem kỹ thông số trong danh mục trước khi chọn: CPU có hasIgpu = false thì bắt buộc có card đồ họa. \
@@ -106,13 +107,15 @@ public class ChatService {
                - buy_qty: số sản phẩm đó cần mua, mặc định bằng quantity. Chọn bộ kit nhiều thanh thì buy_qty = 1 \
             (vd RAM quantity 2 nhưng mua một bộ "2x8GB" thì buy_qty = 1);
                - price_min_vnd, price_max_vnd: chỉ ghi khi không có product_id (khoảng giá ước tính).
-            6. Ngân sách quá thấp so với nhu cầu thì vẫn đưa ba phương án gần nhất, nói rõ thiếu khoảng bao nhiêu hoặc nên \
-            bớt món nào.
+            6. Ngân sách quá thấp so với nhu cầu thì vẫn chọn ba phương án rẻ nhất có thể; phương án nào vẫn vượt mức thì \
+            app không hiển thị, nên nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
             7. App sẽ vẽ bảng so sánh ba phương án và bảng chi tiết từng linh kiện, nên trong câu trả lời đừng liệt kê lại. \
             Mỗi phương án viết một dòng: tên phương án, tổng ước tính so với ngân sách, và nó hợp với ai hoặc khác ở món \
             nào (vd card mạnh hơn, ổ lớn hơn). Rồi gợi ý "Phù hợp cho bạn" và mời chọn một phương án để xem và lắp.
             Tổng nói trong câu trả lời lấy đúng total_min_vnd và total_max_vnd mà từng propose_build trả về, làm tròn tới \
-            0,1 triệu (vd "6,8 - 6,9 triệu"); hai số bằng nhau thì nói một số. Không tự cộng nhẩm.
+            0,1 triệu (vd "6,8 - 6,9 triệu"); hai số bằng nhau thì nói một số. Không tự cộng nhẩm. Đó là tổng CUỐI CÙNG \
+            (app đã đổi link, đọc giá trên trang cửa hàng); nhắc tới linh kiện nào thì dùng đúng tên trong final_items \
+            của lần propose_build gần nhất (vd final_items ghi Ryzen 7 7700X thì không viết Ryzen 7 7700).
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
@@ -353,9 +356,16 @@ public class ChatService {
         final Map<String, List<ProductSearch.Product>> groups = new ConcurrentHashMap<>();
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
+        /** Các khoản tiền người dùng đã nói (tin mới nhất trước): ngân sách kiểm trần lấy từ đây, không tin số trợ lý tự ghi */
+        final List<Long> userAmounts;
 
         Turn(boolean advice) {
+            this(advice, List.of());
+        }
+
+        Turn(boolean advice, List<Long> userAmounts) {
             this.advice = advice;
+            this.userAmounts = userAmounts;
         }
     }
 
@@ -385,7 +395,8 @@ public class ChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tin cuối cùng phải là câu hỏi của người dùng");
         }
 
-        Turn turn = new Turn("advice".equals(request.mode()));
+        Turn turn = new Turn("advice".equals(request.mode()), amounts(request.messages().reversed().stream()
+                .filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content).toList()));
         // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
@@ -489,46 +500,36 @@ public class ChatService {
      */
     private ChatResponse respond(String reply, Turn turn) {
         Map<String, List<Checked>> chosen = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
         for (String t : TIERS) {
             if (!turn.tiers.containsKey(t)) continue;
-            // Mọi nút mua phải vào thẳng web cửa hàng. Link đã đổi song song lúc trợ lý viết câu trả lời; món nào vẫn
-            // không có link thì thay bằng sản phẩm cùng nhóm có link (hiếm, vài giây)
-            Checked base = turn.tiers.get(t);
-            Long cap = turn.advice ? tierCap(base.budgetVnd(), t) : null;
-            if (turn.advice && search.enabled()) base = withLinkedPicks(base, t, cap);
-            List<Checked> all = new ArrayList<>();
-            all.add(base);
-            // Giá hiển thị là giá đọc trên chính trang cửa hàng của link (Google Shopping có thể cũ hoặc là bản khác)
-            all.replaceAll(c -> turn.advice ? withPagePrices(c) : c);
-            // Giá thật trên trang cao hơn giá lúc chốt (hoặc món đổi lấy link đắt hơn): đổi lại hàng cùng thông số rẻ hơn
-            if (turn.advice && cap != null && search.enabled()) {
-                all.replaceAll(c -> total(c.request(), c.details(), c.picks()) > cap ? refit(c, t, cap) : c);
+            // Phương án đã chốt trong propose_build (finalizeTier: link, giá trên trang, RAM, trần). Ở đây không đổi món
+            // nữa, để thẻ khớp đúng lời tư vấn trợ lý đã viết. Vượt trần hay lắp không được thì không hiện (luật cứng)
+            Checked c = turn.tiers.get(t);
+            Long cap = turn.advice ? tierCap(c.budgetVnd(), t) : null;
+            if (turn.advice && !showable(c, cap)) {
+                log.warn("Phương án {} không hiện: tổng {} / trần {}, lắp chung {}, lỗi sản phẩm {}", t,
+                        total(c.request(), c.details(), c.picks()), cap, c.result().compatible(), productIssues(c.picks()));
+                missing.add(t);
+                continue;
             }
-            // Luật cứng (tierCap): đo trên thẻ cuối cùng (sau khi đổi món lấy link), cùng cách cộng với giao diện
-            List<Checked> kept = options(all, cap, c -> productIssues(c.picks()).isEmpty());
-            Checked low = null;
-            if (kept.isEmpty() && search.enabled()) {
-                // Trợ lý vẫn chọn vượt dù đã được báo: thử bộ rẻ nhất trong cùng các lần tìm kiếm
-                low = withPagePrices(cheapest(base, t, cap));
-                if (total(low.request(), low.details(), low.picks()) <= cap) kept = List.of(low);
-            }
-            if (kept.isEmpty()) {
-                // Giá thật làm mọi bộ vượt trần: vẫn gửi bộ rẻ nhất (thẻ ghi rõ vượt bao nhiêu)
-                List<Checked> pool = new ArrayList<>(all);
-                if (low != null) pool.add(low);
-                pool.sort(Comparator.comparingLong(c -> total(c.request(), c.details(), c.picks())));
-                kept = pool.stream().limit(1).toList();
-                log.warn("Phương án {} vượt trần {} dù đã thử bộ rẻ nhất, gửi bộ rẻ nhất", t, cap);
-            }
-            chosen.put(t, kept);
+            chosen.put(t, List.of(c));
         }
-        // Trợ lý chỉ viết thông số / lý do cho món khác balanced (trả lời nhanh hơn): điền phần trống từ tier khác cùng món
+        if (!missing.isEmpty()) {
+            Long budget = turn.tiers.get(missing.getFirst()).budgetVnd();
+            reply += "\n\n" + missing.stream().map(t -> "Phương án " + TIER_NAME.get(t) + ": chưa tìm được cấu hình lắp chung được, "
+                    + "có link mua" + (budget == null ? "" : " trong mức tối đa " + millions(tierCap(budget, t))) + ", nên app không hiển thị.")
+                    .collect(Collectors.joining("\n"));
+        }
+        // Trợ lý chỉ viết thông số / lý do cho món khác balanced (trả lời nhanh hơn): điền phần trống từ tier khác có
+        // ĐÚNG sản phẩm đó (cùng mã nhưng khác hàng thì không mượn chữ, vd balanced "2x8GB" cho dòng mua 1 thanh)
         Map<String, Map<String, Object>> shared = new LinkedHashMap<>();
         for (String t : List.of("balanced", "cheap", "quality")) {
             var c = turn.tiers.get(t);
             if (c == null) continue;
             c.details().forEach((code, d) -> {
-                var into = shared.computeIfAbsent(code, k -> new LinkedHashMap<>());
+                var p = c.picks().get(code);
+                var into = shared.computeIfAbsent(code + "|" + (p == null ? "" : p.title()), k -> new LinkedHashMap<>());
                 if (text(d.get("spec")) != null) into.putIfAbsent("spec", d.get("spec"));
                 if (text(d.get("reason")) != null) into.putIfAbsent("reason", d.get("reason"));
             });
@@ -545,8 +546,11 @@ public class ChatService {
             int v = 1;
             for (var c : kept) options.add(card(c, turn.advice, t, v++));
         });
+        // Thẻ chính: balanced, không có thì phương án đầu tiên còn hiện. Mọi phương án đều bị ẩn (vượt trần / lắp không
+        // được) thì không có thẻ nào, không lấy lại bản cuối của trợ lý; chỉ khi chưa chốt phương án nào (check_build) mới dùng
         BuildCard build = options.stream().filter(o -> "balanced".equals(o.tier()) && o.variant() == 1).findFirst()
-                .orElseGet(() -> turn.last == null ? null : card(turn.last, turn.advice, null, 1));
+                .or(() -> options.stream().findFirst())
+                .orElseGet(() -> turn.last == null || !turn.tiers.isEmpty() ? null : card(turn.last, turn.advice, null, 1));
         return new ChatResponse(reply, build, options.size() > 1 ? options : null);
     }
 
@@ -591,6 +595,30 @@ public class ChatService {
         var fitted = withPagePrices(withLinkedPicks(new Checked(c.request(), c.result(), c.details(), c.summary(), c.budgetVnd(),
                 picks, links, c.siblings()), tier, cap));
         return total(fitted.request(), fitted.details(), fitted.picks()) < total(c.request(), c.details(), c.picks()) ? fitted : c;
+    }
+
+    /**
+     * Chốt một phương án TRƯỚC khi trợ lý viết câu trả lời (chạy trong propose_build): đổi link cửa hàng, đọc giá trên
+     * trang, tính lại RAM / spec theo hàng thật, vượt trần thì đổi hàng cùng thông số rẻ hơn rồi thử bộ rẻ nhất. Kết quả
+     * là bản cuối: trợ lý đọc đúng tên, giá, tổng này, và sau đó app không đổi món nào nữa (thẻ và lời tư vấn khớp nhau).
+     */
+    private Checked finalizeTier(Checked base, String tier, Long cap, Map<String, String> aiTitles) {
+        Checked c = normalized(withPagePrices(withLinkedPicks(base, tier, cap)), aiTitles);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(refit(c, tier, cap), aiTitles);
+        boolean over = cap != null && total(c.request(), c.details(), c.picks()) > cap;
+        if (over || !productIssues(c.picks()).isEmpty()) {
+            var low = normalized(withPagePrices(cheapest(c, tier, cap)), aiTitles);
+            long lowTotal = total(low.request(), low.details(), low.picks());
+            boolean lowOk = (cap == null || lowTotal <= cap) && productIssues(low.picks()).isEmpty();
+            if (lowOk || over && lowTotal < total(c.request(), c.details(), c.picks()) && productIssues(low.picks()).isEmpty()) c = low;
+        }
+        return c;
+    }
+
+    /** Phương án hiện được cho người dùng: không vượt trần, lắp chung được (danh mục, mô hình 3D và sản phẩm thật) */
+    private boolean showable(Checked c, Long cap) {
+        return (cap == null || total(c.request(), c.details(), c.picks()) <= cap) && c.result().compatible()
+                && productIssues(c.picks()).isEmpty();
     }
 
     /** Dòng mua theo bộ (buy_qty nhỏ hơn số lượng, vd RAM 2x8GB là 1 sản phẩm cho 2 thanh) */
@@ -669,12 +697,22 @@ public class ChatService {
         return page != null && page.priceVnd() != null;
     }
 
-    /** Điền spec / reason còn trống của từng món từ tier khác có cùng món */
+    /** Tên phương án hiện cho người dùng */
+    private static final Map<String, String> TIER_NAME = Map.of("cheap", "Rẻ", "balanced", "Phù hợp", "quality", "Chất lượng");
+
+    /** 43000000 -> "43 triệu", 10800000 -> "10,8 triệu" */
+    static String millions(long vnd) {
+        double m = Math.round(vnd / 1e5) / 10.0;
+        return (m == Math.floor(m) ? String.valueOf((long) m) : String.valueOf(m).replace('.', ',')) + " triệu";
+    }
+
+    /** Điền spec / reason còn trống của từng món từ tier khác có cùng món (khoá "mã|tên sản phẩm") */
     private static Checked withSharedText(Checked c, Map<String, Map<String, Object>> shared) {
         Map<String, Map<String, Object>> details = new LinkedHashMap<>();
         c.details().forEach((code, d) -> {
             var filled = new LinkedHashMap<>(d);
-            var from = shared.getOrDefault(code, Map.of());
+            var p = c.picks().get(code);
+            var from = shared.getOrDefault(code + "|" + (p == null ? "" : p.title()), Map.of());
             if (text(filled.get("spec")) == null && from.get("spec") != null) filled.put("spec", from.get("spec"));
             if (text(filled.get("reason")) == null && from.get("reason") != null) filled.put("reason", from.get("reason"));
             details.put(code, filled);
@@ -1156,23 +1194,30 @@ public class ChatService {
     }
 
     /**
-     * Món rẻ hơn món đang chọn trong các kết quả đã tìm, theo dòng (tối đa 4 món mỗi dòng, giá từ cao xuống), kèm id để
-     * trợ lý chọn lại khi vượt trần mà đã hết lượt tìm. Chỉ hàng mới, đúng loại, giá hợp lý.
+     * Món rẻ hơn món đang chọn trong các kết quả đã tìm, theo dòng (tối đa 4 món mỗi dòng), kèm id và số tiền tiết kiệm
+     * để trợ lý chọn lại khi vượt trần mà đã hết lượt tìm. Chỉ hàng mới, đúng loại, giá hợp lý, giá đã xác minh. Món một
+     * mình đủ bù khoản vượt (need) đứng trước, trong đó món tiết kiệm vừa đủ trước (giữ cấu hình tốt nhất); rồi tới món
+     * tiết kiệm nhiều nhất, để trợ lý luôn thấy món đủ rẻ thay vì chỉ thấy món rẻ hơn chút ít.
      */
-    private Map<String, List<String>> cheaperOptions(Map<String, ProductSearch.Product> picks,
-            Map<String, List<ProductSearch.Product>> siblings, Turn turn) {
+    private Map<String, List<String>> cheaperOptions(BuildCheckRequest req, Map<String, Map<String, Object>> details,
+            Map<String, ProductSearch.Product> picks, Map<String, List<ProductSearch.Product>> siblings, Turn turn, long need) {
         Map<ProductSearch.Product, String> ids = new java.util.IdentityHashMap<>();
         turn.results.forEach((id, p) -> ids.put(p, id));
         Map<String, List<String>> out = new LinkedHashMap<>();
         picks.forEach((code, now) -> {
             if (now == null || now.priceVnd() == null) return;
             String category = categoryOf(code);
+            int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
+            var d = details.getOrDefault(code, Map.of());
+            long was = price(d, now, qty)[1];
+            java.util.function.ToLongFunction<ProductSearch.Product> save = s -> was - price(d, s, qty)[1];
             var list = siblings.getOrDefault(code, List.of()).stream()
                     .filter(s -> ids.containsKey(s) && s.priceVnd() != null && s.priceVnd() < now.priceVnd() && s.title() != null && verified(s))
                     .filter(s -> !JUNK.matcher(s.title()).find() && sameKind(now.title(), s.title()) && plausible(category, s.priceVnd()))
-                    .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd).reversed())
+                    .sorted(Comparator.comparing((ProductSearch.Product s) -> save.applyAsLong(s) < need)
+                            .thenComparingLong(s -> save.applyAsLong(s) >= need ? save.applyAsLong(s) : -save.applyAsLong(s)))
                     .limit(4)
-                    .map(s -> ids.get(s) + ": " + s.title() + " (" + s.priceVnd() + ")")
+                    .map(s -> ids.get(s) + ": " + s.title() + " (" + s.priceVnd() + ", rẻ hơn " + save.applyAsLong(s) + ")")
                     .toList();
             if (!list.isEmpty()) out.put(code, list);
         });
@@ -1195,6 +1240,72 @@ public class ChatService {
             int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
             if (qty >= sticks && qty % sticks == 0) d.put("buy_qty", qty / sticks);
         });
+    }
+
+    /** Tổng dung lượng RAM spec muốn ("2x8GB" là 16, "16 GB, 2 thanh" là 16, "16GB" là 16), null nếu không đọc được */
+    static Integer ramTotal(String spec) {
+        if (spec == null) return null;
+        String t = spec.toLowerCase();
+        var split = RAM_SPLIT.matcher(t);
+        if (split.find()) {
+            int n = Integer.parseInt(split.group(1) != null ? split.group(1) : split.group(4));
+            int per = Integer.parseInt(split.group(2) != null ? split.group(2) : split.group(3));
+            return n * per;
+        }
+        var g = GB.matcher(t);
+        if (!g.find()) return null;
+        int total = Integer.parseInt(g.group(1));
+        return g.find() ? null : total;
+    }
+
+    /**
+     * Sau mọi lần đổi món: dòng RAM tính lại theo sản phẩm thật. Số thanh trong máy = tổng dung lượng spec muốn chia
+     * dung lượng mỗi thanh của sản phẩm (không đọc được thì giữ số thanh cũ), làm tròn lên bội số thanh mỗi bộ; buy_qty =
+     * số bộ (kit) hay số thanh (thanh lẻ); spec ghi lại đúng hàng mua (ca thật: thẻ ghi "2x8GB" mà mua 1 thanh 8GB; spec
+     * "1x16GB" mà mua kit 2x8GB). Món khác bị app đổi sang sản phẩm khác (aiTitles: tên trợ lý chọn) thì spec lấy theo
+     * sản phẩm mới, không giữ chữ của món cũ (vd "750W Gold" khi nguồn mới là Bronze).
+     */
+    private Checked normalized(Checked c, Map<String, String> aiTitles) {
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((code, d) -> details.put(code, new LinkedHashMap<>(d)));
+        List<BuildCheckRequest.Item> items = new ArrayList<>();
+        for (var i : c.request().items()) {
+            var p = c.picks().get(i.code());
+            String category = categoryOf(i.code());
+            var d = details.computeIfAbsent(i.code(), k -> new LinkedHashMap<>());
+            if (p == null || p.title() == null) {
+                items.add(i);
+                continue;
+            }
+            if ("ram".equals(category)) {
+                int perPack = Objects.requireNonNullElse(kitSticks(p.title()), 1);
+                Integer packGb = amount("ram", p.title());
+                Integer stickGb = packGb == null ? null : packGb / perPack;
+                Integer want = ramTotal(text(d.get("spec")));
+                int sticks = stickGb != null && stickGb > 0 && want != null && want % stickGb == 0 ? want / stickGb : i.qty();
+                int packs = Math.max(1, (sticks + perPack - 1) / perPack);
+                sticks = packs * perPack;
+                if (sticks != i.qty() || !Objects.equals(d.get("buy_qty"), packs)) {
+                    log.info("Dòng {}: \"{}\" ({} thanh mỗi bộ) -> {} thanh, mua {} (trước: quantity {}, buy_qty {}, spec \"{}\")",
+                            i.code(), p.title(), perPack, sticks, packs, i.qty(), d.get("buy_qty"), d.get("spec"));
+                }
+                d.put("buy_qty", packs);
+                String ddr = ProductRules.read("ram", p.title()).ramType();
+                if (stickGb != null) d.put("spec", sticks + "x" + stickGb + "GB" + (ddr == null ? "" : " " + ddr)
+                        + (perPack > 1 ? (packs > 1 ? ", " + packs + " bộ kit" : ", bộ kit") : ""));
+                items.add(new BuildCheckRequest.Item(i.code(), sticks));
+                continue;
+            }
+            String ai = aiTitles.get(i.code());
+            if (ai != null && !ai.equalsIgnoreCase(p.title())) {
+                String spec = ProductRules.describeAny(p.title());
+                Integer amt = category == null ? null : amount(category, p.title());
+                if (spec.isEmpty() && amt != null) spec = amt + ("psu".equals(category) ? "W" : "GB");
+                d.put("spec", spec.isEmpty() ? null : spec);
+            }
+            items.add(i);
+        }
+        return new Checked(new BuildCheckRequest(items), c.result(), details, c.summary(), c.budgetVnd(), c.picks(), c.links(), c.siblings());
     }
 
     /** Phương án Rẻ: loại món được tìm thêm bằng từ khoá chung để có hàng rẻ hơn cùng thông số */
@@ -1461,7 +1572,10 @@ public class ChatService {
         return switch (code) {
             case "mb_itx" -> size == null || size == 1;
             case "mb_matx" -> size == null || size == 2;
-            case "mb_atx" -> size == null || size >= 2;
+            // Máy mẫu 3D vẽ bo ATX: bo Micro-ATX lắp được vỏ ATX nhưng hướng dẫn lắp sẽ khác hàng mua (ca thật: B650M ở mb_atx)
+            case "mb_atx" -> size == null || size == 3;
+            // Máy mẫu 240 mm vẽ card 2 quạt cho vỏ nhỏ: card 3 quạt (dài ~300 mm) có thể không vừa vỏ
+            case "gpu_240" -> !Integer.valueOf(3).equals(gpuFans(title));
             case "case_mini_sff" -> size != null && size == 1;
             case "low_profile_47" -> lowProfile(title) && !liquid(title);
             case "tower_air_155" -> !liquid(title) && !lowProfile(title) && !LAPTOP_COOLER.matcher(title).find();
@@ -1470,6 +1584,28 @@ public class ChatService {
             case "psu_sfx" -> sfx(title);
             default -> true;
         };
+    }
+
+    private static final java.util.regex.Pattern FANS_3 = java.util.regex.Pattern.compile(
+            "\\b(trio|triple|tri[\\s-]?frozr|3\\s*x\\b|x3\\b|3\\s*fans?\\b|3\\s*quạt|windforce\\s*3)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern FANS_2 = java.util.regex.Pattern.compile(
+            "\\b(dual|twin|2\\s*x\\b|x2\\b|2\\s*fans?\\b|2\\s*quạt|windforce\\s*2)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** Số quạt card đồ họa ghi trên tên (2 hoặc 3), null nếu không ghi */
+    static Integer gpuFans(String title) {
+        if (title == null) return null;
+        if (FANS_3.matcher(title).find()) return 3;
+        return FANS_2.matcher(title).find() ? 2 : null;
+    }
+
+    private static final List<String> PSU_RATINGS = List.of("white", "bronze", "silver", "gold", "platinum", "titanium");
+
+    /** Chuẩn 80 Plus ghi trên tên nguồn (0 White ... 5 Titanium), null nếu không ghi */
+    static Integer psuRating(String title) {
+        if (title == null) return null;
+        String t = title.toLowerCase();
+        for (int i = PSU_RATINGS.size() - 1; i >= 0; i--) if (t.matches(".*\\b" + PSU_RATINGS.get(i) + "\\b.*")) return i;
+        return t.matches(".*80\\s*\\+?\\s*plus.*") ? 0 : null;
     }
 
     private static final java.util.regex.Pattern LOW_PROFILE = java.util.regex.Pattern.compile(
@@ -1523,7 +1659,9 @@ public class ChatService {
             }
             case "psu" -> {
                 Integer a = amount(category, now), b = amount(category, other);
-                yield (a == null || b == null || b >= a) && (!sfx(now) || sfx(other));
+                Integer ra = psuRating(now), rb = psuRating(other);
+                // Không hạ chuẩn 80 Plus khi cả hai tên đều ghi (ca thật: nguồn Gold bị đổi sang Bronze mà thẻ vẫn ghi Gold)
+                yield (a == null || b == null || b >= a) && (!sfx(now) || sfx(other)) && (ra == null || rb == null || rb >= ra);
             }
             case "cpu" -> cpuModel(now) == null || cpuModel(now).equals(cpuModel(other));
             // Card: cùng chip (RTX 4060 hãng khác được, 4060 Ti hay 3050 thì không)
@@ -1631,6 +1769,46 @@ public class ChatService {
         return text != null && BUDGET.matcher(text).find();
     }
 
+    private static final java.util.regex.Pattern MONEY = java.util.regex.Pattern.compile(
+            "(\\d+(?:[.,]\\d+)?)\\s*(?:triệu|tr\\b|củ|m\\b)|(\\d{1,3}(?:[.,]\\d{3}){2,})", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern BUDGET_WORD = java.util.regex.Pattern.compile(
+            "(ngân sách|budget|tầm|khoảng|dưới|tối đa|trong|mức|có)\\s*:?\\s*$", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Các khoản tiền có thể là ngân sách trong lời người dùng (tin mới nhất trước). Trong một tin: số đứng sau "ngân
+     * sách / tầm / khoảng / dưới / có..." trước, rồi số lớn trước (vd "25 triệu, card tầm 8 triệu" thì 25 triệu không
+     * bị số tiền card che). Chỉ lấy khoản 3 - 500 triệu.
+     */
+    static List<Long> amounts(List<String> texts) {
+        List<Long> out = new ArrayList<>();
+        for (String text : texts) {
+            if (text == null) continue;
+            List<long[]> found = new ArrayList<>(); // {số tiền, 1 nếu có chữ chỉ ngân sách đứng trước}
+            var m = MONEY.matcher(text);
+            while (m.find()) {
+                long v;
+                if (m.group(1) != null) v = Math.round(Double.parseDouble(m.group(1).replace(',', '.')) * 1_000_000);
+                else v = Long.parseLong(m.group(2).replaceAll("[.,]", ""));
+                if (v < 3_000_000 || v > 500_000_000) continue;
+                String before = text.substring(Math.max(0, m.start() - 20), m.start());
+                found.add(new long[] { v, BUDGET_WORD.matcher(before).find() ? 1 : 0 });
+            }
+            found.sort(Comparator.comparingLong((long[] f) -> -f[1]).thenComparingLong(f -> -f[0]));
+            found.forEach(f -> { if (!out.contains(f[0])) out.add(f[0]); });
+        }
+        return out;
+    }
+
+    /**
+     * Ngân sách để kiểm trần: số trợ lý ghi nếu đúng là một khoản người dùng đã nói (lệch dưới 2%); người dùng có nói
+     * mà trợ lý ghi khác hay quên ghi thì lấy khoản người dùng nói; người dùng chưa nói thì dùng số trợ lý giả định.
+     */
+    static Long budgetOf(List<Long> userAmounts, Long aiBudget) {
+        if (userAmounts.isEmpty()) return aiBudget;
+        if (aiBudget != null && userAmounts.stream().anyMatch(a -> Math.abs(a - aiBudget) * 50 <= a)) return aiBudget;
+        return userAmounts.getFirst();
+    }
+
     /** Thêm món p vào dòng code không làm tăng số lỗi lắp chung giữa các sản phẩm thật đã chọn */
     private boolean fitsWith(Map<String, ProductSearch.Product> picks, String code, ProductSearch.Product p, int issuesNow) {
         var trial = new LinkedHashMap<>(picks);
@@ -1662,11 +1840,12 @@ public class ChatService {
             Map<String, CompletableFuture<String>> links, Map<String, List<ProductSearch.Product>> siblings, String tier, Long cap) {
         Map<String, CompletableFuture<ProductSearch.Product>> fixes = new LinkedHashMap<>();
         java.util.Set<String> mustLink = ConcurrentHashMap.newKeySet();
-        // Món yếu: chưa có link, chỉ có trang chủ, hoặc link chưa đọc được giá trên trang (giá Google có thể sai).
-        // Trang hết hàng đã bị loại từ bước xác minh link; trang không ghi tình trạng hàng thì giữ (đổi mãi rất chậm)
+        // Món yếu: chưa có link, chỉ có trang chủ, link chưa đọc được giá trên trang (giá Google có thể sai), hoặc trang
+        // không cho biết còn hàng (MVP: hàng phải còn bán): thử món cùng thông số đã xác nhận còn hàng, trong giới hạn
+        // thời gian LINK_BUDGET; không có thì giữ món đang có link (thẻ ghi "hỏi cửa hàng còn hàng không")
         var weak = links.entrySet().stream().filter(e -> {
             String l = e.getValue().join();
-            return l == null || ProductSearch.homePage(l) || !priceChecked(l) || soldOut(l);
+            return l == null || ProductSearch.homePage(l) || !priceChecked(l) || soldOut(l) || !inStock(l);
         }).map(Map.Entry::getKey).toList();
         // Phần còn dư tới trần chia đều cho các món phải đổi, để đổi món lấy link không làm phương án vượt trần
         long allowance = cap == null || weak.isEmpty() ? Long.MAX_VALUE : (cap - total(req, details, picks)) / weak.size();
@@ -1841,11 +2020,14 @@ public class ChatService {
                     Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
                     Map<String, CompletableFuture<String>> links = new LinkedHashMap<>();
                     Map<String, List<ProductSearch.Product>> siblings = new ConcurrentHashMap<>();
+                    // Tên sản phẩm trợ lý chọn: món app đổi sang hàng khác thì spec lấy theo hàng mới (normalized)
+                    Map<String, String> aiTitles = new LinkedHashMap<>();
                     details.forEach((code, d) -> {
                         String id = String.valueOf(d.get("product_id")).strip();
                         var pick = turn.results.get(id);
                         if (pick == null) return;
                         picks.put(code, pick);
+                        if (pick.title() != null) aiTitles.put(code, pick.title());
                         var group = turn.groups.get(id.replaceFirst("-\\d+$", ""));
                         if (group != null) siblings.put(code, group);
                         links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
@@ -1880,8 +2062,18 @@ public class ChatService {
                     result = withoutFalseGpuError(result, picks);
                     // Ba propose_build của cùng một lượt chạy song song: giữ thẻ trong biến riêng, không đọc lại turn.last
                     // Trợ lý có khi quên budget_vnd ở một tier: lấy ngân sách của tier khác trong cùng lượt
-                    Long budget = input.get("budget_vnd") instanceof Number n ? n.longValue()
+                    Long aiBudget = input.get("budget_vnd") instanceof Number n ? n.longValue()
                             : turn.tiers.values().stream().map(Checked::budgetVnd).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+                    // Ngân sách kiểm trần do app nắm: khoản người dùng đã nói, không phải số trợ lý tự ghi (có thể quên / ghi khác)
+                    Long budget = turn.advice ? budgetOf(turn.userAmounts, aiBudget) : aiBudget;
+                    if (!Objects.equals(budget, aiBudget)) log.info("propose_build {}: trợ lý ghi ngân sách {}, dùng {} theo lời người dùng", tier, aiBudget, budget);
+                    // RAM theo hàng thật ngay từ đầu (số thanh, số bộ), để mọi bước kiểm trần sau cộng đúng tiền
+                    if (turn.advice) {
+                        var ram = normalized(new Checked(req, result, details, null, budget, picks, links, siblings), aiTitles);
+                        req = ram.request();
+                        details.clear();
+                        details.putAll(ram.details());
+                    }
                     // Vượt trần: code đổi lần lượt món tiết kiệm nhiều nhất sang hàng cùng thông số rẻ hơn (Rẻ đã đổi hết ở cheapen)
                     var fitSwaps = turn.advice && !"cheap".equals(tier) ? fitCap(req, details, picks, links, siblings, tierCap(budget, tier))
                             : List.<Map<String, Object>>of();
@@ -1901,6 +2093,28 @@ public class ChatService {
                     }
                     var checked = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
                             budget, picks, links, siblings);
+                    // Chốt bản cuối ngay bây giờ (link cửa hàng, giá trên trang, RAM, trần) để trợ lý viết câu trả lời theo
+                    // đúng bản sẽ hiện; sau bước này app không đổi món nữa
+                    if (turn.advice && search.enabled()) {
+                        var before = checked.request();
+                        checked = finalizeTier(checked, tier, capNow, aiTitles);
+                        if (!checked.request().equals(before)) {
+                            var r = withoutFalseGpuError(matched(compatibilityService.check(checked.request()), checked.request(), turn), checked.picks());
+                            checked = new Checked(checked.request(), r, checked.details(), checked.summary(), checked.budgetVnd(),
+                                    checked.picks(), checked.links(), checked.siblings());
+                        }
+                        req = checked.request();
+                        result = checked.result();
+                        var finalPicks = new LinkedHashMap<>(checked.picks());
+                        var finalLinks = new LinkedHashMap<>(checked.links());
+                        var finalDetails = new LinkedHashMap<>(checked.details());
+                        picks.clear();
+                        picks.putAll(finalPicks);
+                        links.clear();
+                        links.putAll(finalLinks);
+                        details.clear();
+                        details.putAll(finalDetails);
+                    }
                     turn.tiers.put(tier, checked);
                     turn.last = checked;
                     // Build 2 và 3 dựng ngay để việc đổi link cửa hàng chạy song song lúc trợ lý viết câu trả lời
@@ -1934,6 +2148,25 @@ public class ChatService {
                     }
                     saved.put("total_min_vnd", totalMin);
                     saved.put("total_max_vnd", totalMax);
+                    // Bản cuối app sẽ hiện (sau khi đổi link, đọc giá trên trang): trợ lý tả đúng các món này
+                    if (turn.advice && search.enabled()) {
+                        List<Map<String, Object>> finalItems = new ArrayList<>();
+                        for (var i : req.items()) {
+                            var p = picks.get(i.code());
+                            Map<String, Object> m = new LinkedHashMap<>();
+                            m.put("code", i.code());
+                            m.put("quantity", i.qty());
+                            if (p != null) {
+                                m.put("product", p.title());
+                                m.put("price_vnd", p.priceVnd());
+                                if (details.getOrDefault(i.code(), Map.of()).get("buy_qty") instanceof Number b && b.intValue() != i.qty()) {
+                                    m.put("buy_qty", b.intValue());
+                                }
+                            }
+                            finalItems.add(m);
+                        }
+                        saved.put("final_items", finalItems);
+                    }
                     saved.put("note", !result.compatible() ? "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build."
                             : !productErrors.isEmpty() ? "Sản phẩm thật đã chọn lắp không được với nhau (xem product_errors): chọn lại "
                                     + "sản phẩm cho đúng socket / loại RAM rồi gọi lại propose_build với cùng tier."
@@ -1944,16 +2177,18 @@ public class ChatService {
                     if (!result.compatible()) log.info("propose_build {}: chưa lắp chung được, trợ lý phải sửa", tier);
                     if (turn.advice && cap != null && totalMax > cap
                             && turn.overWarned.computeIfAbsent(tier, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet() > MAX_OVER_WARNINGS) {
-                        // Đã nhắc một lần mà vẫn vượt (thường do món đi kèm vỏ cố định): chấp nhận, chỉ cần nói rõ
-                        log.info("propose_build {}: vẫn vượt trần ({} > {}), chấp nhận", tier, totalMax, cap);
-                        saved.put("over_budget_note", "Vẫn vượt mức tối đa " + cap + " đồng. Không cần chọn lại nữa: "
-                                + "nói rõ trong câu trả lời là phương án này vượt bao nhiêu và vì sao.");
+                        // Đã nhắc đủ số lần mà vẫn vượt: phương án này không được hiện (luật cứng, respond); trợ lý phải nói
+                        // thật là chưa tìm được, không giới thiệu cấu hình vượt trần
+                        log.info("propose_build {}: vẫn vượt trần ({} > {}) sau {} lần nhắc, sẽ không hiện", tier, totalMax, cap, MAX_OVER_WARNINGS);
+                        saved.put("over_budget_final", "Vẫn vượt mức tối đa " + cap + " đồng nên app sẽ KHÔNG hiển thị phương án \""
+                                + tier + "\". Không gọi lại propose_build cho tier này. Trong câu trả lời nói rõ chưa tìm được phương án "
+                                + TIER_NAME.get(tier) + " có link mua trong mức " + millions(cap) + "; không giới thiệu cấu hình này.");
                     } else if (turn.advice && cap != null && totalMax > cap) {
                         log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại. Từng món: {}", tier, totalMax, cap,
                                 req.items().stream().map(i -> i.code() + " x" + i.qty() + " = "
                                         + price(details.getOrDefault(i.code(), Map.of()), picks.get(i.code()), i.qty())[1]
                                         + (picks.get(i.code()) == null ? " (ước tính)" : " " + picks.get(i.code()).title())).toList());
-                        saved.put("cheaper_options", cheaperOptions(picks, siblings, turn));
+                        saved.put("cheaper_options", cheaperOptions(req, details, picks, siblings, turn, totalMax - cap));
                         saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
                                 + "\" khoảng " + (totalMax - cap) + " đồng. Hạ thông số vài món đắt nhất (vd card, CPU, SSD thấp hơn "
                                 + "một bậc) bằng các sản phẩm đã tìm và đã xác minh giá trong cheaper_options (dùng đúng product_id), rồi gọi lại "
@@ -2029,9 +2264,8 @@ public class ChatService {
     }
 
     /** Thẻ cấu hình cho khung chat: loại của từng linh kiện, sản phẩm đã chọn (nếu có), kèm kết quả kiểm tra */
-    private BuildCard card(Checked original, boolean advice, String tier, int variant) {
-        // Mọi thẻ (cả option 2, 3 và bộ rẻ nhất) đều dùng giá đọc trên trang cửa hàng của link
-        Checked c = advice ? withPagePrices(original) : original;
+    private BuildCard card(Checked c, boolean advice, String tier, int variant) {
+        // Giá đã đọc trên trang cửa hàng lúc chốt (finalizeTier); không đọc lại cache giá ở đây, để thẻ đúng bản trợ lý đã tả
         Map<String, Integer> qty = new LinkedHashMap<>();
         c.request().items().forEach(i -> qty.merge(i.code(), i.qty(), Integer::sum));
         List<Line> lines = new ArrayList<>();
@@ -2072,6 +2306,10 @@ public class ChatService {
         // Mục 3: ưu tiên kit 2 thanh để chạy kênh đôi
         lines.stream().filter(l -> "ram".equals(l.category()) && l.quantity() == 1).findFirst().ifPresent(l -> tips.add(
                 new Issue("RAM_DUAL_CHANNEL", "Nên dùng 2 thanh RAM (kit 2 thanh) để chạy kênh đôi, máy nhanh hơn rõ khi chơi game.")));
+        // Máy mẫu 3D vẽ card 3 quạt (280 mm) mà card mua là loại 2 quạt: lắp cùng chỗ, chỉ ngắn hơn hình
+        if (advice) lines.stream().filter(l -> "gpu_280".equals(l.code()) && Integer.valueOf(2).equals(gpuFans(l.productName()))).findFirst()
+                .ifPresent(l -> tips.add(new Issue("MODEL_GPU_SHORTER", "Hình 3D vẽ card 3 quạt; card bạn mua là loại 2 quạt, ngắn hơn, "
+                        + "lắp vào đúng khe và vị trí như hướng dẫn.")));
         boolean productOk = findings.stream().noneMatch(f -> f.severity() == ProductRules.Severity.ERROR);
         // Trạng thái phương án do code tính (docs/pc-build-verifier): AI không tự cho qua gate nào
         var verdict = advice ? BuildVerifier.verify(lines, errors, warnings, unknowns, tierCap(c.budgetVnd(), tier)) : null;
