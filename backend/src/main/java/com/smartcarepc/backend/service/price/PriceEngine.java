@@ -143,9 +143,14 @@ public class PriceEngine {
                         : BUNDLE_PATH.matcher(fetched.finalUrl().toLowerCase()).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()
                                 ? "trang máy nguyên bộ" : null;
                 if (why != null) {
-                    // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option), có hạn REJECT_TTL
+                    // Nhớ các trang bị loại để không tải lại (cùng sản phẩm hay xuất hiện ở nhiều option), có hạn REJECT_TTL.
+                    // Trang hết hàng: lưu luôn bằng chứng hết hàng (offer của trang) để kết quả danh sách cũ không che mất
                     log.debug("readPage {}: loại vì {}", url, why);
                     remember(url);
+                    if (page != null && Boolean.FALSE.equals(page.inStock())) {
+                        byUrl.put(url, page);
+                        pageRead.put(clean(url), System.currentTimeMillis());
+                    }
                     return null;
                 }
                 if (byUrl.size() > 5000) byUrl.clear();
@@ -316,15 +321,22 @@ public class PriceEngine {
         var read = pages.stream()
                 .map(url -> CompletableFuture.supplyAsync(() -> ProductPage.parse(fetcher.get(url, Duration.ofSeconds(3)), url, Instant.now()), pool))
                 .toList();
+        Set<String> readNow = new HashSet<>();
         for (var f : read) {
             Offer page = joinOne(f);
             if (page == null) continue;
             all.merge(clean(page.url()), page, (shop, p) -> shop.merge(p));
             pageRead.put(clean(page.url()), System.currentTimeMillis());
+            readNow.add(clean(page.url()));
         }
-        var result = rank(query, all.values());
-        result.forEach(o -> byUrl.put(o.url(), o));
         if (byUrl.size() > 5000) byUrl.clear();
+        // Link đã đọc chính trang sản phẩm (còn hạn VERIFIED_TTL) mà lần này chỉ thấy trên trang tìm kiếm: giữ bản đọc trang
+        // (giá trang, còn / hết hàng), không để kết quả danh sách ghi đè (ca thật v8: CPU GEARVN trang ghi InStock thành null)
+        var result = rank(query, all.values()).stream().map(o -> {
+            Offer old = byUrl.get(o.url());
+            return old != null && pageChecked(o.url()) && !readNow.contains(clean(o.url())) ? old : o;
+        }).toList();
+        result.forEach(o -> byUrl.put(o.url(), o));
         return result;
     }
 
