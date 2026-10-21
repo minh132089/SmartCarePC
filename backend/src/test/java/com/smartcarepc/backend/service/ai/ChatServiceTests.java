@@ -1307,6 +1307,15 @@ class ChatServiceTests {
         assertThat(cpu.productName()).as("bản có đồ họa tích hợp (máy không card rời), không lấy bản F").isEqualTo("CPU Intel Core i3-12100 Box");
     }
 
+    @Test
+    void doiNguonReHonKhongHaChuan80Plus() {
+        // v16: bước đổi hàng rẻ hơn cùng thông số hạ nguồn Bronze xuống White
+        var now = new ProductSearch.Product("Nguồn máy tính MSI MAG A650BN - 80 Plus Bronze (650W)", "A", 1_190_000L, "https://a.vn/psu", null);
+        var white = new ProductSearch.Product("Nguồn máy tính FSP VIC WD 650W - 80 Plus White (650W)", "B", 990_000L, "https://b.vn/w", null);
+        var bronze = new ProductSearch.Product("Nguồn máy tính AIGO GB650 - 650W (80 Plus Bronze)", "B", 950_000L, "https://b.vn/b", null);
+        assertThat(ChatService.equivalents("psu", now, List.of(white, bronze), false, false, false)).containsExactly(bronze);
+    }
+
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
 
     private static Map<String, Object> answer(String text) {

@@ -674,8 +674,8 @@ public class ChatService {
     /** Khoản vượt trần tối đa còn ép giá thêm một lượt (đổi hàng cùng thông số rẻ hơn) */
     static final long SQUEEZE_GAP = 1_500_000;
 
-    /** Khoản vượt trần tối đa còn đáng thử chuyển sang vỏ nhỏ gọn */
-    static final long COMPACT_GAP = 4_500_000;
+    /** Khoản vượt trần tối đa còn đáng thử chuyển sang vỏ nhỏ gọn (các lần chuyển thật tiết kiệm 3,3 - 5 triệu) */
+    static final long COMPACT_GAP = 6_000_000;
 
     /** Vỏ có mẫu 3D bo ATX được thử chuyển sang mẫu nhỏ gọn (vỏ Mini / nhỏ gọn thì không) */
     private static final java.util.Set<String> ATX_CASES = java.util.Set.of("case_standard_tower", "case_gaming",
@@ -1324,8 +1324,12 @@ public class ChatService {
                     if (!SPEC_SWAPPABLE.contains(category) || need == null) return false;
                     Integer has = amount(category, s.title());
                     if (has == null || has < need) return false;
-                    // Nguồn SFX (vỏ nhỏ) chỉ thay bằng nguồn SFX: nguồn ATX thường không lắp vừa
-                    if ("psu".equals(category)) return !sfx(now.title()) || sfx(s.title());
+                    // Nguồn SFX (vỏ nhỏ) chỉ thay bằng nguồn SFX: nguồn ATX thường không lắp vừa. Không hạ chuẩn 80 Plus khi
+                    // cả hai tên đều ghi (ca thật v16: MSI A650BN Bronze thành FSP VIC WD White)
+                    if ("psu".equals(category)) {
+                        Integer ra = psuRating(now.title()), rb = psuRating(s.title());
+                        return (!sfx(now.title()) || sfx(s.title())) && (ra == null || rb == null || rb >= ra);
+                    }
                     if (!"ram".equals(category)) return true;
                     var ram = ProductRules.read("ram", s.title());
                     return !ram.laptopRam() && (nowDdr == null || nowDdr.equals(ram.ramType()));
