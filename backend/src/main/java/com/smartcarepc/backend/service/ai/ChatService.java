@@ -417,6 +417,9 @@ public class ChatService {
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false;
+        // Một lượt propose thêm khi ba phương án sai thứ tự (Chất lượng không hơn Phù hợp, Rẻ không rẻ hơn rõ rệt)
+        boolean orderNudged = false;
+        int proposeLimit = MAX_PROPOSE_ROUNDS;
         String lastUser = String.valueOf(messages.getLast().get("content"));
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
@@ -430,7 +433,7 @@ public class ChatService {
             // Đã đề xuất đủ MAX_PROPOSE_ROUNDS vòng: chỉ còn viết câu trả lời (mỗi vòng đề xuất tốn ~50 giây; giá thật
             // quá cao so với ngân sách thì trợ lý đề xuất lại mãi). Bước dựng thẻ vẫn lọc option theo trần giá
             body.put("tools", offered);
-            if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
+            if (proposeRounds >= proposeLimit) body.put("tool_choice", "none");
 
             long t0 = System.nanoTime();
             Map<String, Object> res;
@@ -458,6 +461,17 @@ public class ChatService {
                             + "mức phổ biến cho chi tiết còn thiếu (nói rõ giả định) và làm luôn ba phương án nhé."));
                     continue;
                 }
+                // Ba phương án sai thứ tự (thường sau khi app đổi vỏ / hạ giá, Chất lượng thành bằng Phù hợp): nhắc một lần,
+                // cho thêm một lượt propose_build cho đúng tier đó trước khi viết câu trả lời
+                String order = turn.advice && !orderNudged && search.enabled() ? orderProblem(turn) : null;
+                if (order != null) {
+                    orderNudged = true;
+                    proposeLimit = proposeRounds + 1;
+                    log.info("Chat vòng {}: ba phương án sai thứ tự, nhắc chọn lại: {}", round + 1, order);
+                    messages.add(Map.of("role", "assistant", "content", String.valueOf(message.getOrDefault("content", ""))));
+                    messages.add(Map.of("role", "user", "content", order));
+                    continue;
+                }
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
                 if (!turn.tiers.isEmpty() && search.enabled()) progress.accept(STAGE_LINKS);
@@ -471,7 +485,7 @@ public class ChatService {
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
             // Trợ lý có khi vẫn gọi search_products sau khi công cụ đã bị bỏ (chép theo các lượt trước): không chạy
             boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS;
-            boolean proposeClosed = proposeRounds >= MAX_PROPOSE_ROUNDS;
+            boolean proposeClosed = proposeRounds >= proposeLimit;
             if (names.contains("propose_build") && !proposeClosed) proposeRounds++;
             if (names.contains("search_products") && !searchClosed) {
                 searchRounds++;
@@ -515,7 +529,7 @@ public class ChatService {
      */
     private ChatResponse respond(String reply, Turn turn) {
         Map<String, List<Checked>> chosen = new LinkedHashMap<>();
-        List<String> missing = new ArrayList<>();
+        List<String> missing = new ArrayList<>(), duplicate = new ArrayList<>();
         for (String t : TIERS) {
             if (!turn.tiers.containsKey(t)) continue;
             // Phương án đã chốt trong propose_build (finalizeTier: link, giá trên trang, RAM, trần). Ở đây không đổi món
@@ -535,6 +549,21 @@ public class ChatService {
                 continue;
             }
             chosen.put(t, List.of(c));
+        }
+        // Hai phương án trùng y hệt cấu hình (cùng sản phẩm mọi dòng): chỉ giữ Phù hợp, không hiện cùng một máy hai lần
+        var balancedChosen = chosen.get("balanced");
+        for (String t : List.of("cheap", "quality")) {
+            var mine = chosen.get(t);
+            if (balancedChosen == null || mine == null || mine.getFirst().picks().isEmpty()) continue;
+            if (signature(mine.getFirst().picks()).equals(signature(balancedChosen.getFirst().picks()))) {
+                log.warn("Phương án {} trùng cấu hình Phù hợp, không hiện", t);
+                chosen.remove(t);
+                duplicate.add(t);
+            }
+        }
+        if (!duplicate.isEmpty()) {
+            reply += "\n\n" + duplicate.stream().map(t -> "Phương án " + TIER_NAME.get(t) + " trùng cấu hình với Phù hợp trong mức tiền này, "
+                    + "nên app chỉ hiện Phù hợp.").collect(Collectors.joining("\n"));
         }
         if (!missing.isEmpty()) {
             Long budget = turn.tiers.get(missing.getFirst()).budgetVnd();
@@ -991,6 +1020,39 @@ public class ChatService {
         if (found == null) log.info("Hạ {} xuống {}: {} món trong {} kết quả tìm \"{}\", không món nào có link mua", code,
                 "ram".equals(category) ? target + "GB" : label(target), list.size(), pool.size(), query);
         return found;
+    }
+
+    /** Chênh lệch tối thiểu giữa hai phương án liền nhau để coi là khác nhau thật */
+    static final long TIER_GAP = 300_000;
+
+    /**
+     * Ba phương án phải đúng thứ tự: Rẻ rẻ hơn Phù hợp rõ rệt, Chất lượng đắt hơn và khác Phù hợp. Trả về lời nhắc trợ lý
+     * chọn lại tier sai (chỉ xét các tier hiện được), null nếu đúng thứ tự.
+     */
+    private String orderProblem(Turn turn) {
+        var b = turn.tiers.get("balanced");
+        if (b == null || b.picks().isEmpty() || !showable(b, tierCap(b.budgetVnd(), "balanced"))) return null;
+        long tb = total(b.request(), b.details(), b.picks());
+        List<String> asks = new ArrayList<>();
+        var q = turn.tiers.get("quality");
+        if (q != null && showable(q, tierCap(q.budgetVnd(), "quality"))) {
+            long tq = total(q.request(), q.details(), q.picks());
+            if (tq < tb + TIER_GAP || signature(q.picks()).equals(signature(b.picks()))) {
+                asks.add("Phương án Chất lượng (" + millions(tq) + ") không tốt hơn Phù hợp (" + millions(tb) + "): gọi lại propose_build "
+                        + "tier \"quality\" với linh kiện TỐT HƠN Phù hợp ở ít nhất một món quan trọng (card mạnh hơn, CPU mạnh hơn, RAM / SSD "
+                        + "lớn hơn hoặc nguồn tốt hơn), dùng phần tiền còn dư tới mức tối đa " + millions(tierCap(q.budgetVnd(), "quality"))
+                        + ", đủ mọi món.");
+            }
+        }
+        var c = turn.tiers.get("cheap");
+        if (c != null && showable(c, tierCap(c.budgetVnd(), "cheap"))) {
+            long tc = total(c.request(), c.details(), c.picks());
+            if (tc > tb - TIER_GAP || signature(c.picks()).equals(signature(b.picks()))) {
+                asks.add("Phương án Rẻ (" + millions(tc) + ") không rẻ hơn Phù hợp (" + millions(tb) + ") rõ rệt: gọi lại propose_build "
+                        + "tier \"cheap\" với thông số thấp hơn Phù hợp (card / CPU / RAM / SSD thấp hơn một bậc nhưng vẫn đủ nhu cầu), đủ mọi món.");
+            }
+        }
+        return asks.isEmpty() ? null : String.join(" ", asks);
     }
 
     /** Phương án hiện được cho người dùng: không vượt trần, lắp chung được (danh mục, mô hình 3D và sản phẩm thật) */

@@ -239,14 +239,15 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD 1TB")).thenReturn(List.of(
                 new ProductSearch.Product("SSD A 1TB", "Shop A", 1_500_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 1TB", "Shop B", 1_550_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD C 1TB", "Shop C", 1_400_000L, "https://c.vn/1", null)));
+                new ProductSearch.Product("SSD B 1TB", "Shop B", 1_850_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 1TB", "Shop C", 1_100_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
-        String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ chỗ\",\"product_id\":\"s1-1\"}";
+        // Ba tier ba sản phẩm (Chất lượng phải đắt hơn và khác Phù hợp, Rẻ rẻ hơn rõ rệt)
         var calls = new ArrayList<Map<String, Object>>();
-        for (String t : List.of("cheap", "balanced", "quality")) {
-            calls.add(Map.of("id", "p-" + t, "type", "function", "function", Map.of("name", "propose_build",
-                    "arguments", "{\"tier\":\"" + t + "\",\"summary\":\"Học\",\"items\":[" + item + "]}")));
+        for (String[] t : List.of(new String[] { "cheap", "s1-1" }, new String[] { "balanced", "s1-1" }, new String[] { "quality", "s1-2" })) {
+            String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ chỗ\",\"product_id\":\"" + t[1] + "\"}";
+            calls.add(Map.of("id", "p-" + t[0], "type", "function", "function", Map.of("name", "propose_build",
+                    "arguments", "{\"tier\":\"" + t[0] + "\",\"summary\":\"Học\",\"items\":[" + item + "]}")));
         }
         reply(toolCall("s", "search_products", "{\"query\":\"SSD 1TB\"}"),
                 Map.of("choices", List.of(Map.of("finish_reason", "tool_calls", "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))),
@@ -259,7 +260,7 @@ class ChatServiceTests {
         assertThat(res.options()).extracting(ChatResponse.BuildCard::tier).containsExactly("cheap", "balanced", "quality");
         assertThat(res.options()).extracting(ChatResponse.BuildCard::variant).containsOnly(1);
         // Phương án Rẻ do code chọn hàng: cùng 1TB nhưng rẻ hơn
-        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB", "SSD A 1TB", "SSD A 1TB");
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB", "SSD A 1TB", "SSD B 1TB");
         assertThat(res.build().variant()).isEqualTo(1);
         assertThat(res.build().tier()).isEqualTo("balanced");
     }
@@ -323,7 +324,7 @@ class ChatServiceTests {
                 {"tier":"cheap","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
                 """), toolCall("p2", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-2"}]}
-                """), answer("Xong."));
+                """), answer("Xong."), answer("Xong."));
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
@@ -1314,6 +1315,34 @@ class ChatServiceTests {
         var white = new ProductSearch.Product("Nguồn máy tính FSP VIC WD 650W - 80 Plus White (650W)", "B", 990_000L, "https://b.vn/w", null);
         var bronze = new ProductSearch.Product("Nguồn máy tính AIGO GB650 - 650W (80 Plus Bronze)", "B", 950_000L, "https://b.vn/b", null);
         assertThat(ChatService.equivalents("psu", now, List.of(white, bronze), false, false, false)).containsExactly(bronze);
+    }
+
+    @Test
+    void chatLuongKhongHonPhuHopThiNhacChonLaiRoiAnBanTrung() {
+        // v17: sau khi đổi vỏ nhỏ gọn, Chất lượng bằng y Phù hợp (cùng sản phẩm, cùng tổng)
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 1TB", "A", 1_500_000L, "https://a.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ\",\"product_id\":\"s1-1\"}";
+        var calls = new ArrayList<Map<String, Object>>();
+        for (String t : List.of("balanced", "quality")) {
+            calls.add(Map.of("id", "p-" + t, "type", "function", "function", Map.of("name", "propose_build",
+                    "arguments", "{\"tier\":\"" + t + "\",\"summary\":\"Học\",\"budget_vnd\":2000000,\"items\":[" + item + "]}")));
+        }
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
+                Map.of("choices", List.of(Map.of("finish_reason", "tool_calls", "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))),
+                answer("Xong."), answer("Vẫn vậy."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 2 triệu")), null, null, "advice"));
+
+        // Lần trả lời đầu bị chặn: trợ lý được nhắc chọn lại tier Chất lượng (tốt hơn Phù hợp)
+        assertThat(sent.get(3).get("messages").toString()).contains("Chất lượng").contains("không tốt hơn Phù hợp");
+        // Trợ lý không sửa: bản trùng không hiện, chỉ còn Phù hợp, câu trả lời nói rõ
+        assertThat(res.options()).isNull();
+        assertThat(res.build().tier()).isEqualTo("balanced");
+        assertThat(res.reply()).contains("Phương án Chất lượng trùng cấu hình với Phù hợp");
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
