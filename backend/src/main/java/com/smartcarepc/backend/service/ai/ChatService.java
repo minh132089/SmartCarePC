@@ -1021,7 +1021,10 @@ public class ChatService {
             int v = Integer.parseInt(d.group(1) != null ? d.group(1) : d.group(3));
             ssd = "tb".equalsIgnoreCase(d.group(2) != null ? d.group(2) : d.group(4)) ? v * 1000 : v;
         }
-        boolean creator = all.matches(".*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|premiere).*");
+        // "card đồ họa" / "đồ họa tích hợp" là tên linh kiện, không phải nhu cầu làm đồ họa (ca thật n10: "Đổi card đồ họa sang AMD"
+        // làm máy game mất mức VRAM 8GB, không hạ CPU / đổi vỏ nhỏ gọn được)
+        String uses = all.replaceAll("(card|vga|chip|nhân)\\s+đồ\\s+h[oọ]a|đồ\\s+h[oọ]a\\s+(tích hợp|rời|onboard)", " ");
+        boolean creator = uses.matches(".*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|premiere).*");
         boolean game = all.matches(".*(game|chơi|stream).*");
         // Học AI / deep learning: chữ "học" không làm thành máy văn phòng (ca thật n3: "học AI, chạy mô hình deep learning"
         // ra RAM 8GB, SSD 256GB)

@@ -1680,6 +1680,10 @@ class ChatServiceTests {
         var n = ChatService.needs(List.of("Đổi sang card AMD giúp mình", "Mình chơi game và livestream, 25 triệu, thích kính"));
         assertThat(n.allowedVendor()).isEqualTo("amd");
         assertThat(ChatService.needs(List.of("chơi game 25 triệu")).allowedVendor()).as("không nói hãng thì đổi khác hãng được").isNull();
+        assertThat(ChatService.needs(List.of("Đổi card đồ họa sang AMD giúp mình nhé, vẫn trong ngân sách đó.",
+                "Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.")).vramMin())
+                .as("card đồ họa là linh kiện, không phải làm đồ họa").isEqualTo(8);
+        assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isNull();
     }
 
     @Test
