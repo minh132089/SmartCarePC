@@ -1855,7 +1855,7 @@ public class ChatService {
                     // Vỏ, tản, quạt: model khác được nếu cùng lớp (vỏ chứa được bo cùng cỡ và vẫn có kính nếu vỏ cũ có;
                     // tản cùng kiểu; quạt cùng cỡ)
                     if ("case".equals(category)) {
-                        Integer x = boardSize(now.title()), y = boardSize(s.title());
+                        Integer x = caseBoardSize(now.title()), y = caseBoardSize(s.title());
                         return x != null && y != null && y >= x && (!glass(now.title()) || glass(s.title()));
                     }
                     if ("cooler".equals(category) || "fans".equals(category)) return sameSpec(category, now.title(), s.title());
@@ -2907,7 +2907,8 @@ public class ChatService {
             // Vỏ: chứa được bo cỡ bằng hoặc lớn hơn vỏ đang chọn. Tên vỏ hay không ghi cỡ: chỉ chặn khi vỏ thay ghi rõ
             // là vỏ nhỏ hơn (vd Mini-ITX)
             case "case" -> {
-                Integer x = boardSize(now), y = boardSize(other);
+                // Cỡ bo vỏ chứa được (caseBoardSize: nhận tên mẫu ITX như Sugo / SG13, bỏ chữ ATX của nguồn)
+                Integer x = caseBoardSize(now), y = caseBoardSize(other);
                 yield y == null || (x == null ? y > 1 : y >= x);
             }
             // Tản: khí thay khí; tản nước cùng cỡ két
