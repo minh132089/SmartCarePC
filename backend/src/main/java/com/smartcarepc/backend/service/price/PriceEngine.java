@@ -59,7 +59,8 @@ public class PriceEngine {
      * là sai hàng (tìm "tản nhiệt khí" mà ra vỏ máy).
      */
     private static final List<Map.Entry<String, Pattern>> KINDS = List.of(
-            Map.entry("cooler", Pattern.compile("\\btan nhiet\\b|\\btan nuoc\\b|\\btan khi\\b|\\bcooler\\b|\\baio\\b")),
+            // "Tản ID-Cooling IS-40X": tên bắt đầu bằng "Tản" cũng là tản nhiệt
+            Map.entry("cooler", Pattern.compile("\\btan nhiet\\b|\\btan nuoc\\b|\\btan khi\\b|\\bcooler\\b|\\baio\\b|^tan\\b")),
             Map.entry("case", Pattern.compile("^vo\\b|\\bvo may tinh\\b|\\bvo case\\b|^case\\b")),
             Map.entry("mainboard", Pattern.compile("\\bbo mach chu\\b|\\bmainboard\\b|^main\\b")),
             Map.entry("gpu", Pattern.compile("\\bcard man hinh\\b|\\bcard do hoa\\b|\\bvga\\b")),

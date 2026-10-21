@@ -871,6 +871,30 @@ class ChatServiceTests {
         assertThat(ChatService.sameSpec("ssd", "SSD 512GB", "SSD 512GB NVMe Gen4")).isTrue();
     }
 
+    @Test
+    void monThayCuoiCungVanDungThongSo() {
+        assertThat(ChatService.sameSpec("gpu", "Card MSI RTX 4060 Ventus 2X 8G", "Card ASUS Dual GeForce RTX 4060 OC 8GB")).isTrue();
+        assertThat(ChatService.sameSpec("gpu", "Card MSI RTX 4060 Ventus 2X 8G", "Card ASUS Dual RTX 4060 Ti 8GB")).isFalse();
+        assertThat(ChatService.sameSpec("gpu", "Card Powercolor RX 6600 8GB", "Card Sapphire Pulse RX 6600 XT")).isFalse();
+        assertThat(ChatService.sameSpec("motherboard", "Mainboard MSI PRO H610M-E DDR4", "Mainboard ASUS PRIME H610M-K D4 mATX")).isTrue();
+        assertThat(ChatService.sameSpec("motherboard", "Mainboard ASUS PRIME H610M-E D4 Micro-ATX", "Mainboard ASUS PRIME H610I-PLUS D4 Mini-ITX")).isFalse();
+        assertThat(ChatService.sameSpec("case", "Vỏ máy tính EDRA ECS1105 Micro-ATX", "Vỏ Xigmatek Gaming X II ATX Mid Tower")).isTrue();
+        assertThat(ChatService.sameSpec("case", "Vỏ máy tính EDRA ECS1105 Micro-ATX", "Case NXPC NX-01 Mini ITX")).isFalse();
+        assertThat(ChatService.sameSpec("cooler", "Tản nhiệt khí Jonsbo CR-1200E", "Tản nhiệt AIO Corsair 240")).isFalse();
+        assertThat(ChatService.sameSpec("cooler", "Tản nước AIO DeepCool LE520 240mm", "Tản nhiệt nước Corsair H100 240")).isTrue();
+        assertThat(ChatService.boardSize("Mainboard Gigabyte B760M D DDR4 (Intel B760/ Socket 1700/ M-ATX/ 2 khe)")).isEqualTo(2);
+    }
+
+    @Test
+    void appTuChonChiLayHangDungLoaiVaGiaHopLy() {
+        // Ca thật: dòng bo mạch tự tìm ra RAM; dòng tản tự tìm ra cái pát 30 nghìn
+        assertThat(ChatService.ofKind("motherboard", "Ram Corsair Vengeance LPX 16GB 3200MHz DDR4")).isFalse();
+        assertThat(ChatService.ofKind("motherboard", "Mainboard MSI PRO H610M-E DDR4")).isTrue();
+        assertThat(ChatService.plausible("cooler", 30_000L)).isFalse();
+        assertThat(ChatService.plausible("cooler", 190_000L)).isTrue();
+        assertThat(ChatService.plausible("cpu", 2_890_000L)).isTrue();
+    }
+
     private static ProductSearch.Product product(String title, long price) {
         return new ProductSearch.Product(title, "GEARVN", price, "https://gearvn.com/products/" + Math.abs(title.hashCode()), null);
     }
