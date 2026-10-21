@@ -465,8 +465,11 @@ public class ChatService {
                 // (ca thật n8: 0 thẻ). Chỉ khi người dùng đã nói ngân sách ở đâu đó trong hội thoại; chưa có ngân sách thì
                 // trợ lý được hỏi lại. Nhắc một lần
                 String draft = String.valueOf(message.getOrDefault("content", ""));
+                // Câu hỏi tiếp yêu cầu đổi cấu hình (ca thật n9: "đổi sang card AMD", trợ lý viết "ba phương án đều dùng card
+                // này" mà không dựng thẻ, không ghi nhãn tier)
+                boolean changeAsk = CHANGE_ASK.matcher(lastUser).find() && (MONEY_MENTION.matcher(draft).find() || draft.toLowerCase().contains("phương án"));
                 if (turn.advice && !toolNudged && turn.tiers.isEmpty() && !turn.userAmounts.isEmpty() && proposeRounds < proposeLimit
-                        && TIER_MENTION.matcher(draft).find() && MONEY_MENTION.matcher(draft).find()) {
+                        && (TIER_MENTION.matcher(draft).find() && MONEY_MENTION.matcher(draft).find() || changeAsk)) {
                     toolNudged = true;
                     log.info("Chat vòng {}: AI viết phương án kèm giá mà chưa gọi propose_build, nhắc gọi công cụ", round + 1);
                     messages.add(Map.of("role", "assistant", "content", draft));
@@ -731,6 +734,11 @@ public class ChatService {
                 }
             }
         }
+        // Máy game (card rời, không phải máy AI / đồ họa) vẫn vượt trần: hạ CPU xuống dòng game phổ thông cùng socket
+        boolean gameNeeds = needs != null && !needs.office() && !needs.cuda() && Integer.valueOf(8).equals(needs.vramMin());
+        if (cap != null && gameNeeds && total(c.request(), c.details(), c.picks()) > cap) {
+            c = normalized(withPagePrices(lowerCpuForNeeds(c, notes, true)), aiTitles);
+        }
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) {
             log.info("finalize {}: còn vượt {} sau ép giá; vỏ nhỏ gọn: nhu cầu card {}, mini {}, vỏ {}", tier,
                     total(c.request(), c.details(), c.picks()) - cap, needs == null ? null : needs.vramMin(),
@@ -858,6 +866,20 @@ public class ChatService {
         return trial;
     }
 
+    /** CPU game phổ thông theo socket (đi cùng card rời), rẻ trước: hạ CPU khi máy game vẫn vượt trần */
+    static final Map<String, List<String>> GAME_CPUS = Map.of(
+            "LGA1700", List.of("i3-12100f", "i3-13100f", "i3-14100f", "i5-12400f"),
+            "AM4", List.of("ryzen5-5600", "ryzen5-5600x"),
+            "AM5", List.of("ryzen5-7500f", "ryzen5-7600"));
+
+    /** Từ khoá tìm CPU theo mã gọn ("i3-12100f" -> "CPU Intel Core i3 12100F", "ryzen5-7500f" -> "CPU AMD Ryzen 5 7500F") */
+    static String cpuQuery(String model) {
+        var m = java.util.regex.Pattern.compile("^(i[3579]|ryzen([3579]))-(.+)$").matcher(model);
+        if (!m.find()) return "CPU " + model;
+        return m.group(2) != null ? "CPU AMD Ryzen " + m.group(2) + " " + m.group(3).toUpperCase()
+                : "CPU Intel Core " + m.group(1) + " " + m.group(3).toUpperCase();
+    }
+
     /** CPU phổ thông đủ cho học / văn phòng theo socket (có đồ họa tích hợp), để hạ CPU đắt mà không đổi bo */
     static final Map<String, List<String>> OFFICE_CPUS = Map.of(
             "LGA1700", List.of("i3-12100", "i3-13100", "i3-14100"),
@@ -869,16 +891,24 @@ public class ChatService {
      * không có card rời thì phải có đồ họa tích hợp. Món mới qua phép kiểm chung (swapOk).
      */
     private Checked lowerCpuForNeeds(Checked c, List<String> notes) {
+        return lowerCpuForNeeds(c, notes, false);
+    }
+
+    /**
+     * game: máy chơi game có card rời vẫn vượt trần sau mọi bước giữ hiệu năng (ca thật n9 itx 25tr thiếu 0,5 - 3,9 triệu):
+     * hạ CPU xuống dòng game phổ thông cùng socket (GAME_CPUS), kể cả i5-12400F -> i3-12100F
+     */
+    private Checked lowerCpuForNeeds(Checked c, List<String> notes, boolean game) {
         String code = c.request().items().stream().map(BuildCheckRequest.Item::code).filter(x -> "cpu".equals(categoryOf(x))).findFirst().orElse(null);
         var now = code == null ? null : c.picks().get(code);
         if (now == null || now.priceVnd() == null) return c;
         String socket = ProductRules.read("cpu", now.title()).socket();
-        var allowed = socket == null ? null : OFFICE_CPUS.get(socket.toUpperCase().replace(" ", ""));
-        if (allowed == null || allowed.contains(cpuModel(now.title()))) return c;
+        var allowed = socket == null ? null : (game ? GAME_CPUS : OFFICE_CPUS).get(socket.toUpperCase().replace(" ", ""));
+        if (allowed == null || !game && allowed.contains(cpuModel(now.title()))) return c;
         boolean noGpu = c.request().items().stream().noneMatch(i -> "gpu".equals(categoryOf(i.code())));
         List<ProductSearch.Product> pool = new ArrayList<>();
         for (String model : allowed) {
-            String q = "CPU " + model.replace("ryzen3-", "Ryzen 3 ").replace("ryzen5-", "Ryzen 5 ").replace("i3-", "Intel Core i3 ");
+            String q = cpuQuery(model);
             try {
                 pool.addAll(search.search(q));
             } catch (RuntimeException e) {
@@ -895,7 +925,8 @@ public class ChatService {
                 .toList();
         var found = bestLinked(list, null, 6);
         if (found == null) {
-            log.info("Hạ CPU \"{}\" cho máy học / văn phòng: {} món cùng socket {}, không món nào có link mua", now.title(), list.size(), socket);
+            log.info("Hạ CPU \"{}\" cho máy {}: {} món cùng socket {}, không món nào có link mua", now.title(), game ? "game" : "học / văn phòng",
+                    list.size(), socket);
             return c;
         }
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
@@ -906,7 +937,8 @@ public class ChatService {
         links.put(code, CompletableFuture.completedFuture(found.url()));
         var d = details.computeIfAbsent(code, k -> new LinkedHashMap<>());
         d.put("spec", cpuModel(found.title()));
-        d.put("downgrade_note", "CPU " + cpuModel(found.title()) + " đủ cho học, Word, Excel, học online; rẻ hơn để vừa ngân sách.");
+        d.put("downgrade_note", "CPU " + cpuModel(found.title()) + (game ? " đủ chơi game Full HD phổ thông cùng card rời (game nặng CPU sẽ"
+                + " thấp FPS hơn); rẻ hơn để vừa ngân sách." : " đủ cho học, Word, Excel, học online; rẻ hơn để vừa ngân sách."));
         String note = "CPU " + cpuModel(now.title()) + " -> " + cpuModel(found.title()) + " (rẻ hơn " + (now.priceVnd() - found.priceVnd()) + " đồng)";
         log.info("Vượt trần: hạ {}", note);
         notes.add(note);
@@ -1541,6 +1573,9 @@ public class ChatService {
     private static final java.util.regex.Pattern TIER_MENTION = java.util.regex.Pattern.compile(
             "\\*\\*\\s*(Rẻ|Phù hợp|Chất lượng)|(Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|phương án\\s+(rẻ|phù hợp|chất lượng)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** Người dùng yêu cầu đổi cấu hình đã có (đổi / thay / chuyển / nâng / hạ / bỏ / thêm món, làm lại phương án) */
+    private static final java.util.regex.Pattern CHANGE_ASK = java.util.regex.Pattern.compile(
+            "\\b(đổi|thay|chuyển|nâng|hạ|bỏ|thêm|chọn lại|làm lại|dựng lại)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern MONEY_MENTION = java.util.regex.Pattern.compile(
             "\\d+(?:[.,]\\d+)?\\s*(triệu|tr\\b)", java.util.regex.Pattern.CASE_INSENSITIVE);
 
@@ -2309,6 +2344,18 @@ public class ChatService {
             out.addFirst("mainboard mini ITX " + socket + (ddr == null ? "" : " " + ddr));
             // Mã bo ITX theo chipset (chữ I sau chipset), tìm trúng hơn từ khoá chung
             for (String chip : ITX_CHIPSETS.getOrDefault(socket, List.of()).reversed()) out.addFirst("mainboard " + chip + (ddr == null ? "" : " " + ddr));
+        }
+        // CPU trống không ghi model (ca thật n9: thông số chỉ "CPU", tìm không ra gì): tìm theo mã CPU phổ thông, cùng socket
+        // bo đã chọn nếu có; có card rời thì dòng game, không thì dòng văn phòng (có đồ họa tích hợp)
+        if ("cpu".equals(categoryOf(code)) && !picks.containsKey(code)) {
+            String boardTitle = productTitles(picks).get("motherboard");
+            String boardSocket = boardTitle == null ? null : ProductRules.read("motherboard", boardTitle).socket();
+            boolean hasGpu = picks.keySet().stream().anyMatch(k -> "gpu".equals(categoryOf(k)));
+            var table = hasGpu ? GAME_CPUS : OFFICE_CPUS;
+            List<String> models = new ArrayList<>();
+            if (boardSocket != null) models.addAll(table.getOrDefault(boardSocket, List.of()));
+            else table.values().forEach(v -> models.add(v.getFirst()));
+            for (String m : models.reversed()) out.addFirst(cpuQuery(m));
         }
         // Bo ATX: tìm "mainboard B760 ATX" chỉ ra bo B760M (ca thật v22 / n8): tìm theo mã model ATX có thật
         if (socket != null && "mb_atx".equals(code)) {

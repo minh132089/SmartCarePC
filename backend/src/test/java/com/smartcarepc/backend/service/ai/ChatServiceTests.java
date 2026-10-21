@@ -1664,6 +1664,13 @@ class ChatServiceTests {
     }
 
     @Test
+    void tuKhoaCpuTheoMaGon() {
+        assertThat(ChatService.cpuQuery("i3-12100f")).isEqualTo("CPU Intel Core i3 12100F");
+        assertThat(ChatService.cpuQuery("ryzen5-7500f")).isEqualTo("CPU AMD Ryzen 5 7500F");
+        assertThat(ChatService.GAME_CPUS.get("LGA1700")).contains(ChatService.cpuModel("Bộ vi xử lý Intel Core i3 12100F / 3.3GHz"));
+    }
+
+    @Test
     void hangCardNguoiDungDoi() {
         assertThat(ChatService.gpuVendor(List.of("Đổi sang card AMD giúp mình", "Mình chơi game 25 triệu, CPU Intel"))).isEqualTo("amd");
         assertThat(ChatService.gpuVendor(List.of("Thôi hãng nào cũng được", "Đổi sang card AMD"))).isNull();
