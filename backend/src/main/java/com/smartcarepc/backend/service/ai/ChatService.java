@@ -764,7 +764,20 @@ public class ChatService {
             if (category == null) continue;
             var now = picks.get(code);
             boolean isKit = kit(req, details, code);
-            found.put(code, Io.async(() -> cheaperLinked(category, now, siblings.getOrDefault(code, List.of()), isKit, true, noGpu)));
+            found.put(code, Io.async(() -> {
+                // Nhóm tìm kiếm của trợ lý chỉ có hàng cùng tầm (tìm "Hyper 612" không ra tản 190 nghìn): món không ảnh
+                // hưởng hiệu năng thì tìm thêm bằng từ khoá chung để có hàng rẻ hơn cùng thông số
+                List<ProductSearch.Product> group = new ArrayList<>(siblings.getOrDefault(code, List.of()));
+                String generic = CHEAP_WIDEN.contains(category) ? GENERIC_QUERY.get(code) : null;
+                if (generic != null) {
+                    try {
+                        group.addAll(search.search(generic));
+                    } catch (RuntimeException e) {
+                        log.debug("Tìm thêm \"{}\" lỗi: {}", generic, e.getMessage());
+                    }
+                }
+                return cheaperLinked(category, now, group, isKit, true, noGpu);
+            }));
         }
         for (var f : found.entrySet()) {
             String code = f.getKey();
@@ -1154,6 +1167,30 @@ public class ChatService {
         return out;
     }
 
+    /** Số thanh trong một bộ kit ghi trên tên ("32GB (2x16GB)" là 2), null nếu không phải kit */
+    static Integer kitSticks(String title) {
+        if (title == null) return null;
+        var m = KIT_SIZE.matcher(title);
+        return m.find() ? Integer.parseInt(m.group(1)) : null;
+    }
+
+    /** Điền buy_qty cho dòng chọn bộ kit mà trợ lý quên ghi (quantity là số thanh trong máy) */
+    private static void kitQuantities(BuildCheckRequest req, Map<String, Map<String, Object>> details, Map<String, ProductSearch.Product> picks) {
+        picks.forEach((code, p) -> {
+            Integer sticks = kitSticks(p == null ? null : p.title());
+            var d = details.get(code);
+            if (sticks == null || sticks < 2 || d == null || d.get("buy_qty") instanceof Number) return;
+            int qty = req.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
+            if (qty >= sticks && qty % sticks == 0) d.put("buy_qty", qty / sticks);
+        });
+    }
+
+    /** Phương án Rẻ: loại món được tìm thêm bằng từ khoá chung để có hàng rẻ hơn cùng thông số */
+    private static final java.util.Set<String> CHEAP_WIDEN = java.util.Set.of("case", "cooler", "psu", "ram", "ssd", "fans");
+
+    /** Món bắt buộc của một máy: lần sửa gửi thiếu thì lấy lại từ lần chốt trước */
+    private static final java.util.Set<String> RESTORABLE = java.util.Set.of("cpu", "motherboard", "ram", "ssd", "psu", "case", "cooler");
+
     /**
      * Lần sửa propose_build mà trợ lý chỉ gửi vài món (các món đã đổi): lấy lại các món còn thiếu (theo loại linh kiện)
      * từ lần chốt trước của cùng tier, để phương án không mất nguồn, RAM, ổ... Nhớ lại danh sách món cho lần sau.
@@ -1172,8 +1209,9 @@ public class ChatService {
             List<String> added = new ArrayList<>();
             for (var old : before) {
                 String c = old.get("code") == null ? null : categoryOf(String.valueOf(old.get("code")));
-                // Card: có lần sửa cố ý bỏ card (dùng đồ họa tích hợp) nên không tự thêm lại
-                if (c == null || have.contains(c) || "gpu".equals(c)) continue;
+                // Chỉ lấy lại món bắt buộc; card (có lần sửa cố ý bỏ để dùng đồ họa tích hợp) và quạt lắp thêm (bỏ
+                // để tiết kiệm) là lựa chọn của trợ lý, không tự thêm lại
+                if (c == null || have.contains(c) || !RESTORABLE.contains(c)) continue;
                 items.add(new LinkedHashMap<>(old));
                 if (!"ram".equals(c) && !"fans".equals(c)) have.add(c);
                 added.add(String.valueOf(old.get("code")));
@@ -1623,7 +1661,8 @@ public class ChatService {
                     .toList();
             String spec = text(details.getOrDefault(code, Map.of()).get("spec"));
             // Dòng chưa có link mua (hoặc chỉ có trang chủ): bắt buộc phải tìm ra link, kể cả khi món thay đắt hơn phần dư
-            boolean noLink = now == null || ProductSearch.homePage(now);
+            // Hết hàng cũng không mua được: phải đổi như dòng chưa có link
+            boolean noLink = now == null || ProductSearch.homePage(now) || soldOut(now);
             if (noLink) mustLink.add(code);
             java.util.function.ToLongFunction<ProductSearch.Product> extra = c -> was[1] == null ? 0
                     : price(details.getOrDefault(code, Map.of()), c, qty)[1] - was[1];
@@ -1811,6 +1850,9 @@ public class ChatService {
                         links.put(code, Io.async(() -> search.directLink(pick.title(), pick.shop(), pick.url())));
                     });
                     String tier = TIERS.contains(String.valueOf(input.get("tier"))) ? String.valueOf(input.get("tier")) : "balanced";
+                    // Bộ kit N thanh mà quantity là bội của N, trợ lý quên buy_qty: hiểu là mua quantity / N bộ (ca thật: kit
+                    // 2x16GB, quantity 2 bị tính 2 bộ = 64GB, 14 triệu)
+                    kitQuantities(req, details, picks);
                     // Phương án Rẻ do code chọn hàng: mỗi món đổi sang sản phẩm rẻ nhất cùng thông số (trợ lý hay chọn đắt)
                     var cheapSwaps = turn.advice && "cheap".equals(tier) ? cheapen(req, details, picks, links, siblings) : List.<Map<String, Object>>of();
                     // CPU thật có đồ họa tích hợp (theo mã sản phẩm) thì không bắt buộc card rời: danh mục chỉ có một CPU
@@ -1823,6 +1865,20 @@ public class ChatService {
                     // Vượt trần: code đổi lần lượt món tiết kiệm nhiều nhất sang hàng cùng thông số rẻ hơn (Rẻ đã đổi hết ở cheapen)
                     var fitSwaps = turn.advice && !"cheap".equals(tier) ? fitCap(req, details, picks, links, siblings, tierCap(budget, tier))
                             : List.<Map<String, Object>>of();
+                    // Vẫn vượt trần: bỏ quạt lắp thêm (vỏ đã có quạt, mô hình 3D ghi chú số quạt khác)
+                    Long capNow = turn.advice ? tierCap(budget, tier) : null;
+                    if (capNow != null && total(req, details, picks) > capNow) {
+                        var fans = req.items().stream().filter(i -> "fans".equals(categoryOf(i.code()))).toList();
+                        if (!fans.isEmpty()) {
+                            log.info("propose_build {}: vẫn vượt trần, bỏ quạt lắp thêm {}", tier, fans.stream().map(BuildCheckRequest.Item::code).toList());
+                            req = new BuildCheckRequest(req.items().stream().filter(i -> !fans.contains(i)).toList());
+                            fans.forEach(f -> {
+                                picks.remove(f.code());
+                                links.remove(f.code());
+                                details.remove(f.code());
+                            });
+                        }
+                    }
                     var checked = new Checked(req, result, details, String.valueOf(input.getOrDefault("summary", "")),
                             budget, picks, links, siblings);
                     turn.tiers.put(tier, checked);
@@ -2036,9 +2092,13 @@ public class ChatService {
             // "tản khí 155" có thể ra cái pát 30 nghìn)
             boolean isKit = d.get("buy_qty") instanceof Number b && b.intValue() < i.qty();
             Integer want = "ram".equals(category) ? ramWant(spec, i.qty(), isKit) : specAmount(category, spec);
+            // RAM: spec ghi DDR4 / DDR5 thì sản phẩm phải ghi đúng loại đó (tên không ghi DDR có thể là loại kia)
+            String ddr = !"ram".equals(category) || spec == null ? null
+                    : spec.toUpperCase().contains("DDR5") ? "DDR5" : spec.toUpperCase().contains("DDR4") ? "DDR4" : null;
             java.util.function.Predicate<ProductSearch.Product> ok = p -> p.title() != null && !JUNK.matcher(p.title()).find()
                     && plausible(category, p.priceVnd()) && ofKind(category, p.title()) && !wrongKind(i.code(), p)
                     && fitsCode(i.code(), p.title()) && fitsWith(picks, i.code(), p, issuesNow)
+                    && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType()))
                     && (want == null || want.equals(amount(category, p.title())));
             // Bo mạch: tìm theo socket của CPU đã chọn để ra đúng loại bo ngay từ đầu
             String generic = "motherboard".equals(category) && cpuSocket != null

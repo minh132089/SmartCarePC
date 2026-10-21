@@ -1067,6 +1067,13 @@ class ChatServiceTests {
         assertThat(ChatService.specAmount("psu", "650W, 80 Plus, bảo hành 5 năm")).isEqualTo(650);
     }
 
+    @Test
+    void kitRamQuenBuyQtyThiHieuLaMotBo() {
+        // Ca thật: kit 2x16GB với quantity 2 bị tính 2 bộ (64GB, 14 triệu)
+        assertThat(ChatService.kitSticks("Ram Corsair Vengeance RGB 32GB (2x16GB) 6000 DDR5")).isEqualTo(2);
+        assertThat(ChatService.kitSticks("Ram SSTC 16GB DDR4 3200MHz")).isNull();
+    }
+
     private static ProductSearch.Product product(String title, long price) {
         return new ProductSearch.Product(title, "GEARVN", price, "https://gearvn.com/products/" + Math.abs(title.hashCode()), null);
     }
