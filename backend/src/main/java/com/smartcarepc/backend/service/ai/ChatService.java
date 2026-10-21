@@ -119,13 +119,10 @@ public class ChatService {
                - price_min_vnd, price_max_vnd: chỉ ghi khi không có product_id (khoảng giá ước tính).
             6. Ngân sách quá thấp so với nhu cầu thì vẫn chọn ba phương án rẻ nhất có thể; phương án nào vẫn vượt mức thì \
             app không hiển thị, nên nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
-            7. App sẽ vẽ bảng so sánh ba phương án và bảng chi tiết từng linh kiện, nên trong câu trả lời đừng liệt kê lại. \
-            Mỗi phương án viết một dòng: tên phương án, tổng ước tính so với ngân sách, và nó hợp với ai hoặc khác ở món \
-            nào (vd card mạnh hơn, ổ lớn hơn). Rồi gợi ý "Phù hợp cho bạn" và mời chọn một phương án để xem và lắp.
-            Tổng nói trong câu trả lời lấy đúng total_min_vnd và total_max_vnd mà từng propose_build trả về, làm tròn tới \
-            0,1 triệu (vd "6,8 - 6,9 triệu"); hai số bằng nhau thì nói một số. Không tự cộng nhẩm. Đó là tổng CUỐI CÙNG \
-            (app đã đổi link, đọc giá trên trang cửa hàng); nhắc tới linh kiện nào thì dùng đúng tên trong final_items \
-            của lần propose_build gần nhất (vd final_items ghi Ryzen 7 7700X thì không viết Ryzen 7 7700).
+            7. Câu trả lời cuối CHỈ gồm: một dòng tóm tắt nhu cầu và giả định, rồi 1 - 3 lời khuyên chung (vd nâng cấp sau \
+            này, lưu ý hỏi cửa hàng BIOS, an toàn khi lắp). KHÔNG giới thiệu từng phương án, KHÔNG ghi tổng tiền, KHÔNG ghi \
+            tên model linh kiện: app tự hiện danh sách phương án còn hiển thị được, với tổng tiền và món khác nhau lấy đúng \
+            từ thẻ cuối cùng (phương án bị ẩn đã được app ghi lý do).
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
@@ -465,6 +462,9 @@ public class ChatService {
                 }
                 // Ba phương án sai thứ tự (thường sau khi app đổi vỏ / hạ giá, Chất lượng thành bằng Phù hợp): nhắc một lần,
                 // cho thêm một lượt propose_build cho đúng tier đó trước khi viết câu trả lời
+                // Rẻ không rẻ hơn Phù hợp rõ rệt (thường do Phù hợp đã được hạ thông số): dựng lại Rẻ từ Phù hợp, ép xuống dưới
+                // Phù hợp ít nhất TIER_GAP, một lần, trước khi nhắc trợ lý
+                if (turn.advice && !orderNudged && search.enabled()) cheapFromBalanced(turn);
                 String order = turn.advice && !orderNudged && search.enabled() ? orderProblem(turn) : null;
                 if (order != null) {
                     orderNudged = true;
@@ -610,6 +610,10 @@ public class ChatService {
         });
         // Thẻ chính: balanced, không có thì phương án đầu tiên còn hiện. Mọi phương án đều bị ẩn (vượt trần / lắp không
         // được) thì không có thẻ nào, không lấy lại bản cuối của trợ lý; chỉ khi chưa chốt phương án nào (check_build) mới dùng
+        // Trang tư vấn: phần giới thiệu từng phương án do app dựng từ chính các thẻ sẽ trả (tổng, món khác nhau), trợ lý
+        // chỉ viết phần hiểu nhu cầu + lời khuyên chung; dòng nào của trợ lý nhắc tier / số tiền / model không có trên thẻ thì
+        // bỏ (ca thật: trợ lý tả phương án đã bị ẩn, ghi tổng cũ 25,0 triệu trong khi thẻ 23,91 triệu)
+        if (turn.advice && !options.isEmpty() && options.getFirst().tier() != null) reply = withTierRows(reply, options);
         BuildCard build = options.stream().filter(o -> "balanced".equals(o.tier()) && o.variant() == 1).findFirst()
                 .or(() -> options.stream().findFirst())
                 .orElseGet(() -> turn.last == null || !turn.tiers.isEmpty() ? null : card(turn.last, turn.advice, null, 1));
@@ -737,8 +741,13 @@ public class ChatService {
         if (needs.miniItx()) return c;
         String caseCode = c.request().items().stream().map(BuildCheckRequest.Item::code).filter(ATX_CASES::contains).findFirst().orElse(null);
         if (caseCode == null) return c;
-        var fixed = modelMatch.fixedCodes("case_compact_tower");
-        if (fixed.isEmpty()) return c;
+        Map<String, String> fixed;
+        try {
+            fixed = modelMatch.fixedCodes("case_compact_tower");
+        } catch (RuntimeException e) {
+            return c; // chưa có máy mẫu 3D vỏ nhỏ gọn: không chuyển
+        }
+        if (fixed == null || fixed.isEmpty()) return c;
         String cpu = productTitles(c.picks()).get("cpu");
         String socket = ProductRules.read("cpu", cpu == null ? "" : cpu).socket();
         String ddr = c.picks().entrySet().stream().filter(e -> "ram".equals(categoryOf(e.getKey())))
@@ -1053,6 +1062,35 @@ public class ChatService {
     static final long TIER_GAP = 300_000;
 
     /**
+     * Rẻ đắt hơn / sát / trùng Phù hợp mà Phù hợp hiện được: lấy bản sao Phù hợp làm nền Rẻ, chốt lại với trần
+     * min(trần Rẻ, tổng Phù hợp - TIER_GAP) (finalizeTier: đổi hàng rẻ hơn, hạ thông số theo nhu cầu, hạ CPU máy học...);
+     * nhận nếu hiện được và khác Phù hợp, không thì giữ nguyên để orderProblem / respond xử lý. Không sửa Phù hợp.
+     */
+    private void cheapFromBalanced(Turn turn) {
+        var b = turn.tiers.get("balanced");
+        var c = turn.tiers.get("cheap");
+        if (b == null || b.picks().isEmpty() || !showable(b, tierCap(b.budgetVnd(), "balanced"))) return;
+        long tb = total(b.request(), b.details(), b.picks());
+        if (c != null && showable(c, tierCap(c.budgetVnd(), "cheap")) && total(c.request(), c.details(), c.picks()) <= tb - TIER_GAP
+                && !signature(c.picks()).equals(signature(b.picks()))) return;
+        Long capCheap = tierCap(b.budgetVnd(), "cheap");
+        long target = capCheap == null ? tb - TIER_GAP : Math.min(capCheap, tb - TIER_GAP);
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        b.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
+        var base = new Checked(b.request(), b.result(), details, b.summary(), b.budgetVnd(), new LinkedHashMap<>(b.picks()),
+                new LinkedHashMap<>(b.links()), b.siblings());
+        List<String> notes = new ArrayList<>();
+        var cand = finalizeTier(base, "cheap", target, Map.of(), turn.needs, notes);
+        long tc = total(cand.request(), cand.details(), cand.picks());
+        if (showable(cand, target) && !signature(cand.picks()).equals(signature(b.picks()))) {
+            log.info("Rẻ dựng lại từ Phù hợp: {} (Phù hợp {}), {}", tc, tb, notes);
+            turn.tiers.put("cheap", cand);
+        } else {
+            log.info("Rẻ dựng lại từ Phù hợp không đạt: {} / mức {} (Phù hợp {})", tc, target, tb);
+        }
+    }
+
+    /**
      * Ba phương án phải đúng thứ tự: Rẻ rẻ hơn Phù hợp rõ rệt, Chất lượng đắt hơn và khác Phù hợp. Trả về lời nhắc trợ lý
      * chọn lại tier sai (chỉ xét các tier hiện được), null nếu đúng thứ tự.
      */
@@ -1187,6 +1225,68 @@ public class ChatService {
     private boolean priceChecked(String url) {
         var page = url == null ? null : search.offer(url);
         return page != null && page.priceVnd() != null && search.pageChecked(url);
+    }
+
+    private static final java.util.regex.Pattern TIER_MENTION = java.util.regex.Pattern.compile(
+            "\\*\\*\\s*(Rẻ|Phù hợp|Chất lượng)|(Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|phương án\\s+(rẻ|phù hợp|chất lượng)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern MONEY_MENTION = java.util.regex.Pattern.compile(
+            "\\d+(?:[.,]\\d+)?\\s*(triệu|tr\\b)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Lời cuối cho trang tư vấn: phần trợ lý viết (bỏ dòng nhắc tier, số tiền, hay model CPU / card không có trên thẻ;
+     * các ghi chú "Phương án ... không hiển thị" của app giữ nguyên), rồi một dòng cho mỗi thẻ: tên phương án, tổng đúng
+     * thẻ, và tối đa 3 món khác thẻ chính (Phù hợp, không có thì thẻ đầu).
+     */
+    static String withTierRows(String reply, List<BuildCard> cards) {
+        java.util.Set<String> onCards = new java.util.HashSet<>();
+        cards.forEach(c -> c.items().forEach(l -> {
+            if (l.productName() == null) return;
+            String cpu = cpuModel(l.productName()), gpu = gpuChip(l.productName());
+            if (cpu != null) onCards.add(cpu);
+            if (gpu != null) onCards.add(gpu);
+        }));
+        List<String> kept = new ArrayList<>();
+        for (String line : reply.split("\n")) {
+            boolean appNote = line.startsWith("Phương án ") && line.contains("app");
+            boolean stray = TIER_MENTION.matcher(line).find() || MONEY_MENTION.matcher(line).find();
+            var cpu = CPU_MODEL.matcher(line.toLowerCase());
+            while (!stray && cpu.find()) stray = !onCards.contains(cpuModel(cpu.group()));
+            var gpu = GPU_CHIP.matcher(line.toLowerCase());
+            while (!stray && gpu.find()) stray = !onCards.contains(gpuChip(gpu.group()));
+            if (appNote || !stray) kept.add(line);
+        }
+        String prose = String.join("\n", kept).replaceAll("\n{3,}", "\n\n").strip();
+        List<String> notes = kept.stream().filter(l -> l.startsWith("Phương án ") && l.contains("app")).toList();
+        prose = prose.lines().filter(l -> !notes.contains(l)).collect(Collectors.joining("\n")).strip();
+        if (prose.isEmpty()) prose = "Mình đã chọn các phương án dưới đây theo nhu cầu của bạn.";
+        var main = cards.stream().filter(c -> "balanced".equals(c.tier())).findFirst().orElse(cards.getFirst());
+        StringBuilder sb = new StringBuilder(prose).append("\n\n");
+        for (var c : cards) {
+            long sum = c.items().stream().mapToLong(l -> l.priceMaxVnd() != null ? l.priceMaxVnd() : l.priceMinVnd() != null ? l.priceMinVnd() : 0).sum();
+            sb.append("- **").append(TIER_NAME.getOrDefault(c.tier(), c.tier())).append(": ")
+                    .append(String.format(java.util.Locale.ROOT, "%.2f", sum / 1e6).replace('.', ',')).append(" triệu**");
+            if (c == main) {
+                sb.append(" - gợi ý chính");
+            } else {
+                List<String> diffs = new ArrayList<>();
+                Map<String, Line> base = new LinkedHashMap<>();
+                main.items().forEach(l -> base.putIfAbsent(l.category(), l));
+                for (var l : c.items()) {
+                    var b = base.get(l.category());
+                    if (diffs.size() >= 3 || l.productName() == null) continue;
+                    if (b == null || b.productName() == null) diffs.add("thêm " + ProductSearch.shortTitle(l.productName()));
+                    else if (!b.productName().equals(l.productName()) || b.quantity() != l.quantity()) {
+                        diffs.add(ProductSearch.shortTitle(l.productName()) + (l.quantity() > 1 ? " x" + l.quantity() : ""));
+                    }
+                }
+                if (!diffs.isEmpty()) sb.append(" - khác Phù hợp: ").append(String.join("; ", diffs));
+            }
+            sb.append("\n");
+        }
+        sb.append("\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.");
+        if (!notes.isEmpty()) sb.append("\n\n").append(String.join("\n", notes));
+        return sb.toString();
     }
 
     /** Tên phương án hiện cho người dùng */
@@ -1883,7 +1983,9 @@ public class ChatService {
     private List<String> lineQueries(String code, Map<String, ProductSearch.Product> picks) {
         List<String> out = new ArrayList<>(BUDGET_QUERIES.getOrDefault(code, List.of()));
         String socket = ProductRules.read("cpu", productTitles(picks).getOrDefault("cpu", "")).socket();
-        if (socket != null && "mb_itx".equals(code)) out.addFirst("mainboard mini ITX " + socket);
+        String ddr = picks.entrySet().stream().filter(e -> "ram".equals(categoryOf(e.getKey())))
+                .map(e -> ProductRules.read("ram", e.getValue().title()).ramType()).filter(Objects::nonNull).findFirst().orElse(null);
+        if (socket != null && "mb_itx".equals(code)) out.addFirst("mainboard mini ITX " + socket + (ddr == null ? "" : " " + ddr));
         if (socket != null && "low_profile_47".equals(code)) out.add("tản nhiệt low profile " + socket);
         return out;
     }

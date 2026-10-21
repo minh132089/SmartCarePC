@@ -374,7 +374,7 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        assertThat(res.reply()).isEqualTo(ChatService.BUILDS_READY);
+        assertThat(res.reply()).startsWith(ChatService.BUILDS_READY);
         assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
     }
 
@@ -542,7 +542,7 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        assertThat(res.reply()).isEqualTo("Xong.");
+        assertThat(res.reply()).startsWith("Xong.");
         // Vòng 4: không cho gọi công cụ nữa; lời gọi thứ 4 bị từ chối
         assertThat(sent.get(3).get("tool_choice")).isEqualTo("none");
         assertThat(sent.get(4).get("messages").toString()).contains("Đã chốt đủ phương án");
@@ -1391,6 +1391,26 @@ class ChatServiceTests {
         assertThat(res.reply()).contains("Phương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp");
     }
 
+    @Test
+    void dongGioiThieuPhuongAnLayTuTheVaBoLoiLechThe() {
+        // v19 / n2: trợ lý tả phương án đã bị ẩn và ghi tổng cũ; giờ app dựng dòng từng phương án từ thẻ
+        var line = new Line("ssd_m2_2280", "ssd", "SSD", 1, "1TB", null, 1_500_000L, 1_500_000L, null, "https://a.vn/1",
+                "SSD Kingston NV3 1TB", "A", true, null, null, List.of(), true);
+        var line2 = new Line("ssd_m2_2280", "ssd", "SSD", 1, "1TB", null, 2_390_000L, 2_390_000L, null, "https://b.vn/1",
+                "SSD Samsung 990 EVO 1TB", "B", true, null, null, List.of(), true);
+        var b = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1, List.of(), List.of(), null);
+        var q = new ChatResponse.BuildCard(List.of(line2), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1, List.of(), List.of(), null);
+        String ai = "Mình hiểu bạn cần máy học.\n- **Phù hợp cho bạn - 25,0 triệu:** vỏ kính, Ryzen 5 5600\n- **Chất lượng - 40 triệu**\nNhớ xả tĩnh điện trước khi lắp."
+                + "\n\nPhương án Rẻ: chưa tìm được cấu hình lắp chung được, có link mua trong mức tối đa 1,8 triệu, nên app không hiển thị.";
+
+        String out = ChatService.withTierRows(ai, List.of(b, q));
+
+        assertThat(out).startsWith("Mình hiểu bạn cần máy học.").contains("Nhớ xả tĩnh điện")
+                .doesNotContain("25,0 triệu").doesNotContain("Ryzen 5 5600")
+                .contains("**Phù hợp: 1,50 triệu** - gợi ý chính").contains("**Chất lượng: 2,39 triệu** - khác Phù hợp: SSD Samsung 990 EVO 1TB")
+                .contains("Phương án Rẻ: chưa tìm được");
+    }
+
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
 
     private static Map<String, Object> answer(String text) {
@@ -1644,7 +1664,7 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "Mình dựng video, ngân sách khoảng 40 triệu")), null, null, "advice"));
 
-        assertThat(res.reply()).isEqualTo("Xong.");
+        assertThat(res.reply()).startsWith("Xong.");
         assertThat(res.build()).isNotNull();
         assertThat(messages(1).toString()).contains("làm luôn ba phương án");
     }
