@@ -630,6 +630,11 @@ public class ChatService {
         // thiểu theo nhu cầu (học Word 8GB / 256GB; game 16GB / 512GB), lấy link và giá trang lần nữa
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = withoutExtraCooler(c, notes);
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(downgrade(c, cap, needs, notes)), aiTitles);
+        // Máy học / văn phòng mà CPU đắt (ca thật v12: CPU 5,69 triệu cho máy học Word): hạ xuống CPU phổ thông cùng socket
+        if (cap != null && needs != null && needs.office() && total(c.request(), c.details(), c.picks()) > cap) {
+            c = normalized(withPagePrices(lowerCpuForNeeds(c, notes)), aiTitles);
+            if (total(c.request(), c.details(), c.picks()) > cap) c = withoutExtraCooler(c, notes);
+        }
         boolean over = cap != null && total(c.request(), c.details(), c.picks()) > cap;
         if (over || !productIssues(c.picks()).isEmpty()) {
             var low = normalized(withPagePrices(cheapest(c, tier, cap)), aiTitles);
@@ -637,13 +642,153 @@ public class ChatService {
             boolean lowOk = (cap == null || lowTotal <= cap) && productIssues(low.picks()).isEmpty();
             if (lowOk || over && lowTotal < total(c.request(), c.details(), c.picks()) && productIssues(low.picks()).isEmpty()) c = low;
         }
+        // Máy game vẫn vượt trần: thử cả bộ trên mẫu vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt), chỉ nhận khi hiện được
+        if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap) {
+            c = compactSwitch(c, tier, cap, needs, aiTitles, notes);
+        }
         return c;
     }
 
+    /** Vỏ có mẫu 3D bo ATX được thử chuyển sang mẫu nhỏ gọn (vỏ Mini / nhỏ gọn thì không) */
+    private static final java.util.Set<String> ATX_CASES = java.util.Set.of("case_standard_tower", "case_gaming",
+            "case_showcase_dual_chamber", "case_full_tower");
+
+    /**
+     * Máy game vẫn vượt trần sau mọi bước đổi món: thử cả bộ trên mẫu vỏ nhỏ gọn (case_compact_tower + mã đi kèm theo
+     * fixedCodes: bo Micro-ATX, tản khí, card 240 mm 2 quạt, nguồn ATX). Giữ nguyên CPU / RAM / SSD / nguồn và card nếu
+     * hợp mẫu mới; vỏ / bo / tản tìm mới (vỏ có kính nếu người dùng thích, bo cùng socket CPU và loại DDR của RAM). Làm
+     * trên bản sao; chỉ nhận khi bản mới hiện được (trần, link, lắp chung, khớp 3D), không thì giữ bản cũ.
+     */
+    private Checked compactSwitch(Checked c, String tier, Long cap, Needs needs, Map<String, String> aiTitles, List<String> notes) {
+        String caseCode = c.request().items().stream().map(BuildCheckRequest.Item::code).filter(ATX_CASES::contains).findFirst().orElse(null);
+        if (caseCode == null) return c;
+        var fixed = modelMatch.fixedCodes("case_compact_tower");
+        if (fixed.isEmpty()) return c;
+        String cpu = productTitles(c.picks()).get("cpu");
+        String socket = ProductRules.read("cpu", cpu == null ? "" : cpu).socket();
+        String ddr = c.picks().entrySet().stream().filter(e -> "ram".equals(categoryOf(e.getKey())))
+                .map(e -> ProductRules.read("ram", e.getValue().title()).ramType()).filter(Objects::nonNull).findFirst().orElse(null);
+        List<BuildCheckRequest.Item> items = new ArrayList<>();
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((code, d) -> details.put(code, new LinkedHashMap<>(d)));
+        Map<String, List<ProductSearch.Product>> siblings = new LinkedHashMap<>(c.siblings());
+        for (var i : c.request().items()) {
+            String category = categoryOf(i.code());
+            String to = "case".equals(category) ? "case_compact_tower" : fixed.get(category);
+            if (to == null || to.equals(i.code())) {
+                items.add(i);
+                continue;
+            }
+            var old = picks.remove(i.code());
+            links.remove(i.code());
+            var oldDetails = details.remove(i.code());
+            siblings.remove(i.code());
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("code", to);
+            d.put("quantity", i.qty());
+            switch (category) {
+                case "case" -> {
+                    d.put("spec", "vỏ máy tính micro ATX" + (needs.glass() ? " kính cường lực" : ""));
+                    if (needs.glass()) d.put("need_glass", true);
+                }
+                case "motherboard" -> d.put("spec", "mainboard " + (socket == null ? "" : socket + " ") + (ddr == null ? "" : ddr + " ") + "micro ATX");
+                case "gpu" -> {
+                    // Card 2 quạt hợp mẫu 240 mm thì giữ nguyên sản phẩm, chỉ đổi mã
+                    if (old != null && fitsCode(to, old.title())) {
+                        picks.put(to, old);
+                        links.put(to, CompletableFuture.completedFuture(c.links().get(i.code()).join()));
+                        if (oldDetails != null) d.putAll(oldDetails);
+                        d.put("code", to);
+                    } else {
+                        d.put("spec", old == null ? text(oldDetails == null ? null : oldDetails.get("spec")) : coreQuery("gpu", old.title()));
+                    }
+                }
+                default -> d.put("spec", partName(to));
+            }
+            details.put(to, d);
+            items.add(new BuildCheckRequest.Item(to, i.quantity()));
+        }
+        var req = new BuildCheckRequest(items);
+        Checked trial = new Checked(req, c.result(), details, c.summary(), c.budgetVnd(), picks, links, siblings);
+        trial = normalized(withPagePrices(withLinkedPicks(trial, tier, cap)), aiTitles);
+        var r = withoutFalseGpuError(ModelMatchService.merge(compatibilityService.check(trial.request()), modelMatch.check(trial.request()).errors()),
+                trial.picks());
+        trial = new Checked(trial.request(), r, trial.details(), trial.summary(), trial.budgetVnd(), trial.picks(), trial.links(), trial.siblings());
+        long was = total(c.request(), c.details(), c.picks()), now = total(trial.request(), trial.details(), trial.picks());
+        if (!showable(trial, cap)) {
+            log.info("Thử vỏ nhỏ gọn cho phương án {}: tổng {} (trước {}), trần {}, vẫn chưa hiện được: lắp chung {}, dòng chưa mua được {}",
+                    tier, now, was, cap, r.compatible(), missingBuy(trial));
+            return c;
+        }
+        log.info("Vượt trần {}: chuyển phương án {} sang vỏ nhỏ gọn (bo Micro-ATX), tổng {} -> {}", cap, tier, was, now);
+        notes.add("Chuyển sang vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt" + (needs.glass() ? ", vỏ có kính" : "") + ") để vừa ngân sách");
+        return trial;
+    }
+
+    /** CPU phổ thông đủ cho học / văn phòng theo socket (có đồ họa tích hợp), để hạ CPU đắt mà không đổi bo */
+    static final Map<String, List<String>> OFFICE_CPUS = Map.of(
+            "LGA1700", List.of("i3-12100", "i3-13100", "i3-14100"),
+            "AM4", List.of("ryzen3-4300g", "ryzen5-4600g", "ryzen5-5600g"),
+            "AM5", List.of("ryzen5-8500g", "ryzen5-8600g"));
+
+    /**
+     * Máy học / văn phòng mà CPU đắt: đổi sang CPU phổ thông cùng socket trong OFFICE_CPUS (giữ bo), rẻ hơn, có link mua;
+     * không có card rời thì phải có đồ họa tích hợp. Món mới qua phép kiểm chung (swapOk).
+     */
+    private Checked lowerCpuForNeeds(Checked c, List<String> notes) {
+        String code = c.request().items().stream().map(BuildCheckRequest.Item::code).filter(x -> "cpu".equals(categoryOf(x))).findFirst().orElse(null);
+        var now = code == null ? null : c.picks().get(code);
+        if (now == null || now.priceVnd() == null) return c;
+        String socket = ProductRules.read("cpu", now.title()).socket();
+        var allowed = socket == null ? null : OFFICE_CPUS.get(socket.toUpperCase().replace(" ", ""));
+        if (allowed == null || allowed.contains(cpuModel(now.title()))) return c;
+        boolean noGpu = c.request().items().stream().noneMatch(i -> "gpu".equals(categoryOf(i.code())));
+        List<ProductSearch.Product> pool = new ArrayList<>();
+        for (String model : allowed) {
+            String q = "CPU " + model.replace("ryzen3-", "Ryzen 3 ").replace("ryzen5-", "Ryzen 5 ").replace("i3-", "Intel Core i3 ");
+            try {
+                pool.addAll(search.search(q));
+            } catch (RuntimeException e) {
+                log.debug("Tìm \"{}\" lỗi: {}", q, e.getMessage());
+            }
+        }
+        var list = pool.stream()
+                .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() < now.priceVnd() && !JUNK.matcher(p.title()).find())
+                .filter(p -> allowed.contains(cpuModel(p.title())) && (!noGpu || Boolean.TRUE.equals(ProductRules.hasIgpu(p.title()))))
+                .filter(p -> swapOk(code, p, c.picks()))
+                .filter(distinctUrl())
+                .sorted(Comparator.comparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
+                .toList();
+        var found = bestLinked(list, null, 6);
+        if (found == null) {
+            log.info("Hạ CPU \"{}\" cho máy học / văn phòng: {} món cùng socket {}, không món nào có link mua", now.title(), list.size(), socket);
+            return c;
+        }
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
+        picks.put(code, found);
+        links.put(code, CompletableFuture.completedFuture(found.url()));
+        var d = details.computeIfAbsent(code, k -> new LinkedHashMap<>());
+        d.put("spec", cpuModel(found.title()));
+        d.put("downgrade_note", "CPU " + cpuModel(found.title()) + " đủ cho học, Word, Excel, học online; rẻ hơn để vừa ngân sách.");
+        String note = "CPU " + cpuModel(now.title()) + " -> " + cpuModel(found.title()) + " (rẻ hơn " + (now.priceVnd() - found.priceVnd()) + " đồng)";
+        log.info("Vượt trần: hạ {}", note);
+        notes.add(note);
+        return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
+    }
+
     /** Dung lượng tối thiểu (GB) app được hạ RAM / SSD xuống khi vượt trần; null là không hạ món đó */
-    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin) {
+    record Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass) {
         Needs(Integer ramMin, Integer ssdMin) {
-            this(ramMin, ssdMin, null);
+            this(ramMin, ssdMin, null, false, false);
+        }
+
+        Needs(Integer ramMin, Integer ssdMin, Integer vramMin) {
+            this(ramMin, ssdMin, vramMin, false, false);
         }
     }
 
@@ -674,7 +819,9 @@ public class ChatService {
         if (!heavy && !light && ram == null && ssd == null) return null;
         // Card: máy game Full HD đổi được sang chip ngang / mạnh hơn rẻ hơn nếu VRAM >= 8GB; máy đồ họa / dựng video không
         // giảm VRAM (null: chỉ đổi cùng chip, cùng VRAM)
-        return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256, game && !creator ? 8 : null);
+        // office: chỉ học / văn phòng rõ ràng (được hạ CPU xuống dòng phổ thông); glass: người dùng nói thích kính
+        return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256, game && !creator ? 8 : null,
+                light && !heavy, all.matches(".*(kính|glass).*"));
     }
 
     /**
@@ -2429,6 +2576,7 @@ public class ChatService {
             String lineName = partName(code);
             String lineCore = coreQuery(lineCategory, lineSpec);
             String lineChip = "gpu".equals(lineCategory) && lineSpec != null ? gpuChip(lineSpec) : null;
+            boolean needGlass = Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("need_glass"));
             int issuesNow = productIssues(picks).size();
             fixes.put(code, Io.async(() -> {
                 ProductSearch.Product fallback = null;
@@ -2439,6 +2587,8 @@ public class ChatService {
                                 .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
                                 .filter(c -> plausible(lineCategory, c.priceVnd()) && ofKind(lineCategory, c.title()) && fitsCode(code, c.title()))
                                 .filter(c -> !wrongKind(code, c) && !recentlyNoLink(c) && fitsWith(picks, code, c, issuesNow))
+                                // Vỏ: người dùng thích kính thì vỏ tìm mới cũng phải có kính
+                                .filter(c -> !needGlass || glass(c.title()))
                                 // Card: giữ đúng chip trợ lý ghi (RTX 4060 hãng nào cũng được, không thành 4060 Ti / 3050)
                                 .filter(c -> !"gpu".equals(lineCategory) || lineChip == null || lineChip.equals(gpuChip(c.title())))
                                 // Hàng đã biết còn trước (danh sách hay bị một hãng hết hàng chiếm hết lượt thử), rồi rẻ trước

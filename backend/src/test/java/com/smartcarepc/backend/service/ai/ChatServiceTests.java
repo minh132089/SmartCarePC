@@ -1091,10 +1091,11 @@ class ChatServiceTests {
     @Test
     void mucToiThieuTheoNhuCau() {
         assertThat(ChatService.needs(List.of("Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.")))
-                .isEqualTo(new ChatService.Needs(8, 256));
+                .isEqualTo(new ChatService.Needs(8, 256, null, true, false));
         assertThat(ChatService.needs(List.of("Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu")))
                 .isEqualTo(new ChatService.Needs(16, 512, 8));
-        assertThat(ChatService.needs(List.of("học online, cần RAM 16GB và SSD 1TB"))).isEqualTo(new ChatService.Needs(16, 1000));
+        assertThat(ChatService.needs(List.of("học online, cần RAM 16GB và SSD 1TB"))).isEqualTo(new ChatService.Needs(16, 1000, null, true, false));
+        assertThat(ChatService.needs(List.of("chơi game 25 triệu, thích máy có kính")).glass()).isTrue();
         assertThat(ChatService.needs(List.of("xin chào"))).isNull();
     }
 
@@ -1282,6 +1283,28 @@ class ChatServiceTests {
         assertThat(ChatService.equivalents("gpu", now, List.of(r4060, r3050, r4070), false, false, false, 8)).containsExactly(r4060);
         // Đồ họa / không cho đổi chip (vramMin null): chỉ cùng chip
         assertThat(ChatService.equivalents("gpu", now, List.of(r4060), false, false, false, null)).isEmpty();
+    }
+
+    @Test
+    void mayHocCpuDatThiHaXuongCpuPhoThongCungSocket() {
+        // v12 học sinh: trợ lý chọn CPU 5,69 triệu cho máy học Word, phương án vượt trần
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("CPU")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i5-13400 Box", "A", 5_690_000L, "https://a.vn/i5", null)));
+        when(search.search("CPU Intel Core i3 12100")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i3-12100F Box", "B", 2_000_000L, "https://b.vn/i3f", null),
+                new ProductSearch.Product("CPU Intel Core i3-12100 Box", "B", 2_900_000L, "https://b.vn/i3", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"CPU\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":3000000,"items":[{"code":"cpu_std","spec":"i5-13400","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var cpu = service.reply(new ChatRequest(List.of(new Message("user", "học online, Word, Excel, có 3 triệu")), null, null, "advice"))
+                .build().items().getFirst();
+
+        assertThat(cpu.productName()).as("bản có đồ họa tích hợp (máy không card rời), không lấy bản F").isEqualTo("CPU Intel Core i3-12100 Box");
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
