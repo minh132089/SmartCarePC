@@ -1772,11 +1772,39 @@ public class ChatService {
      * Từ khoá tìm thêm hàng rẻ hơn cho một dòng: bo theo socket CPU đã chọn + loại DDR (vd "mainboard LGA1700 DDR4", ra cả
      * H610 lẫn B760 đúng cỡ sau bước lọc), món khác theo từ khoá chung của mã
      */
+    /**
+     * Từ khoá thêm cho hàng phổ thông giá rẻ hay có ở cửa hàng Việt Nam (v15: "tản nhiệt khí CPU" chỉ ra 5 món, gần như chỉ
+     * có tản 1,59 triệu, trong khi tản ID-COOLING / Jonsbo / Deepcool 250 - 390 nghìn có link ở các vòng trước). Chỉ là từ
+     * khoá tìm; món tìm được vẫn phải cùng thông số, đúng cỡ mẫu 3D, có link và rẻ hơn.
+     */
+    private static final Map<String, List<String>> BUDGET_QUERIES = Map.of(
+            "tower_air_155", List.of("tản nhiệt ID-COOLING SE-214", "tản nhiệt Jonsbo CR-1200", "tản nhiệt Deepcool AG400"),
+            "psu_atx", List.of("nguồn máy tính 550W 80 Plus Bronze", "nguồn máy tính 650W 80 Plus"),
+            "case_compact_tower", List.of("vỏ máy tính mATX", "vỏ case micro ATX giá rẻ"));
+
+    /** Bo chipset phổ thông thấp nhất theo socket (vd B760M -> H610M) để tìm bo rẻ hơn cùng socket / DDR / cỡ */
+    private static final Map<String, String> ENTRY_CHIPSET = Map.of("LGA1700", "H610M", "AM4", "A520M", "AM5", "A620M");
+
     /** Từ khoá tìm thêm hàng rẻ hơn (widenQuery), với card thêm tối đa 2 chip ngang / mạnh hơn gần nhất (vd "VGA RTX 4060") */
     private List<String> widenQueries(String code, String category, ProductSearch.Product now, Map<String, ProductSearch.Product> picks) {
         List<String> out = new ArrayList<>();
         String q = widenQuery(code, category, now, picks);
         if (q != null) out.add(q);
+        out.addAll(BUDGET_QUERIES.getOrDefault(code, List.of()));
+        if ("ram".equals(category) && now != null) {
+            String ddr = ProductRules.read("ram", now.title()).ramType();
+            Integer gb = amount("ram", now.title());
+            if (ddr != null && gb != null) {
+                out.add("RAM " + ddr + " " + gb + "GB");
+                out.add("RAM Kingston Fury " + ddr + " " + gb + "GB");
+            }
+        }
+        if ("motherboard".equals(category) && now != null && code.endsWith("matx")) {
+            String socket = ProductRules.read("cpu", productTitles(picks).getOrDefault("cpu", "")).socket();
+            String chip = socket == null ? null : ENTRY_CHIPSET.get(socket);
+            String ddr = ProductRules.read("motherboard", now.title()).ramType();
+            if (chip != null) out.add("mainboard " + chip + (ddr == null ? "" : " " + ddr));
+        }
         if ("gpu".equals(category) && now != null) {
             gpuUpgrades(gpuChip(now.title())).stream().limit(2).forEach(chip -> {
                 var m = java.util.regex.Pattern.compile("^(rtx|gtx|rx|arc)(.*)$").matcher(chip);
