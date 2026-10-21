@@ -813,7 +813,8 @@ class ChatServiceTests {
 
     @Test
     void trangTuVanDungLuatTuVan() {
-        reply(answer("Ok."));
+        // Có ngân sách mà trả lời không chốt gì: app nhắc làm luôn một lần (cần câu trả lời thứ hai)
+        reply(answer("Ok."), answer("Ok."));
 
         service.reply(new ChatRequest(List.of(new Message("user", "mình học online, có 12 triệu")), null, null, "advice"));
 
@@ -1072,6 +1073,29 @@ class ChatServiceTests {
         // Ca thật: kit 2x16GB với quantity 2 bị tính 2 bộ (64GB, 14 triệu)
         assertThat(ChatService.kitSticks("Ram Corsair Vengeance RGB 32GB (2x16GB) 6000 DDR5")).isEqualTo(2);
         assertThat(ChatService.kitSticks("Ram SSTC 16GB DDR4 3200MHz")).isNull();
+    }
+
+    @Test
+    void nhanRaNganSachTrongCauNguoiDung() {
+        assertThat(ChatService.hasBudget("ngân sách khoảng 40 triệu")).isTrue();
+        assertThat(ChatService.hasBudget("có 25tr, thích máy có kính")).isTrue();
+        assertThat(ChatService.hasBudget("tầm 12.000.000 đồng")).isTrue();
+        assertThat(ChatService.hasBudget("mình học thiết kế, cần máy êm")).isFalse();
+    }
+
+    @Test
+    void daCoNganSachMaAiHoiLaiThiNhacLamLuon() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        reply(answer("Bạn dựng video ở độ phân giải nào?"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Dựng video","items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "Mình dựng video, ngân sách khoảng 40 triệu")), null, null, "advice"));
+
+        assertThat(res.reply()).isEqualTo("Xong.");
+        assertThat(res.build()).isNotNull();
+        assertThat(messages(1).toString()).contains("làm luôn ba phương án");
     }
 
     private static ProductSearch.Product product(String title, long price) {

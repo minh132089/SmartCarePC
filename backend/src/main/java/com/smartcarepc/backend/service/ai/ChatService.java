@@ -390,6 +390,8 @@ public class ChatService {
         var tools = search.enabled() ? TOOLS
                 : TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
         int searchRounds = 0, proposeRounds = 0;
+        boolean nudged = false;
+        String lastUser = String.valueOf(messages.getLast().get("content"));
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
@@ -420,6 +422,16 @@ public class ChatService {
             var message = (Map<String, Object>) choices.getFirst().getOrDefault("message", Map.of());
             var calls = (List<Map<String, Object>>) message.get("tool_calls");
             if (calls == null || calls.isEmpty()) {
+                // Người dùng đã nói ngân sách mà trợ lý chỉ hỏi lại chi tiết phụ (vd độ phân giải) chưa chốt gì: nhắc
+                // một lần là làm luôn với giả định phổ biến (lời dặn bước 2; DeepSeek hay hỏi thừa)
+                if (turn.advice && !nudged && turn.tiers.isEmpty() && hasBudget(lastUser)) {
+                    nudged = true;
+                    log.info("Chat vòng {}: AI hỏi lại dù đã có ngân sách, nhắc làm luôn", round + 1);
+                    messages.add(Map.of("role", "assistant", "content", String.valueOf(message.getOrDefault("content", ""))));
+                    messages.add(Map.of("role", "user", "content", "Mình đã nói ngân sách và mục đích rồi. Bạn cứ giả định "
+                            + "mức phổ biến cho chi tiết còn thiếu (nói rõ giả định) và làm luôn ba phương án nhé."));
+                    continue;
+                }
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
                 if (!turn.tiers.isEmpty() && search.enabled()) progress.accept(STAGE_LINKS);
@@ -1609,6 +1621,14 @@ public class ChatService {
             }
         }
         return new Checked(request, c.result(), c.details(), c.summary(), c.budgetVnd(), picks, links, c.siblings());
+    }
+
+    private static final java.util.regex.Pattern BUDGET = java.util.regex.Pattern.compile(
+            "\\d+([.,]\\d+)?\\s*(triệu|tr\\b|củ|m\\b)|\\d{1,3}([.,]\\d{3}){2,}", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** Câu của người dùng có nói ngân sách (vd "12 triệu", "25tr", "40.000.000") */
+    static boolean hasBudget(String text) {
+        return text != null && BUDGET.matcher(text).find();
     }
 
     /** Thêm món p vào dòng code không làm tăng số lỗi lắp chung giữa các sản phẩm thật đã chọn */
