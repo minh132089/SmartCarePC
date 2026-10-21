@@ -729,7 +729,14 @@ public class ChatService {
             return c;
         }
         log.info("Vượt trần {}: chuyển phương án {} sang vỏ nhỏ gọn (bo Micro-ATX), tổng {} -> {}", cap, tier, was, now);
-        notes.add("Chuyển sang vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt" + (needs.glass() ? ", vỏ có kính" : "") + ") để vừa ngân sách");
+        var casePick = trial.picks().get("case_compact_tower");
+        boolean glassOk = !needs.glass() || casePick != null && glass(casePick.title());
+        notes.add("Chuyển sang vỏ nhỏ gọn (bo Micro-ATX, tản khí, card 2 quạt) để vừa ngân sách"
+                + (glassOk ? "" : "; vỏ này không ghi rõ có mặt kính, muốn kính thì hỏi cửa hàng hoặc chọn phương án khác"));
+        if (!glassOk && casePick != null) {
+            trial.details().computeIfAbsent("case_compact_tower", k -> new LinkedHashMap<>()).put("downgrade_note",
+                    "Vỏ nhỏ gọn này không ghi rõ có mặt kính trên tên sản phẩm. Bạn thích kính thì hỏi cửa hàng, hoặc chọn phương án có vỏ kính.");
+        }
         return trial;
     }
 
@@ -2593,12 +2600,12 @@ public class ChatService {
                                 .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
                                 .filter(c -> plausible(lineCategory, c.priceVnd()) && ofKind(lineCategory, c.title()) && fitsCode(code, c.title()))
                                 .filter(c -> !wrongKind(code, c) && !recentlyNoLink(c) && fitsWith(picks, code, c, issuesNow))
-                                // Vỏ: người dùng thích kính thì vỏ tìm mới cũng phải có kính
-                                .filter(c -> !needGlass || glass(c.title()))
                                 // Card: giữ đúng chip trợ lý ghi (RTX 4060 hãng nào cũng được, không thành 4060 Ti / 3050)
                                 .filter(c -> !"gpu".equals(lineCategory) || lineChip == null || lineChip.equals(gpuChip(c.title())))
-                                // Hàng đã biết còn trước (danh sách hay bị một hãng hết hàng chiếm hết lượt thử), rồi rẻ trước
-                                .sorted(Comparator.comparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
+                                // Người dùng thích kính: vỏ ghi rõ có kính trước (tên vỏ mATX ở cửa hàng hiếm khi ghi "kính", nên
+                                // không bắt buộc); rồi hàng đã biết còn (một hãng hết hàng hay chiếm hết lượt thử), rồi rẻ trước
+                                .sorted(Comparator.comparingInt((ProductSearch.Product c) -> needGlass && !glass(c.title()) ? 1 : 0)
+                                        .thenComparingInt(this::stockOrder).thenComparingLong(ProductSearch.Product::priceVnd))
                                 .toList();
                         var best = bestLinked(list, null, 8);
                         // Hàng xác nhận còn bán thì xong; chưa rõ tình trạng thì giữ dự phòng, tìm tiếp các từ khoá sau
