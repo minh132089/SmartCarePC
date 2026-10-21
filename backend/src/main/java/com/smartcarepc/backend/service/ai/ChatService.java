@@ -1168,10 +1168,16 @@ public class ChatService {
                 changed = true;
             }
         }
-        if (!changed) return null;
+        if (!changed) {
+            log.info("Nâng cấp từ {}: không nâng được món nào ({}) trong trần {}", total(base.request(), base.details(), base.picks()), order, cap);
+            return null;
+        }
         c = normalized(withPagePrices(c), Map.of());
         long t = total(c.request(), c.details(), c.picks());
-        return t >= minTotal && showable(c, cap) && !signature(c.picks()).equals(signature(base.picks())) ? c : null;
+        boolean ok = t >= minTotal && showable(c, cap) && !signature(c.picks()).equals(signature(base.picks()));
+        if (!ok) log.info("Nâng cấp từ {}: bản nâng {} không nhận (cần >= {}, hiện được {}, trần {})",
+                total(base.request(), base.details(), base.picks()), t, minTotal, showable(c, cap), cap);
+        return ok ? c : null;
     }
 
     /** Nâng một món lên một nấc (card: chip mạnh hơn cùng hãng; RAM / SSD: dung lượng kế tiếp), trong trần; null nếu không có */
@@ -2800,6 +2806,23 @@ public class ChatService {
         return a != null && b != null && vendor.apply(a).equals(vendor.apply(b));
     }
 
+    /** Chip card phổ thông hay có hàng, rẻ trước: dòng card trống không ghi chip thì tìm theo các chip này */
+    static final List<String> POPULAR_CHIPS = List.of("rx7600", "rtx4060", "rtx5060", "rx9060xt", "rtx5060ti");
+
+    /** Lý do món tìm được bị loại khỏi dòng trống (null: qua mọi bước lọc), để log chẩn đoán */
+    private String emptyLineReject(String code, String category, ProductSearch.Product c, Map<String, ProductSearch.Product> picks, int issuesNow) {
+        if (c.title() == null || c.priceVnd() == null) return "thiếu tên/giá";
+        if (JUNK.matcher(c.title()).find()) return "hàng cũ/phụ kiện";
+        if (!plausible(category, c.priceVnd())) return "giá lạ";
+        if (!ofKind(category, c.title())) return "sai loại";
+        if (!fitsCode(code, c.title())) return "sai cỡ mẫu 3D";
+        if (wrongKind(code, c)) return "sai kiểu";
+        if (recentlyNoLink(c)) return "vừa không có link";
+        if (!fitsWith(picks, code, c, issuesNow)) return "lỗi lắp chung";
+        if (stockOrder(c) >= 2) return "hết hàng";
+        return null;
+    }
+
     /** Từ khoá tìm card theo chip ("rtx4060ti" -> "VGA RTX 4060 TI") */
     static String chipQuery(String chip) {
         var m = java.util.regex.Pattern.compile("^(rtx|gtx|rx|arc)([a-z]?\\d{3,4})(.*)$").matcher(chip);
@@ -2845,8 +2868,12 @@ public class ChatService {
                     .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                     .toList();
             var found = bestLinked(list, null, 8);
+            log.info("Thử chip {} cho dòng {} (thay {}): {} kết quả, {} qua lọc (VRAM >= {}, giá <= {}), {}", other, code, chip, pool.size(),
+                    list.size(), floor, maxPrice == Long.MAX_VALUE ? "-" : maxPrice,
+                    found == null ? "không có link" : rank(found.url()) == 3 ? "có link còn hàng" : "link chưa rõ còn hàng");
             if (found != null && rank(found.url()) == 3) return found;
         }
+        if (tried == 0) log.info("Dòng {}: không có chip nào để thử thay {} (cùng hãng, nguồn đủ) trong {}", code, chip, chips);
         return null;
     }
 
@@ -2877,7 +2904,10 @@ public class ChatService {
             if (best == null || found.priceVnd() < best.priceVnd()) best = found;
             if (total - was + found.priceVnd() * gpu.qty() <= cap) break;
         }
-        if (best == null) return c;
+        if (best == null) {
+            log.info("Vượt trần {}: không hạ được card {} (VRAM tối thiểu {}, chip yếu hơn {})", cap, chip, floor, gpuDowngrades(chip, 15));
+            return c;
+        }
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
         Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
         Map<String, Map<String, Object>> details = new LinkedHashMap<>();
@@ -3214,8 +3244,23 @@ public class ChatService {
                 String core = coreQuery(category, spec != null ? spec : pick.title());
                 if (core != null) queries.add(core);
                 queries.addAll(lineQueries(code, picks));
+                Map<String, Integer> rejected = new java.util.TreeMap<>();
+                List<String> passed = new ArrayList<>();
                 for (String q : queries.stream().distinct().toList()) {
-                    best = bestLinked(fit.apply(search.search(q)), null, 8);
+                    var raw = search.search(q);
+                    if (noLink) {
+                        // Chẩn đoán: món tìm được bị loại ở bước lọc nào (log khi cả dòng không ra link)
+                        var ok = new java.util.HashSet<>(fit.apply(raw));
+                        var specOk = new java.util.HashSet<>(linkable(category, pick, raw, isKit));
+                        raw.forEach(c -> {
+                            String why = ok.contains(c) ? null : !specOk.contains(c) ? "khác thông số" : extra.applyAsLong(c) > room ? "vượt trần"
+                                    : !fitsCode(code, c.title()) ? "sai cỡ mẫu 3D" : !fits.test(c) ? "lỗi lắp / sai kiểu"
+                                    : recentlyNoLink(c) ? "vừa không có link" : "hết hàng";
+                            if (why != null) rejected.merge(why, 1, Integer::sum);
+                            else if (passed.size() < 6) passed.add(c.title());
+                        });
+                    }
+                    best = bestLinked(fit.apply(raw), null, 8);
                     if (best == null || rank(best.url()) < 3) {
                         var engine = bestLinked(fit.apply(search.engineSearch(q)), null, 8);
                         if (engine != null && (best == null || rank(engine.url()) > rank(best.url()))) best = engine;
@@ -3241,7 +3286,8 @@ public class ChatService {
                 // Dòng đang có link (chưa rõ còn hàng / chưa kiểm giá trang): chỉ đổi khi món tìm được hạng cao hơn
                 if (fallback != null && (noLink || rank(fallback.url()) > rank(now))) return fallback;
                 if (!noLink) return null;
-                log.info("Không tìm được link mua cho dòng {} (\"{}\") dù đã thử cửa hàng khác và sản phẩm khác", code, pick.title());
+                log.info("Không tìm được link mua cho dòng {} (\"{}\") dù đã thử cửa hàng khác và sản phẩm khác; bị loại {}; qua lọc nhưng không có link còn hàng {}",
+                        code, pick.title(), rejected, passed);
                 rememberNoLink(pick);
                 return null;
             }));
@@ -3258,20 +3304,39 @@ public class ChatService {
             String lineName = partName(code);
             String lineCore = coreQuery(lineCategory, lineSpec);
             String lineChip = "gpu".equals(lineCategory) && lineSpec != null ? gpuChip(lineSpec) : null;
+            // Card trống không ghi chip (ca thật n4: "Card 2 quạt, 8GB, 240 mm" tìm nguyên câu không ra gì): tìm theo các chip
+            // phổ thông đủ VRAM (VRAM ghi trong thông số, hoặc mức nhu cầu), cùng hãng NVIDIA nếu máy AI
+            Integer lineVram = lineSpec != null ? vram(lineSpec) : null;
+            if (lineVram == null && details.getOrDefault(code, Map.of()).get("vram_min") instanceof Number v) lineVram = v.intValue();
+            boolean lineCuda = Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("cuda"));
+            final Integer needVram = lineVram;
+            List<String> chipQueries = "gpu".equals(lineCategory) && lineChip == null
+                    ? POPULAR_CHIPS.stream().filter(x -> !lineCuda || !x.startsWith("rx")).map(ChatService::chipQuery).toList() : List.of();
             boolean needGlass = Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("need_glass"));
             int issuesNow = productIssues(picks).size();
             fixes.put(code, Io.async(() -> {
                 ProductSearch.Product fallback = null;
+                Map<String, Integer> rejected = new java.util.TreeMap<>();
+                List<String> passed = new ArrayList<>();
                 // Thang từ khoá: thông số trợ lý ghi -> lõi model (vd "VGA RTX 4060", "mainboard B550 DDR4") -> tên danh mục -> chung
-                for (String q : Stream.concat(Stream.of(lineSpec, lineCore, lineName, GENERIC_QUERY.get(code)), lineQueries(code, picks).stream())
+                for (String q : Stream.of(Stream.of(lineSpec, lineCore), chipQueries.stream(), Stream.of(lineName, GENERIC_QUERY.get(code)),
+                                lineQueries(code, picks).stream()).flatMap(x -> x)
                         .filter(Objects::nonNull).distinct().toList()) {
                     for (var source : List.<java.util.function.Function<String, List<ProductSearch.Product>>>of(search::search, search::engineSearch)) {
-                        var list = source.apply(q).stream()
-                                .filter(c -> c.title() != null && c.priceVnd() != null && !JUNK.matcher(c.title()).find())
-                                .filter(c -> plausible(lineCategory, c.priceVnd()) && ofKind(lineCategory, c.title()) && fitsCode(code, c.title()))
-                                .filter(c -> !wrongKind(code, c) && !recentlyNoLink(c) && fitsWith(picks, code, c, issuesNow))
-                                // Card: giữ đúng chip trợ lý ghi (RTX 4060 hãng nào cũng được, không thành 4060 Ti / 3050)
-                                .filter(c -> !"gpu".equals(lineCategory) || lineChip == null || lineChip.equals(gpuChip(c.title())))
+                        var found = source.apply(q);
+                        // Chẩn đoán: món bị loại ở bước lọc nào (log khi cả dòng không ra món nào)
+                        found.forEach(c -> {
+                            String why = emptyLineReject(code, lineCategory, c, picks, issuesNow);
+                            if (why != null) rejected.merge(why, 1, Integer::sum);
+                            else if (passed.size() < 6) passed.add(c.title());
+                        });
+                        var list = found.stream()
+                                .filter(c -> emptyLineReject(code, lineCategory, c, picks, issuesNow) == null)
+                                // Card: giữ đúng chip trợ lý ghi (RTX 4060 hãng nào cũng được, không thành 4060 Ti / 3050); không
+                                // ghi chip thì đủ VRAM, cùng hãng NVIDIA nếu máy AI
+                                .filter(c -> !"gpu".equals(lineCategory) || (lineChip == null
+                                        ? (needVram == null || vram(c.title()) != null && vram(c.title()) >= needVram) && cudaOk(details, code, c)
+                                        : lineChip.equals(gpuChip(c.title()))))
                                 // Bỏ hàng đã biết hết (một hãng hết hàng hay chiếm hết lượt thử). Người dùng thích kính: vỏ ghi rõ có
                                 // kính trước (tên vỏ mATX hiếm khi ghi "kính", nên không bắt buộc); rồi RẺ trước, bestLinked ưu tiên
                                 // món còn hàng trong các món rẻ (ca thật v14: tản 1,59 triệu "còn hàng" được chọn trước tản 350 nghìn)
@@ -3286,7 +3351,8 @@ public class ChatService {
                     }
                 }
                 if (fallback != null) return fallback;
-                log.info("Không tìm được sản phẩm có link cho dòng trống {} (\"{}\")", code, lineSpec != null ? lineSpec : lineName);
+                log.info("Không tìm được sản phẩm có link cho dòng trống {} (\"{}\"); bị loại {}; qua lọc nhưng không có link còn hàng {}",
+                        code, lineSpec != null ? lineSpec : lineName, rejected, passed);
                 return null;
             }));
         }
