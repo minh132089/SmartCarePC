@@ -3078,6 +3078,17 @@ public class ChatService {
             if (best == null || found.priceVnd() < best.priceVnd()) best = found;
             if (total - was + found.priceVnd() * gpu.qty() <= cap) break;
         }
+        // Máy AI (NVIDIA, VRAM >= 12): chip yếu hơn trong 15 hạng không có hàng hợp giá (ca thật n12: RTX 4070 Super 19,99tr,
+        // 4070 thường không có, 5060 Ti 16GB đắt hơn): thử thêm 4060 Ti 16GB, 3060 12GB (giảm hiệu năng, có ghi chú)
+        if (best == null && needs != null && needs.cuda()) {
+            for (String other : List.of("rtx4060ti", "rtx3060")) {
+                if (GPU_RANK.getOrDefault(other, 0) >= GPU_RANK.get(chip)) continue;
+                var found = otherChip(code, now, List.of(other), floor, was / gpu.qty() - 1, c.picks(), "nvidia");
+                if (found == null) continue;
+                if (best == null || found.priceVnd() < best.priceVnd()) best = found;
+                if (total - was + found.priceVnd() * gpu.qty() <= cap) break;
+            }
+        }
         if (best == null) {
             log.info("Vượt trần {}: không hạ được card {} (VRAM tối thiểu {}, chip yếu hơn {})", cap, chip, floor, gpuDowngrades(chip, 15));
             return c;
@@ -3429,6 +3440,7 @@ public class ChatService {
                 queries.addAll(lineQueries(code, picks));
                 Map<String, Integer> rejected = new java.util.TreeMap<>();
                 List<String> passed = new ArrayList<>();
+                List<String> overSamples = new ArrayList<>();
                 for (String q : queries.stream().distinct().toList()) {
                     var raw = search.search(q);
                     if (noLink) {
@@ -3441,6 +3453,10 @@ public class ChatService {
                                     : recentlyNoLink(c) ? "vừa không có link" : "hết hàng";
                             if (why != null) rejected.merge(why, 1, Integer::sum);
                             else if (passed.size() < 6) passed.add(c.title());
+                            // Chẩn đoán "vượt trần": món thay đúng cỡ mẫu 3D mà bị loại vì tiền (ghi tiền thêm / phần dư / giá dòng cũ)
+                            if ("vượt trần".equals(why) && overSamples.size() < 3 && fitsCode(code, c.title()))
+                                overSamples.add(c.title() + " " + c.priceVnd() + " (thêm " + extra.applyAsLong(c) + " / dư " + room
+                                        + ", dòng cũ " + was[1] + ", sl " + qty + ")");
                         });
                     }
                     best = bestLinked(fit.apply(raw), null, 8);
@@ -3470,8 +3486,8 @@ public class ChatService {
                 // Dòng đang có link (chưa rõ còn hàng / chưa kiểm giá trang): chỉ đổi khi món tìm được hạng cao hơn
                 if (fallback != null && (noLink || rank(fallback.url()) > rank(now))) return fallback;
                 if (!noLink) return null;
-                log.info("Không tìm được link mua cho dòng {} (\"{}\") dù đã thử cửa hàng khác và sản phẩm khác; bị loại {}; qua lọc nhưng không có link còn hàng {}",
-                        code, pick.title(), rejected, passed);
+                log.info("Không tìm được link mua cho dòng {} (\"{}\") dù đã thử cửa hàng khác và sản phẩm khác; bị loại {}; qua lọc nhưng không có link còn hàng {}; vượt trần mà đúng cỡ {}",
+                        code, pick.title(), rejected, passed, overSamples);
                 rememberNoLink(pick);
                 return null;
             }));
