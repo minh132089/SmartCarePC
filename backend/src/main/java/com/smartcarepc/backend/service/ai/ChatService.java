@@ -124,6 +124,9 @@ public class ChatService {
             tên model linh kiện: app tự hiện danh sách phương án còn hiển thị được, với tổng tiền và món khác nhau lấy đúng \
             từ thẻ cuối cùng (phương án bị ẩn đã được app ghi lý do). Chỉ nói app đã hạ / đổi món khi final_items có \
             downgrade_note, và không đoán dung lượng RAM / SSD hay món nào khác ngoài final_items.
+            8. Người dùng hỏi vì sao chỉ có hai phương án / thiếu phương án nào: giải thích về tài chính theo giá thị trường, dùng \
+            đúng số trong ghi chú của app ở lượt trước (cấu hình rẻ nhất bao nhiêu, mức tối đa bao nhiêu, cần thêm khoảng bao \
+            nhiêu); không bịa số, không hứa có phương án rẻ hơn khi app chưa dựng được.
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
@@ -592,7 +595,8 @@ public class ChatService {
                 duplicate.add(t);
                 outOfOrder.put(t, same ? "trùng cấu hình với Phù hợp trong mức tiền này, nên app chỉ hiện Phù hợp."
                         : "quality".equals(t) ? "chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp trong mức tiền này, nên app không hiển thị."
-                        : "chưa tìm được cấu hình rẻ hơn Phù hợp rõ rệt, nên app không hiển thị.");
+                        : "với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là " + millions(ta) + ", gần bằng Phù hợp ("
+                        + millions(tb) + "), không rẻ hơn rõ rệt. Vì vậy app chỉ đưa hai phương án Phù hợp và Chất lượng.");
             }
         }
         if (!outOfOrder.isEmpty()) {
@@ -1519,6 +1523,13 @@ public class ChatService {
             var noBuy = missingBuy(c);
             boolean fits = c.result() == null || c.result().compatible();
             boolean shortOfMoney = minShown == null || cap == null || minShown > cap;
+            // Rẻ: cấu hình rẻ nhất vẫn vượt trần Rẻ (90% ngân sách) mà Phù hợp hiện được -> giá thị trường đã ở mức sàn, chỉ
+            // đưa hai phương án (người dùng chọn 22/10/2026), giải thích bằng số thật
+            if ("cheap".equals(tier) && minShown != null && shortOfMoney && noBuy.isEmpty() && fits && cap != null && t > cap) {
+                return "với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là " + millions(t) + ", vượt mức tối đa "
+                        + millions(cap) + " của phương án Rẻ (90% ngân sách). Ngân sách này đã ở sát giá sàn, nên app chỉ đưa hai phương án "
+                        + "Phù hợp và Chất lượng.";
+            }
             if (shortOfMoney && noBuy.isEmpty() && fits && productIssues(c.picks()).isEmpty() && cap != null && t > cap) {
                 // Ngân sách cần để phương án này vừa mức tối đa (Rẻ = 90% ngân sách, Chất lượng = ngân sách + 3 triệu)
                 long need = switch (tier) {
