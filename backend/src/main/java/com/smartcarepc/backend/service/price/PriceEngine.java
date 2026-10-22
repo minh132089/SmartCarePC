@@ -99,6 +99,88 @@ public class PriceEngine {
         this.enabled = enabled;
     }
 
+    /**
+     * File lưu bộ nhớ đệm giá (kết quả tìm + giá / còn hàng đã đọc trên trang) để khởi động lại backend không phải tìm lại từ đầu:
+     * mọi lượt tìm đều đi từ IP máy chủ, tìm lại cả nghìn từ khoá sau mỗi lần khởi động làm máy tìm kiếm / cửa hàng chặn.
+     * Để trống thì không lưu (test tự tạo PriceEngine).
+     */
+    @Value("${app.price.cache-file:data/price-cache.json}")
+    private String cacheFile;
+    private final java.util.concurrent.ScheduledExecutorService saver = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "price-cache-saver");
+        t.setDaemon(true);
+        return t;
+    });
+
+    private record Snapshot(Map<String, Cached> searches, Map<String, Offer> offers, Map<String, Long> pageRead) {
+    }
+
+    private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
+
+    @jakarta.annotation.PostConstruct
+    void loadCache() {
+        if (cacheFile == null || cacheFile.isBlank()) return;
+        var file = java.nio.file.Path.of(cacheFile);
+        if (java.nio.file.Files.exists(file)) {
+            try {
+                var snap = JSON.readValue(file.toFile(), Snapshot.class);
+                Instant oldest = Instant.now().minus(CACHE);
+                if (snap.searches() != null) snap.searches().forEach((k, v) -> { if (v.at().isAfter(oldest) && !v.offers().isEmpty()) cache.put(k, v); });
+                long verifiedSince = System.currentTimeMillis() - VERIFIED_TTL.toMillis();
+                if (snap.pageRead() != null) snap.pageRead().forEach((u, at) -> { if (at > verifiedSince) pageRead.put(u, at); });
+                if (snap.offers() != null) byUrl.putAll(snap.offers());
+                log.info("Nạp bộ nhớ đệm giá: {} từ khoá, {} link, {} trang đã đọc", cache.size(), byUrl.size(), pageRead.size());
+            } catch (RuntimeException e) {
+                log.warn("Không đọc được bộ nhớ đệm giá {}: {}", file, e.getMessage());
+            }
+        }
+        saver.scheduleWithFixedDelay(this::saveCache, 5, 5, TimeUnit.MINUTES);
+    }
+
+    @jakarta.annotation.PreDestroy
+    void saveCache() {
+        if (cacheFile == null || cacheFile.isBlank()) return;
+        try {
+            prune();
+            Map<String, Cached> keep = new LinkedHashMap<>();
+            cache.forEach((k, v) -> { if (!v.offers().isEmpty()) keep.put(k, v); });
+            var file = java.nio.file.Path.of(cacheFile);
+            if (file.getParent() != null) java.nio.file.Files.createDirectories(file.getParent());
+            var tmp = file.resolveSibling(file.getFileName() + ".tmp");
+            JSON.writeValue(tmp.toFile(), new Snapshot(keep, new LinkedHashMap<>(byUrl), new LinkedHashMap<>(pageRead)));
+            java.nio.file.Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception e) {
+            log.warn("Không lưu được bộ nhớ đệm giá: {}", e.getMessage());
+        }
+    }
+
+    /** Bỏ kết quả hết hạn; còn quá MAX_CACHED từ khoá thì bỏ những từ khoá cũ nhất (không xoá sạch như trước) */
+    private void prune() {
+        Instant now = Instant.now();
+        cache.entrySet().removeIf(e -> e.getValue().at().isBefore(now.minus(e.getValue().offers().isEmpty()
+                ? (e.getValue().incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE)));
+        if (cache.size() > MAX_CACHED) {
+            cache.entrySet().stream().sorted(Map.Entry.comparingByValue(Comparator.comparing(Cached::at)))
+                    .limit(cache.size() - MAX_CACHED * 4L / 5).map(Map.Entry::getKey).toList().forEach(cache::remove);
+        }
+        if (byUrl.size() > 8000) {
+            byUrl.entrySet().stream().sorted(Comparator.comparing((Map.Entry<String, Offer> e) ->
+                    e.getValue().checkedAt() == null ? Instant.EPOCH : e.getValue().checkedAt()))
+                    .limit(byUrl.size() - 6000).map(Map.Entry::getKey).toList().forEach(byUrl::remove);
+        }
+    }
+
+    static final int MAX_CACHED = 4000;
+
+    /**
+     * Khoá bộ nhớ đệm: chữ thường, bỏ dấu câu / ngoặc, gộp khoảng trắng ("RTX 4060 8GB, 2 quạt" và "rtx 4060 8gb 2 quạt" dùng
+     * chung kết quả)
+     */
+    static String cacheKey(String query) {
+        return Normalizer.normalize(query, Normalizer.Form.NFC).toLowerCase().replaceAll("[,;:()\\[\\]{}|/+\"'“”]+", " ")
+                .replaceAll("\\s+", " ").strip();
+    }
+
     public boolean enabled() {
         return enabled;
     }
@@ -153,7 +235,7 @@ public class PriceEngine {
                     }
                     return null;
                 }
-                if (byUrl.size() > 5000) byUrl.clear();
+                if (byUrl.size() > 8000) prune();
                 if (pageRead.size() > 5000) pageRead.clear();
                 pageRead.put(clean(url), System.currentTimeMillis());
                 byUrl.put(url, page);
@@ -284,7 +366,7 @@ public class PriceEngine {
                             .thenComparingLong(Offer::priceVnd))
                     .limit(MAX).toList();
         }
-        String key = query.strip().toLowerCase();
+        String key = cacheKey(query);
         var hit = cache.get(key);
         if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? (hit.incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE))) {
             return hit.offers();
@@ -322,7 +404,7 @@ public class PriceEngine {
             if (waited > 1000) log.info("So giá \"{}\": chờ lượt {} ms", query, waited);
             log.info("So giá \"{}\": {} sản phẩm trong {} ms{}", query, found.size(), (System.nanoTime() - t0) / 1_000_000,
                     incomplete.get() ? " (có nguồn hết giờ / lỗi)" : "");
-            if (cache.size() > 500) cache.clear();
+            if (cache.size() > MAX_CACHED) prune();
             // Kết quả rỗng chỉ nhớ EMPTY_CACHE (có thể là cửa hàng chậm nhất thời), có hàng nhớ CACHE. Rỗng vì nguồn hết giờ / lỗi
             // thì không nhớ: lần tìm sau thử lại thật (ca thật n18: dòng card trống mọi truy vấn trả rỗng trong cùng câu tư vấn)
             // Rỗng vì nguồn lỗi chỉ nhớ FAILED_CACHE: đủ để không gửi lại cùng từ khoá liên tục vào cửa hàng (ca thật n32: cùng một
@@ -385,7 +467,7 @@ public class PriceEngine {
             pageRead.put(clean(page.url()), System.currentTimeMillis());
             readNow.add(clean(page.url()));
         }
-        if (byUrl.size() > 5000) byUrl.clear();
+        if (byUrl.size() > 8000) prune();
         // Link đã đọc chính trang sản phẩm (còn hạn VERIFIED_TTL) mà lần này chỉ thấy trên trang tìm kiếm: giữ bản đọc trang
         // (giá trang, còn / hết hàng), không để kết quả danh sách ghi đè (ca thật v8: CPU GEARVN trang ghi InStock thành null)
         var result = rank(query, all.values()).stream().map(o -> {

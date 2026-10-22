@@ -56,4 +56,11 @@ class ReadPageTests {
 
         verify(fetcher, times(1)).page(eq(URL), any());
     }
+
+    @org.junit.jupiter.api.Test
+    void khoaBoNhoDemBoDauCauVaKhoangTrang() {
+        org.assertj.core.api.Assertions.assertThat(PriceEngine.cacheKey("RTX 4060 8GB, 2 quạt"))
+                .isEqualTo(PriceEngine.cacheKey("  rtx 4060   8gb 2 quạt "));
+        org.assertj.core.api.Assertions.assertThat(PriceEngine.cacheKey("Mainboard (ITX) B760I/DDR4")).isEqualTo("mainboard itx b760i ddr4");
+    }
 }

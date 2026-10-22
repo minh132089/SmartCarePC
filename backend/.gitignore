@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Bộ nhớ đệm giá lưu trên máy (PriceEngine)
+data/
