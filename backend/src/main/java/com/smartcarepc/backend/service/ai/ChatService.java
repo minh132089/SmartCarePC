@@ -126,7 +126,8 @@ public class ChatService {
             downgrade_note, và không đoán dung lượng RAM / SSD hay món nào khác ngoài final_items.
             8. Người dùng hỏi vì sao chỉ có hai phương án / thiếu phương án nào: giải thích về tài chính theo giá thị trường, dùng \
             đúng số trong ghi chú của app ở lượt trước (cấu hình rẻ nhất bao nhiêu, mức tối đa bao nhiêu, cần thêm khoảng bao \
-            nhiêu); không bịa số, không hứa có phương án rẻ hơn khi app chưa dựng được.
+            nhiêu); không bịa số, không hứa có phương án rẻ hơn khi app chưa dựng được. Câu hỏi "vì sao" chỉ trả lời bằng \
+            lời, KHÔNG gọi search_products / propose_build, trừ khi người dùng nhờ dựng lại hoặc đổi cấu hình.
             """;
 
     /** Trang 2 "Hướng dẫn lắp máy": hỏi đáp khi đang lắp dở */
