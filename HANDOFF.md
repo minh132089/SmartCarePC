@@ -1,6 +1,6 @@
 # Bàn giao dự án PC SmartCare (cho agent khác đọc)
 
-Cập nhật 2026-10-03. Đọc file này trước, rồi mới đọc code.
+Cập nhật 2026-10-03 (phần 3D); phần trợ lý tư vấn AI cập nhật 2026-10-23, xem mục "Trợ lý tư vấn AI (backend)" ở cuối. Đọc file này trước, rồi mới đọc code.
 
 ## Dự án là gì
 
@@ -105,12 +105,46 @@ Khi **đã lắp xong** cũng không vật nào được cắm ngang qua thân l
 - Đầu nối (ổ cắm dây) còn đơn giản: chưa có hốc và khóa chi tiết, chân bộ chia Y (nhánh B chỉ chân 1, 2, 4).
 - Đã so đủ 22 tờ Codex của 6 họ với model (2026-10-04). Đã sửa theo bản vẽ: nóc/đáy Mini khe nhôm, cổng USB nằm ngang (Mini, Slim), vít quạt SFX, đế Slim, hub quạt cổng ở mép, thêm dây AC nối dài cho Mini/Slim. Còn khác có chủ ý: đầu quạt ITX ở y −80 (bản vẽ đè lên khe M.2), ống đồng tản tháp không vòng chữ U.
 - Nóc mới chưa chạy lại kiểm tra va chạm với dây nối cổng I/O trên nóc (dây USB, nút nguồn, audio chạy từ điểm gom (190; 222; −30)). Cần kiểm tra các dây này khớp vị trí 5 cổng mới (Reset −68, USB −32, Power 0, USB +32, Headset +68).
-- Chưa có git repo.
+- Đã có git: remote `github.com/minh132089/SmartCarePC`, nhánh làm việc `guide-reveal`, bản phát hành `release-v1` (trỏ cùng commit). Nhánh mặc định `visual-3d` đang cũ.
 
 ## Ghi chú về cách làm việc với người dùng
 
 Người dùng nói tiếng Việt, hay gửi ảnh chụp màn hình để chỉ lỗi và muốn thấy ảnh kết quả sau mỗi thay đổi. Muốn mô hình chân thực nhưng **không giống hãng cụ thể** (riêng VGA được phép dáng giống card NVIDIA phổ thông, không logo, không chữ). Đừng tự cài hoặc tải gì khi chưa hỏi. Mật khẩu hay đăng nhập thì người dùng tự làm.
 
+## Trợ lý tư vấn AI (backend), tình trạng 2026-10-23
+
+Backend Spring Boot 4 / Java 21 ở `backend/` (cổng 8083, MySQL `smartcarepc`, SearXNG cổng 8888 trong Colima). AI: DeepSeek
+v4.1 flash qua vilao (khoá trong `backend/.env`, không commit, không in ra). Logic chính: `backend/src/main/java/com/smartcarepc/backend/service/ai/ChatService.java`.
+
+Luồng một câu tư vấn: AI hiểu nhu cầu -> `search_products` (tìm giá thật qua `price/PriceEngine` + `ProductSearch`) -> AI gọi
+`propose_build` cho 3 phương án (Rẻ <= 90% ngân sách, Phù hợp <= ngân sách, Chất lượng <= ngân sách + 3tr) -> app chốt từng
+phương án trong `finalizeTier` (link cửa hàng, giá đọc trên trang, còn hàng, sửa lệch DDR, nâng RAM/SSD/card cho đủ nhu cầu, các
+bước cứu khi vượt trần trong tối đa 40 giây: `toDdr4`, `lowerGpu`, `downgrade`, `lowerCpuForNeeds`, ép giá, `compactSwitch`) ->
+dựng lại phương án lệch thứ tự (`cheapFromBalanced`, `balancedFromQuality`, `qualityFromBalanced`) -> AI viết lời khuyên ngắn ->
+app tự viết dòng giới thiệu từng phương án từ thẻ (`withTierRows`) và lý do phương án bị ẩn (`notShownReason`).
+
+Quy tắc MVP (không được bỏ): mọi món phải có link mua, giá đọc trên trang, xác nhận còn hàng, hàng mới, lắp chung được, khớp
+mẫu 3D; phương án vượt trần thì không hiện và app nói thật lý do (thiếu tiền thì nói cần nới bao nhiêu). Ngân sách sát giá sàn
+thì chỉ đưa Phù hợp + Chất lượng. Người dùng hỏi "vì sao" thì trợ lý chỉ giải thích (không cho gọi công cụ, `whyOnly`).
+
+Nhu cầu đọc từ lời người dùng (`needs`): game 8GB VRAM (game nhẹ / esports 6GB), máy AI 12GB + chỉ NVIDIA, học / văn phòng
+RAM 8GB SSD 256GB. Hãng card người dùng đòi: `gpuVendor` (có cả cách viết sai "nvida"...), lưu vào details `gpu_vendor`.
+
+Khác: popup chấm sao khi tick xong mọi bước lắp (`src/ui/study/StudyBar.tsx` RatingDialog), trang xem phản hồi `/feedback`
+(`src/ui/study/FeedbackAdmin.tsx`, khoá `FEEDBACK_EXPORT_KEY` trong `backend/.env`, gửi qua header `X-Export-Key`), bộ nhớ
+đệm giá lưu ở `backend/data/price-cache.json`. Demo công khai: `sh tools/demo.sh` (Cloudflare Pages smartcarepc.pages.dev +
+quick tunnel về máy này; máy phải bật).
+
+Đo chất lượng: thư mục `~/Documents/PCsmartcare-testloop` (`run6.sh` 3 câu cũ, `run-new.sh` câu mới, `ONLY="itx ai"` để chọn
+câu, chấm bằng `score.py` / `extra.py` / `tally.py`). Đo dày quá thì máy tìm kiếm (Brave, DuckDuckGo, Google CSE) và web cửa
+hàng chặn theo IP máy này: nghỉ vài tiếng giữa các vòng lớn. Kết quả gần nhất: 3 câu cũ 18/18 nhiều vòng; ai / itx / itx30 /
+low11 24/24; trung bình ~100 giây một câu. Test backend: `cd backend && sh mvnw test` (180 test).
+
+**Việc đang dở (2026-10-23):** câu "cần máy chơi game 20 triệu có card NVIDA" giờ giữ đúng NVIDIA (commit `d0d4397`, `acad1f9`),
+nhưng chỉ ra 1 phương án vì card NVIDIA 8GB rẻ nhất còn hàng lúc đó 8-9tr (RTX 3050 8GB hết hàng, chỉ còn bản 6GB). Người dùng
+chưa quyết: cho phép card 6GB khi đã chốt NVIDIA và ngân sách chật (sửa trong `needs` / `lowerGpu`), hay giữ chuẩn 8GB và
+báo cần ~21-22tr. Test liên quan: `hangCardNguoiDungDoi` trong `ChatServiceTests.java`.
+
 ## Lịch sử chat
 
-Toàn bộ đoạn chat gốc nằm ở `~/.claude/projects/-Users-yuuki2-Documents/6a5bee9f-71d6-4801-b4d8-68c4e12bf8f0.jsonl` (định dạng JSONL, rất dài). Nếu cần chi tiết quyết định cũ, dùng `grep` trong file này thay vì đọc hết. File này đã tóm đủ phần cần để làm tiếp.
+Đoạn chat phần 3D nằm ở `~/.claude/projects/-Users-yuuki2-Documents/6a5bee9f-71d6-4801-b4d8-68c4e12bf8f0.jsonl`; phần trợ lý AI ở `~/.claude/projects/-Users-yuuki2-Documents/b0c77e04-cb7b-4db0-be75-7089e0f84228.jsonl` (định dạng JSONL, rất dài). Nếu cần chi tiết quyết định cũ, dùng `grep` trong file này thay vì đọc hết. File này đã tóm đủ phần cần để làm tiếp.
