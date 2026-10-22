@@ -25,7 +25,7 @@ class FeedbackDedupTests {
         var repo = mock(FeedbackRepository.class);
         var existing = Feedback.builder().answers("{}").build();
         existing.setId(7L);
-        when(repo.findFirstByAnswersContaining("\"submission_id\":\"abc12345-xyz\"")).thenReturn(Optional.of(existing));
+        when(repo.findFirstBySubmissionId("abc12345-xyz")).thenReturn(Optional.of(existing));
         var service = new FeedbackService(repo, JsonMapper.builder().build(), "");
 
         var saved = service.save(new FeedbackRequest(null, null, "gaming", Map.of("stars", 4, "submission_id", "abc12345-xyz")));

@@ -21,7 +21,8 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder
 @NoArgsConstructor
 @Entity
-@Table(name = "feedback", indexes = @Index(name = "idx_feedback_participant", columnList = "participant_code"))
+@Table(name = "feedback", indexes = {@Index(name = "idx_feedback_participant", columnList = "participant_code"),
+        @Index(name = "uk_feedback_submission", columnList = "submission_id", unique = true)})
 public class Feedback extends BaseEntity {
 
     @Id
@@ -42,4 +43,8 @@ public class Feedback extends BaseEntity {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String answers;
+
+    /** Mã một lần gửi do app tạo (giữ nguyên khi bấm gửi lại): UNIQUE để hai request trùng không lưu hai dòng */
+    @Column(name = "submission_id", length = 64, unique = true)
+    private String submissionId;
 }

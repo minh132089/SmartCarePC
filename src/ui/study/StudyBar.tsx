@@ -4,7 +4,7 @@ import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
 import { FEEDBACK } from './questions'
 import { QuestionList } from './QuestionList'
-import { CODE_PATTERN, PHASE_LABEL, sendFeedback, useSending, useStudy, type Phase } from './study'
+import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, PrimaryButton, Question, QuietButton } from './StudyParts'
 
 /** Nút nhỏ "Tham gia thử nghiệm" cho người chưa có mã (người dùng bình thường bỏ qua được) */
@@ -109,12 +109,13 @@ function FeedbackDialog() {
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
+  const [submissionId] = useState(newSubmissionId)
   const { answers, empty } = collect(FEEDBACK, a)
   // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
   const close = () => !busy && open(null)
 
   const submit = async () => {
-    const r = await sendFeedback({ machine, answers })
+    const r = await sendFeedback({ machine, answers }, submissionId)
     if (r === 'failed') return setFailed(true)
     markAnswered('feedback')
     open(null)
@@ -184,12 +185,13 @@ function RatingDialog() {
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
+  const [submissionId] = useState(newSubmissionId)
   const { answers } = collect(FEEDBACK, a)
   // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
   const close = () => !busy && open(null)
 
   const submit = async () => {
-    const r = await sendFeedback({ machine, answers: { stars, source: 'guide_done', ...answers } })
+    const r = await sendFeedback({ machine, answers: { stars, source: 'guide_done', ...answers } }, submissionId)
     // Không tới được máy chủ và không cất được trên máy: giữ form và câu trả lời để thử lại
     if (r === 'failed') return setFailed(true)
     markAnswered('feedback')

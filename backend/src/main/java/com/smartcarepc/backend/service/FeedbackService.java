@@ -51,8 +51,9 @@ public class FeedbackService {
     public FeedbackSaved save(FeedbackRequest request) {
         // Cùng một lần gửi (mã submission_id do app tạo) tới hai lần (bấm hai lần, gửi lại từ hàng đợi): trả bản đã lưu
         Object sid = request.answers().get("submission_id");
-        if (sid instanceof String id && SUBMISSION_ID.matcher(id).matches()) {
-            var dup = repository.findFirstByAnswersContaining("\"submission_id\":\"" + id + "\"");
+        String submission = sid instanceof String id && SUBMISSION_ID.matcher(id).matches() ? id : null;
+        if (submission != null) {
+            var dup = repository.findFirstBySubmissionId(submission);
             if (dup.isPresent()) return new FeedbackSaved(dup.get().getId());
         }
         String answers = json.writeValueAsString(request.answers());
@@ -64,8 +65,17 @@ public class FeedbackService {
                 .phase(blankToNull(request.phase()))
                 .machine(blankToNull(request.machine()))
                 .answers(answers)
+                .submissionId(submission)
                 .build());
         return new FeedbackSaved(saved.getId());
+    }
+
+    /** Bản đã lưu cùng submission_id với request (sau khi vướng ràng buộc UNIQUE do gửi trùng cùng lúc) */
+    @Transactional(readOnly = true)
+    public java.util.Optional<FeedbackSaved> existing(FeedbackRequest request) {
+        Object sid = request.answers().get("submission_id");
+        if (!(sid instanceof String id) || !SUBMISSION_ID.matcher(id).matches()) return java.util.Optional.empty();
+        return repository.findFirstBySubmissionId(id).map(f -> new FeedbackSaved(f.getId()));
     }
 
     /** Một dòng phản hồi cho trang xem dữ liệu (mới nhất trước) */

@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,7 +29,12 @@ public class FeedbackController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public FeedbackSaved create(@Valid @RequestBody FeedbackRequest request) {
-        return feedbackService.save(request);
+        try {
+            return feedbackService.save(request);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Hai request cùng submission_id tới cùng lúc: bản sau vướng ràng buộc UNIQUE, trả bản đã lưu
+            return feedbackService.existing(request).orElseThrow(() -> e);
+        }
     }
 
     /** Dữ liệu cho trang xem phản hồi (/feedback). Khoá gửi qua header để không lộ trong địa chỉ / log truy cập */
@@ -39,11 +43,9 @@ public class FeedbackController {
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(feedbackService.list(key));
     }
 
-    /** Tải CSV: khoá gửi qua header X-Export-Key (trang /feedback); ?key=... vẫn nhận để mở tay trong trình duyệt */
+    /** Tải CSV: khoá chỉ nhận qua header X-Export-Key (trang /feedback), không qua địa chỉ để khỏi lưu vào log truy cập */
     @GetMapping("/export.csv")
-    public ResponseEntity<String> export(@RequestParam(required = false) String key,
-            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Export-Key", required = false) String headerKey) {
-        if (headerKey != null && !headerKey.isBlank()) key = headerKey;
+    public ResponseEntity<String> export(@org.springframework.web.bind.annotation.RequestHeader(value = "X-Export-Key", required = false) String key) {
         return ResponseEntity.ok()
                 .contentType(new MediaType("text", "csv", java.nio.charset.StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"pcsmartcare-feedback.csv\"")

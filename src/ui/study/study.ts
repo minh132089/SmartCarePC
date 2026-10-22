@@ -106,10 +106,12 @@ type Payload = {
 }
 
 async function post(p: Payload) {
+  // Quá 20 giây thì huỷ (mạng treo): không để hộp thoại khoá mãi ở trạng thái "Đang gửi"
   const res = await fetch('/api/feedback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(p),
+    signal: AbortSignal.timeout(20_000),
   })
   // 400 là dữ liệu sai: gửi lại cũng vô ích nên bỏ, không giữ trong hàng đợi
   if (!res.ok && res.status !== 400) throw new Error(String(res.status))
@@ -140,11 +142,15 @@ export const useSending = create<{ sending: boolean }>(() => ({ sending: false }
  * đợi, bấm hai lần). Không tới được máy chủ thì cất vào hàng đợi trên máy để gửi bù.
  * Trả về 'sent' (máy chủ đã nhận), 'queued' (đã cất trên máy), 'failed' (không gửi được và không cất được: giữ form để thử lại).
  */
-export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phase'>): Promise<SendResult> {
+/** Mã một lần gửi: tạo một lần khi mở hộp thoại, giữ nguyên khi bấm "Gửi lại" để máy chủ nhận ra bản trùng */
+export function newSubmissionId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phase'>, id: string = newSubmissionId()): Promise<SendResult> {
   if (useSending.getState().sending) return 'failed'
   useSending.setState({ sending: true })
   const { code, phase } = useStudy.getState()
-  const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
   const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...data.answers, submission_id: id } }
   try {
     await post(payload)
