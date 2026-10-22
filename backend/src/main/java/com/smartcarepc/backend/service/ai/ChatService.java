@@ -2563,9 +2563,11 @@ public class ChatService {
             "tower_air_155", List.of("tản nhiệt ID-COOLING SE-214", "tản nhiệt Jonsbo CR-1200", "tản nhiệt Deepcool AG400"),
             "psu_atx", List.of("nguồn máy tính 550W 80 Plus Bronze", "nguồn máy tính 650W 80 Plus"),
             "case_compact_tower", List.of("vỏ máy tính mATX", "vỏ case micro ATX giá rẻ"),
-            "case_mini_sff", List.of("case Cooler Master NR200P", "vỏ case SilverStone SG13", "vỏ máy tính mini ITX", "case ITX SFX", "vỏ case ITX"),
-            "low_profile_47", List.of("tản nhiệt low profile", "tản nhiệt CPU thấp", "tản nhiệt Noctua NH-L9", "tản nhiệt ID-COOLING IS-40X"),
-            "psu_sfx", List.of("nguồn Cooler Master V550 SFX Gold", "nguồn Corsair SF600", "nguồn SilverStone SX500-G", "nguồn SFX",
+            "case_mini_sff", List.of("Silverstone Sugo 13", "Cooler Master NR200P", "Jonsbo A4", "Lian Li A4-H2O", "case Cooler Master NR200P",
+                    "vỏ case SilverStone SG13", "vỏ máy tính mini ITX", "case ITX SFX", "vỏ case ITX"),
+            "low_profile_47", List.of("ID-COOLING IS-40X V3", "Noctua NH-L9i", "Thermalright AXP90", "tản nhiệt low profile", "tản nhiệt CPU thấp",
+                    "tản nhiệt Noctua NH-L9", "tản nhiệt ID-COOLING IS-40X"),
+            "psu_sfx", List.of("Cooler Master V550 SFX Gold", "Thermalright TR-SGFX 650", "Corsair SF600", "SilverStone SX500-G", "nguồn SFX",
                     "nguồn SFX 80 Plus", "PSU SFX 600W"),
             "mb_itx", List.of("mainboard mini ITX", "bo mạch chủ ITX"));
 
@@ -2577,6 +2579,11 @@ public class ChatService {
                 .map(e -> ProductRules.read("ram", e.getValue().title()).ramType()).filter(Objects::nonNull).findFirst().orElse(null);
         if (socket != null && "mb_itx".equals(code)) {
             out.addFirst("mainboard mini ITX " + socket + (ddr == null ? "" : " " + ddr));
+            // Tên model bo ITX có thật: ô tìm của cửa hàng khớp tên model, vẫn ra hàng khi máy tìm kiếm (SearXNG) bị giới hạn
+            List<String> models = new ArrayList<>();
+            if (ddr != null) models.addAll(ITX_MODELS.getOrDefault(socket + " " + ddr, List.of()));
+            else ITX_MODELS.forEach((k, v) -> { if (k.startsWith(socket + " ")) models.addAll(v); });
+            for (String m : models.reversed()) out.addFirst("mainboard " + m);
             // Mã bo ITX theo chipset (chữ I sau chipset), tìm trúng hơn từ khoá chung
             for (String chip : ITX_CHIPSETS.getOrDefault(socket, List.of()).reversed()) out.addFirst("mainboard " + chip + (ddr == null ? "" : " " + ddr));
         }
@@ -2609,6 +2616,13 @@ public class ChatService {
             "LGA1700 DDR4", List.of("MSI PRO B760-P DDR4", "ASUS PRIME B760-PLUS D4", "Gigabyte B760 GAMING X DDR4"),
             "LGA1700 DDR5", List.of("MSI PRO B760-P WIFI DDR5", "ASUS PRIME B760-PLUS", "Gigabyte B760 GAMING X AX"),
             "AM5 DDR5", List.of("MSI PRO B650-S WIFI", "ASUS PRIME B650-PLUS", "Gigabyte B650 GAMING X AX"));
+
+    /** Tên model bo Mini ITX có thật theo socket + DDR, rẻ trước (chỉ là từ khoá tìm; món tìm được vẫn phải đúng cỡ, có link, còn hàng) */
+    private static final Map<String, List<String>> ITX_MODELS = Map.of(
+            "LGA1700 DDR4", List.of("Asus PRIME H610I-PLUS D4", "Gigabyte B760I AORUS PRO DDR4", "MSI MPG B760I EDGE WIFI DDR4"),
+            "LGA1700 DDR5", List.of("Asus ROG STRIX B760-I GAMING WIFI", "Gigabyte B760I AORUS PRO", "MSI MPG B760I EDGE WIFI"),
+            "AM4 DDR4", List.of("Gigabyte B550I AORUS PRO AX", "Asus ROG STRIX B550-I GAMING"),
+            "AM5 DDR5", List.of("ASRock B650I Lightning WiFi", "Gigabyte B650I AORUS ULTRA", "Asus ROG STRIX B650E-I GAMING WIFI"));
 
     /** Chipset bo Mini ITX hay có bán theo socket, rẻ trước */
     private static final Map<String, List<String>> ITX_CHIPSETS = Map.of("LGA1700", List.of("H610I", "B760I", "B760M-ITX", "B760-I"),
