@@ -1233,12 +1233,17 @@ public class ChatService {
             // Phù hợp đã ở mức sàn mà còn dư ngân sách (ca thật v20: Phù hợp 10,25 / ngân sách 12 triệu, không hạ thêm được):
             // dùng chính Phù hợp làm Rẻ nếu vừa trần Rẻ, dựng Phù hợp mới bằng nâng cấp trong ngân sách. Chỉ nhận khi cả hai
             // hiện được và cách nhau ít nhất TIER_GAP; Chất lượng dựng lại sau đó nếu cần (qualityFromBalanced)
-            if (capCheap != null && tb <= capCheap) {
+            // Nền Rẻ: chính Phù hợp nếu vừa trần Rẻ, không thì Rẻ hiện có nếu hiện được (ca thật n21 low 11tr: Phù hợp 9,908 >
+            // trần Rẻ 9,9 nên không dùng được, Rẻ 9,888 hiện được nhưng sát Phù hợp)
+            Checked base0 = capCheap != null && tb <= capCheap ? b
+                    : c != null && showable(c, capCheap) ? c : null;
+            if (base0 != null) {
+                long t0 = total(base0.request(), base0.details(), base0.picks());
                 List<String> upNotes = new ArrayList<>();
-                var up = upgraded(b, tierCap(b.budgetVnd(), "balanced"), tb + TIER_GAP, turn.needs, upNotes);
+                var up = upgraded(base0, tierCap(b.budgetVnd(), "balanced"), Math.max(tb, t0 + TIER_GAP), turn.needs, upNotes);
                 if (up != null) {
-                    log.info("Phù hợp sát sàn: dùng làm Rẻ ({}), Phù hợp mới {} ({})", tb, total(up.request(), up.details(), up.picks()), upNotes);
-                    turn.tiers.put("cheap", b);
+                    log.info("Phù hợp sát sàn: dùng {} làm Rẻ, Phù hợp mới {} ({})", t0, total(up.request(), up.details(), up.picks()), upNotes);
+                    turn.tiers.put("cheap", base0);
                     turn.tiers.put("balanced", up);
                 }
             }
