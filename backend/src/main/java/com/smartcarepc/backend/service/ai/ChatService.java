@@ -1360,7 +1360,9 @@ public class ChatService {
             Integer target = ("ram".equals(kind) ? List.of(16, 32) : List.of(512, 1000, 2000)).stream()
                     .filter(t -> t > have * 1.05).findFirst().orElse(null);
             if (target == null) return null;
-            found = lowerTier(code, kind, now, target, c.picks(), was + room + 1, c.siblings().getOrDefault(code, List.of()), target);
+            // Giá nâng hợp lý: không quá 1,5 lần mức tăng theo dung lượng (ca thật v29: RAM 32GB 13,89 triệu thay RAM 16GB 3,39 triệu)
+            long fair = Math.round(was * (target / (double) have) * 1.5);
+            found = lowerTier(code, kind, now, target, c.picks(), Math.min(was + room, fair) + 1, c.siblings().getOrDefault(code, List.of()), target);
             if (found == null) return null;
             String ddr = "ram".equals(kind) ? ProductRules.read("ram", now.title()).ramType() : null;
             spec = "ram".equals(kind) ? target + "GB" + (ddr == null ? "" : " " + ddr) : "SSD " + label(target);
