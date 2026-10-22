@@ -435,7 +435,7 @@ class ChatServiceTests {
                 "SSD Kingston NV2 1TB", "A", 1_550_000L, null, "https://a.vn/ssd", null, true, 36, at));
         // Trang card ghi giá sai đơn vị (x100): bỏ, giữ giá cũ và ghi là chưa kiểm tra
         when(search.offer("https://b.vn/gpu")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
-                "Card RTX 4060", "B", 800_000_000L, null, "https://b.vn/gpu", null, null, null, at));
+                "Card RTX 4060", "B", 800_000_000L, null, "https://b.vn/gpu", null, true, null, at));
         reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"Card\"}"),
                 toolCall("p1", "propose_build", """
                 {"summary":"Game","items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Nhanh","product_id":"s1-1"},
@@ -1215,6 +1215,8 @@ class ChatServiceTests {
         when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM")).thenReturn(List.of(new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
+        when(search.offer("https://a.vn/ram16")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, null, "https://a.vn/ram16", null, true, 36, java.time.Instant.now()));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":4000000,"items":[{"code":"ram_ddr4","quantity":2,"spec":"2x16GB DDR4","reason":"Đủ","product_id":"s1-1"}]}

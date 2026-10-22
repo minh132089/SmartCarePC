@@ -428,7 +428,8 @@ public class ChatService {
         // Câu hỏi tiếp chỉ hỏi "vì sao" (vd "Sao không có phương án Rẻ?") mà không nhờ đổi gì: trả lời bằng lời, không cho gọi
         // công cụ (ca thật n24: trợ lý bỏ qua lời dặn ADVICE bước 8, dựng lại cả ba phương án thay vì giải thích tài chính)
         boolean whyOnly = "advice".equals(request.mode()) && request.messages().stream().anyMatch(m -> "assistant".equals(m.role()))
-                && WHY_ASK.matcher(lastUser).find() && !CHANGE_ASK.matcher(lastUser).find() && !hasBudget(lastUser);
+                && WHY_ASK.matcher(lastUser).find() && !CHANGE_ASK.matcher(lastUser).find() && !LOOKUP_ASK.matcher(lastUser).find()
+                && !hasBudget(lastUser);
         if (whyOnly) log.info("Chat: câu hỏi vì sao, trả lời bằng lời, không dựng lại phương án");
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
@@ -636,7 +637,9 @@ public class ChatService {
         if (turn.advice && search.enabled()) {
             Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
             chosen.values().forEach(list -> list.forEach(c -> c.picks().values().forEach(p -> picks.putIfAbsent(p.url(), p))));
+            long w0 = System.nanoTime();
             search.warmCompare(picks.values());
+            log.info("Chat: so giá phụ (warmCompare) {} ms", (System.nanoTime() - w0) / 1_000_000);
         }
         List<BuildCard> options = new ArrayList<>();
         chosen.forEach((t, kept) -> {
@@ -1066,8 +1069,10 @@ public class ChatService {
         // Máy AI: card ít nhất 12GB VRAM, chỉ NVIDIA (CUDA)
         // Game nhẹ / esports (Valorant, LMHT, CS2...): card 6GB đủ (ca thật itx 25tr: mức 8GB giữ RX 7600 7,8 triệu, máy Mini
         // ITX rẻ nhất 25,2 - 25,5 triệu vượt trần Phù hợp; RTX 3050 6GB rẻ hơn 2 - 3 triệu)
+        // Có nhắc game nặng (AAA, đồ họa cao...) thì giữ sàn 8GB dù có tên game nhẹ (nhu cầu hỗn hợp)
         boolean lightGame = all.matches(".*(game nhẹ|chơi nhẹ|game online nhẹ|valorant|liên minh|lmht|league of legends|cs2|csgo|fifa|"
-                + "fo4|esport|game esports).*");
+                + "fo4|esport|game esports).*") && !all.matches(".*(game nặng|aaa|đồ họa cao|cấu hình cao|cyberpunk|gta|elden|black myth|"
+                + "wukong|2k|4k|144hz|240hz|max setting|ultra).*");
         return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256,
                 ai ? Integer.valueOf(12) : game && !creator ? Integer.valueOf(lightGame ? 6 : 8) : null,
                 light && !heavy, all.matches(".*(kính|glass).*"), mini, ai, vendor);
@@ -1208,8 +1213,9 @@ public class ChatService {
                 .filter(p -> stockOrder(p) < 2)
                 .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
                 .toList();
-        if (list.contains(now)) return now;
-        var found = bestLinked(list, null, 8);
+        // Món đang chọn chỉ dùng lại khi đã xác nhận còn hàng (MVP)
+        if (list.contains(now) && now.url() != null && rank(now.url()) == 3) return now;
+        var found = bestLinked(list.stream().filter(p -> p != now).toList(), null, 8);
         // MVP: hàng phải còn bán. Món chưa rõ còn hàng (trang không ghi) không nhận (ca thật n19: RAM G.Skill "chưa rõ còn hàng"
         // được nâng / hạ vào phương án)
         if (found != null && rank(found.url()) < 3) found = null;
@@ -1685,12 +1691,20 @@ public class ChatService {
                 + ", nên app không hiển thị.";
     }
 
+    /** Đã có dữ liệu cửa hàng cho link mà không xác nhận còn hàng (null / false): MVP chưa mua được */
+    private boolean stockUnconfirmed(String url) {
+        var page = search.offer(url);
+        return page != null && !Boolean.TRUE.equals(page.inStock());
+    }
+
     private List<String> missingBuy(Checked c) {
         return c.request().items().stream().map(BuildCheckRequest.Item::code).filter(code -> {
             var p = c.picks().get(code);
             var link = c.links().get(code);
             String url = p == null || link == null ? null : link.join();
-            return url == null || ProductSearch.homePage(url) || soldOut(url);
+            // MVP: hàng phải xác nhận còn bán; trang không ghi tình trạng hàng thì dòng chưa mua được (ca thật v33: món "chưa rõ
+            // còn hàng" lên thẻ khi máy tìm kiếm bị chặn)
+            return url == null || ProductSearch.homePage(url) || soldOut(url) || stockUnconfirmed(url);
         }).distinct().toList();
     }
 
@@ -1784,6 +1798,10 @@ public class ChatService {
     private static final java.util.regex.Pattern TIER_MENTION = java.util.regex.Pattern.compile(
             "\\*\\*\\s*(Rẻ|Phù hợp|Chất lượng)|(Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|phương án\\s+(rẻ|phù hợp|chất lượng)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** Người dùng nhờ tra cứu / kiểm tra lại (vd "kiểm tra lại cửa hàng còn hàng giúp tôi"): vẫn cho dùng công cụ */
+    private static final java.util.regex.Pattern LOOKUP_ASK = java.util.regex.Pattern.compile(
+            "kiểm tra|tìm (lại|thêm|giúp)|xem lại|tra lại|check|xác minh", java.util.regex.Pattern.CASE_INSENSITIVE);
+
     /** Người dùng hỏi lý do ("sao không có...", "vì sao", "tại sao", "why") */
     private static final java.util.regex.Pattern WHY_ASK = java.util.regex.Pattern.compile(
             "\\b(vì sao|tại sao|sao không|sao lại|sao chỉ|why)\\b|^\\s*sao\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
@@ -3214,7 +3232,8 @@ public class ChatService {
     private List<ProductSearch.Product> enoughPsu(ProductSearch.Product now, List<ProductSearch.Product> found, Map<String, ProductSearch.Product> picks) {
         if (now == null || now.title() == null) return List.of();
         String gpu = productTitles(picks).get("gpu");
-        int need = Math.max(450, gpu == null ? 450 : GPU_PSU.getOrDefault(gpuChip(gpu), 550));
+        String chip = gpu == null ? null : gpuChip(gpu);
+        int need = Math.max(450, gpu == null ? 450 : chip == null ? 550 : GPU_PSU.getOrDefault(chip, 550));
         boolean small = sfx(now.title());
         return found.stream()
                 .filter(p -> p.title() != null && p.priceVnd() != null && plausible("psu", p.priceVnd()) && !JUNK.matcher(p.title()).find())

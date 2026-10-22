@@ -353,6 +353,8 @@ public class PriceEngine {
                 .map(s -> CompletableFuture.supplyAsync(() -> {
                     // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có
                     String html = fetcher.get(s.url(shopQuery), s.maxWait);
+                    // Tải trang tìm kiếm thất bại (hết giờ, bị chặn): không phải "không có hàng", không nhớ kết quả rỗng
+                    if (html == null) incomplete.set(true);
                     return html == null ? List.<Offer>of() : s.parse(html, at);
                 }, pool))
                 .toList();
