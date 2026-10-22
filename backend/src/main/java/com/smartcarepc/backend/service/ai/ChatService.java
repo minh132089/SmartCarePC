@@ -1096,8 +1096,17 @@ public class ChatService {
                 if ("ram".equals(category) && (needs.ramMin() == null || d.get("user_layout") != null)) continue;
                 if ("ssd".equals(category) && needs.ssdMin() == null) continue;
                 long was = price(d, now, i.qty())[1];
-                Integer have = "ram".equals(category) ? ramTotal(text(d.get("spec"))) : amount("ssd", now.title());
-                if (have == null) continue;
+                Integer read = "ram".equals(category) ? ramTotal(text(d.get("spec"))) : amount("ssd", now.title());
+                // Thông số dòng RAM không ghi tổng (vd "DDR4 3200"): đọc dung lượng từ tên hàng thật nhân số bộ mua
+                if (read == null && "ram".equals(category) && amount("ram", now.title()) != null) {
+                    Object buy = d.get("buy_qty");
+                    read = amount("ram", now.title()) * (buy instanceof Number n ? n.intValue() : i.qty());
+                }
+                final Integer have = read;
+                if (have == null) {
+                    log.info("Hạ {}: không đọc được dung lượng (spec \"{}\", hàng \"{}\")", code, d.get("spec"), now.title());
+                    continue;
+                }
                 int floor = "ram".equals(category) ? needs.ramMin() : needs.ssdMin();
                 Integer target = ("ram".equals(category) ? RAM_STEPS : SSD_STEPS).stream()
                         .filter(t -> t < have * 0.95 && t >= floor).findFirst().orElse(null);
@@ -3574,6 +3583,27 @@ public class ChatService {
                     }
                 }
                 if (fallback != null) return fallback;
+                // Card trống ghi sẵn chip mà chip đó không ra hàng có link (ca thật n15: "RTX 4060 8GB, 2 quạt" không ra món
+                // nào): thử các chip phổ thông khác đủ VRAM, đúng hãng bắt buộc nếu có, nguồn đủ
+                if ("gpu".equals(lineCategory) && lineChip != null) {
+                    int floor = needVram != null ? needVram : 8;
+                    for (String chip : POPULAR_CHIPS) {
+                        if (chip.equals(lineChip) || lineVendor != null && !lineVendor.equals(vendorOf(chip)) || !psuFor(chip, lineChip, picks)) continue;
+                        List<ProductSearch.Product> found = new ArrayList<>(search.search(chipQuery(chip)));
+                        found.addAll(search.engineSearch(chipQuery(chip)));
+                        var list = found.stream()
+                                .filter(c -> emptyLineReject(code, lineCategory, c, picks, issuesNow) == null)
+                                .filter(c -> chip.equals(gpuChip(c.title())) && vram(c.title()) != null && vram(c.title()) >= floor)
+                                .filter(distinctUrl())
+                                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
+                                .toList();
+                        var best = bestLinked(list, null, 8);
+                        if (best != null && rank(best.url()) == 3) {
+                            log.info("Dòng trống {}: chip {} không ra hàng có link, dùng \"{}\"", code, lineChip, best.title());
+                            return best;
+                        }
+                    }
+                }
                 log.info("Không tìm được sản phẩm có link cho dòng trống {} (\"{}\"); bị loại {}; qua lọc nhưng không có link còn hàng {}",
                         code, lineSpec != null ? lineSpec : lineName, rejected, passed);
                 return null;
