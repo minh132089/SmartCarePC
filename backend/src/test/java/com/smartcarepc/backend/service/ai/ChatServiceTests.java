@@ -1116,6 +1116,9 @@ class ChatServiceTests {
         when(search.search("hàng")).thenReturn(List.of(
                 new ProductSearch.Product("CPU Intel Core i3-12100 Tray", "A", 3_000_000L, "https://a.vn/cpu", null),
                 new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
+        // Món hạ phải xác nhận còn hàng trên trang (MVP)
+        when(search.offer("https://b.vn/ram8")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, null, "https://b.vn/ram8", null, true, 36, java.time.Instant.now()));
         when(search.search("RAM DDR4 8GB")).thenReturn(List.of(
                 new ProductSearch.Product("Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, "https://b.vn/ram8", null),
                 new ProductSearch.Product("Bộ Nhớ Máy Chủ Kingston KSM 8GB DDR4 ECC", "B", 900_000L, "https://b.vn/ecc8", null)));
@@ -1252,6 +1255,8 @@ class ChatServiceTests {
         when(search.search("SSD")).thenReturn(List.of(
                 new ProductSearch.Product("Ổ Cứng SSD WD Green SN3000 1TB M.2 NVMe", "A", 4_790_000L, "https://a.vn/1tb", null),
                 new ProductSearch.Product("Ổ Cứng SSD WD Green SN3000 500GB M.2 NVMe", "A", 2_390_000L, "https://a.vn/500", null)));
+        when(search.offer("https://a.vn/500")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "Ổ Cứng SSD WD Green SN3000 500GB M.2 NVMe", "A", 2_390_000L, null, "https://a.vn/500", null, true, 36, java.time.Instant.now()));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Game","budget_vnd":3000000,"items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ","product_id":"s1-1"}]}

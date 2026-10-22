@@ -913,7 +913,9 @@ public class ChatService {
         if (now == null || now.priceVnd() == null) return c;
         String socket = ProductRules.read("cpu", now.title()).socket();
         var allowed = socket == null ? null : (game ? GAME_CPUS : OFFICE_CPUS).get(socket.toUpperCase().replace(" ", ""));
-        if (allowed == null || !game && allowed.contains(cpuModel(now.title()))) return c;
+        // CPU đang chọn đã nằm trong danh sách vẫn thử: cùng model có thể đang bị chào giá cao (ca thật v28: i3-14100 4,79 triệu
+        // trong máy học 12 triệu), món thay phải rẻ hơn
+        if (allowed == null) return c;
         boolean noGpu = c.request().items().stream().noneMatch(i -> "gpu".equals(categoryOf(i.code())));
         List<ProductSearch.Product> pool = new ArrayList<>();
         for (String model : allowed) {
@@ -1191,6 +1193,9 @@ public class ChatService {
                 .toList();
         if (list.contains(now)) return now;
         var found = bestLinked(list, null, 8);
+        // MVP: hàng phải còn bán. Món chưa rõ còn hàng (trang không ghi) không nhận (ca thật n19: RAM G.Skill "chưa rõ còn hàng"
+        // được nâng / hạ vào phương án)
+        if (found != null && rank(found.url()) < 3) found = null;
         if (found == null) log.info("Hạ {} xuống {}: {} món trong {} kết quả tìm \"{}\", không món nào có link mua", code,
                 "ram".equals(category) ? target + "GB" : label(target), list.size(), pool.size(), query);
         return found;
