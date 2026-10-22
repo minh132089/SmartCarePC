@@ -712,6 +712,9 @@ public class ChatService {
         // Vẫn vượt trần với hàng cùng thông số: dùng quạt kèm CPU (Intel Box) thay tản rời, rồi hạ RAM / SSD xuống mức tối
         // thiểu theo nhu cầu (học Word 8GB / 256GB; game 16GB / 512GB), lấy link và giá trang lần nữa
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = withoutExtraCooler(c, notes);
+        // Nền DDR5 mà CPU dùng được DDR4 (Intel 12 - 14, AM4): đổi bo + RAM sang DDR4 cùng dung lượng (ca thật v32: RAM DDR5
+        // 16GB 6,49 triệu, DDR4 16GB 3,39 triệu; Rẻ vượt trần 1 triệu)
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(toDdr4(c, cap, notes)), aiTitles);
         // Card đắt (vd 25,99 triệu trong phương án 31,5 triệu): hạ chip trước khi cắt RAM / SSD
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(lowerGpu(c, cap, needs, notes)), aiTitles);
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(downgrade(c, cap, needs, notes)), aiTitles);
@@ -1408,6 +1411,78 @@ public class ChatService {
         notes.add(note);
         var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
         return cap == null || total(out.request(), out.details(), out.picks()) <= cap ? out : null;
+    }
+
+    /**
+     * Đổi nền DDR5 sang DDR4 khi vượt trần: bo cùng socket, cùng cỡ mẫu 3D, DDR4; RAM DDR4 cùng tổng dung lượng; cả hai có link
+     * còn hàng, đổi cùng lúc qua phép kiểm lắp chung (không thêm lỗi), chỉ nhận khi tổng giảm.
+     */
+    private Checked toDdr4(Checked c, Long cap, List<String> notes) {
+        var board = c.request().items().stream().filter(i -> "motherboard".equals(categoryOf(i.code()))).findFirst().orElse(null);
+        var ramItem = c.request().items().stream().filter(i -> "ram".equals(categoryOf(i.code()))).findFirst().orElse(null);
+        if (board == null || ramItem == null) return c;
+        var mb = c.picks().get(board.code());
+        var ram = c.picks().get(ramItem.code());
+        if (mb == null || ram == null || mb.title() == null || ram.title() == null) return c;
+        if (!"DDR5".equals(ProductRules.read("ram", ram.title()).ramType())) return c;
+        if (c.details().getOrDefault(ramItem.code(), Map.of()).get("user_layout") != null) return c;
+        String socket = ProductRules.read("cpu", productTitles(c.picks()).getOrDefault("cpu", "")).socket();
+        if (!"LGA1700".equals(socket) && !"AM4".equals(socket)) return c;
+        Integer gb = ramTotal(text(c.details().getOrDefault(ramItem.code(), Map.of()).get("spec")));
+        if (gb == null && amount("ram", ram.title()) != null) gb = amount("ram", ram.title()) * ramItem.qty();
+        if (gb == null) return c;
+        final int total = gb;
+        String size = board.code().endsWith("itx") ? "ITX " : board.code().endsWith("matx") ? "M " : "";
+        List<String> boardQueries = new ArrayList<>();
+        if (board.code().equals("mb_atx")) ATX_MODELS.getOrDefault(socket + " DDR4", List.of()).forEach(m -> boardQueries.add("mainboard " + m));
+        if (board.code().equals("mb_itx")) ITX_CHIPSETS.getOrDefault(socket, List.of()).forEach(m -> boardQueries.add("mainboard " + m + " DDR4"));
+        if (ENTRY_CHIPSET.containsKey(socket) && board.code().equals("mb_matx")) boardQueries.add("mainboard " + ENTRY_CHIPSET.get(socket) + " DDR4");
+        boardQueries.add("mainboard " + socket + " " + size + "DDR4");
+        List<ProductSearch.Product> boards = new ArrayList<>(), rams = new ArrayList<>();
+        try {
+            for (String q : boardQueries.stream().distinct().limit(4).toList()) boards.addAll(search.search(q));
+            rams.addAll(search.search("RAM DDR4 " + total + "GB"));
+        } catch (RuntimeException e) {
+            log.debug("Tìm nền DDR4 lỗi: {}", e.getMessage());
+        }
+        var boardList = boards.stream()
+                .filter(p -> p.title() != null && p.priceVnd() != null && !JUNK.matcher(p.title()).find() && ofKind("motherboard", p.title()))
+                .filter(p -> "DDR4".equals(ProductRules.read("motherboard", p.title()).ramType())
+                        && socket.equals(ProductRules.read("motherboard", p.title()).socket()) && fitsCode(board.code(), p.title()))
+                .filter(p -> !recentlyNoLink(p) && stockOrder(p) < 2).filter(distinctUrl())
+                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd)).toList();
+        var ramList = rams.stream()
+                .filter(p -> p.title() != null && p.priceVnd() != null && !JUNK.matcher(p.title()).find() && ofKind("ram", p.title()))
+                .filter(p -> "DDR4".equals(ProductRules.read("ram", p.title()).ramType()) && Integer.valueOf(total).equals(amount("ram", p.title()))
+                        && !serverRam(p.title()) && !ProductRules.read("ram", p.title()).laptopRam())
+                .filter(p -> !recentlyNoLink(p) && stockOrder(p) < 2).filter(distinctUrl())
+                .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd)).toList();
+        var newBoard = bestLinked(boardList, null, 6);
+        var newRam = bestLinked(ramList, null, 6);
+        if (newBoard == null || newRam == null || rank(newBoard.url()) < 3 || rank(newRam.url()) < 3) {
+            log.info("Đổi nền DDR4: không đủ bo ({}) / RAM {}GB ({}) có link còn hàng", boardList.size(), total, ramList.size());
+            return c;
+        }
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        picks.put(board.code(), newBoard);
+        picks.put(ramItem.code(), newRam);
+        if (!errorRules(c.picks()).containsAll(errorRules(picks))) return c;
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        links.put(board.code(), CompletableFuture.completedFuture(newBoard.url()));
+        links.put(ramItem.code(), CompletableFuture.completedFuture(newRam.url()));
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
+        details.computeIfAbsent(board.code(), k -> new LinkedHashMap<>()).put("spec", coreQuery("motherboard", newBoard.title()));
+        var rd = details.computeIfAbsent(ramItem.code(), k -> new LinkedHashMap<>());
+        rd.put("spec", total + "GB DDR4");
+        rd.remove("buy_qty");
+        var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
+        long before = total(c.request(), c.details(), c.picks()), after = total(out.request(), out.details(), out.picks());
+        if (after >= before) return c;
+        String note = "Nền DDR5 -> DDR4 (" + newBoard.title() + ", " + newRam.title() + ", rẻ hơn " + (before - after) + " đồng)";
+        log.info("Vượt trần {}: {}", cap, note);
+        notes.add(note);
+        return out;
     }
 
     /** CPU mạnh hơn cùng socket, rẻ trước (không bản K: thường không kèm quạt, cần tản / bo khác), để nâng phương án Chất lượng */
