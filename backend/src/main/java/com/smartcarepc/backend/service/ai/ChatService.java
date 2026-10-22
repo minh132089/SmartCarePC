@@ -747,6 +747,12 @@ public class ChatService {
                     total(c.request(), c.details(), c.picks()) - cap, needs == null ? null : needs.vramMin(),
                     needs != null && needs.miniItx(), c.request().items().stream().map(BuildCheckRequest.Item::code).filter(ATX_CASES::contains).findFirst().orElse("-"));
         }
+        // Máy game mà dòng bo ATX không có link mua nào (ca thật v26: bo B550 ATX không cửa hàng nào có, cả Phù hợp / Chất
+        // lượng bị ẩn dù dưới trần): thử mẫu vỏ nhỏ gọn (bo Micro-ATX); compactSwitch chỉ nhận khi bản mới hiện được
+        if (needs != null && needs.vramMin() != null && !needs.miniItx() && missingBuy(c).contains("mb_atx")) {
+            log.info("finalize {}: dòng bo ATX không có link, thử vỏ nhỏ gọn", tier);
+            c = compactSwitch(c, tier, cap, needs, aiTitles, notes);
+        }
         // Chỉ khi vượt không quá COMPACT_GAP (bo mATX + tản khí rẻ hơn bo ATX + tản nước cỡ 1 - 4 triệu): vượt xa hơn thì đổi
         // vỏ cũng không vào trần, khỏi tốn vài chục lượt tìm
         if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap
@@ -1496,11 +1502,12 @@ public class ChatService {
      */
     private String notShownReason(Checked c, String tier, Long budget, Long minShown) {
         Long cap = budget == null ? null : tierCap(budget, tier);
-        if (c != null && !c.picks().isEmpty() && (minShown == null || cap == null || minShown > cap)) {
+        if (c != null && !c.picks().isEmpty()) {
             long t = total(c.request(), c.details(), c.picks());
             var noBuy = missingBuy(c);
             boolean fits = c.result() == null || c.result().compatible();
-            if (noBuy.isEmpty() && fits && productIssues(c.picks()).isEmpty() && cap != null && t > cap) {
+            boolean shortOfMoney = minShown == null || cap == null || minShown > cap;
+            if (shortOfMoney && noBuy.isEmpty() && fits && productIssues(c.picks()).isEmpty() && cap != null && t > cap) {
                 // Ngân sách cần để phương án này vừa mức tối đa (Rẻ = 90% ngân sách, Chất lượng = ngân sách + 3 triệu)
                 long need = switch (tier) {
                     case "cheap" -> Math.round(t / CHEAP_SHARE);
