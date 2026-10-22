@@ -748,7 +748,7 @@ public class ChatService {
             }
         }
         // Máy game (card rời, không phải máy AI / đồ họa) vẫn vượt trần: hạ CPU xuống dòng game phổ thông cùng socket
-        boolean gameNeeds = needs != null && !needs.office() && !needs.cuda() && Integer.valueOf(8).equals(needs.vramMin());
+        boolean gameNeeds = needs != null && !needs.office() && !needs.cuda() && needs.vramMin() != null && needs.vramMin() <= 8;
         if (cap != null && gameNeeds && total(c.request(), c.details(), c.picks()) > cap) {
             c = normalized(withPagePrices(lowerCpuForNeeds(c, notes, true)), aiTitles);
         }
@@ -1061,8 +1061,12 @@ public class ChatService {
         // giảm VRAM (null: chỉ đổi cùng chip, cùng VRAM)
         // office: chỉ học / văn phòng rõ ràng (được hạ CPU xuống dòng phổ thông); glass: người dùng nói thích kính
         // Máy AI: card ít nhất 12GB VRAM, chỉ NVIDIA (CUDA)
+        // Game nhẹ / esports (Valorant, LMHT, CS2...): card 6GB đủ (ca thật itx 25tr: mức 8GB giữ RX 7600 7,8 triệu, máy Mini
+        // ITX rẻ nhất 25,2 - 25,5 triệu vượt trần Phù hợp; RTX 3050 6GB rẻ hơn 2 - 3 triệu)
+        boolean lightGame = all.matches(".*(game nhẹ|chơi nhẹ|game online nhẹ|valorant|liên minh|lmht|league of legends|cs2|csgo|fifa|"
+                + "fo4|esport|game esports).*");
         return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256,
-                ai ? Integer.valueOf(12) : game && !creator ? Integer.valueOf(8) : null,
+                ai ? Integer.valueOf(12) : game && !creator ? Integer.valueOf(lightGame ? 6 : 8) : null,
                 light && !heavy, all.matches(".*(kính|glass).*"), mini, ai, vendor);
     }
 

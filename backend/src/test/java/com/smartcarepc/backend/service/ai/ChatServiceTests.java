@@ -1694,6 +1694,8 @@ class ChatServiceTests {
                 "Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.")).vramMin())
                 .as("card đồ họa là linh kiện, không phải làm đồ họa").isEqualTo(8);
         assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isNull();
+        assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 25 triệu.")).vramMin())
+                .as("game nhẹ: card 6GB đủ").isEqualTo(6);
     }
 
     @Test
