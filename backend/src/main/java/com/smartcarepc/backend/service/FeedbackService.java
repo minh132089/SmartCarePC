@@ -60,9 +60,23 @@ public class FeedbackService {
         return new FeedbackSaved(saved.getId());
     }
 
-    /** Toàn bộ phản hồi dạng CSV (UTF-8 có BOM để Excel đọc đúng tiếng Việt). Cần khoá FEEDBACK_EXPORT_KEY. */
+    /** Một dòng phản hồi cho trang xem dữ liệu (mới nhất trước) */
+    public record Row(long id, String createdAt, String participantCode, String phase, String machine, Map<String, Object> answers) {
+    }
+
+    /** Toàn bộ phản hồi cho trang xem dữ liệu /feedback, mới nhất trước. Cần khoá FEEDBACK_EXPORT_KEY. */
     @Transactional(readOnly = true)
-    public String exportCsv(String key) {
+    public List<Row> list(String key) {
+        checkKey(key);
+        List<Row> out = new ArrayList<>();
+        for (Feedback f : repository.findAllByOrderByIdAsc().reversed()) {
+            out.add(new Row(f.getId(), f.getCreatedAt() == null ? null : f.getCreatedAt().format(TIME), f.getParticipantCode(),
+                    f.getPhase(), f.getMachine(), parse(f.getAnswers())));
+        }
+        return out;
+    }
+
+    private void checkKey(String key) {
         if (exportKey.length == 0) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chưa đặt FEEDBACK_EXPORT_KEY nên chưa xuất được dữ liệu");
         }
@@ -70,6 +84,12 @@ public class FeedbackService {
         if (!MessageDigest.isEqual(exportKey, given)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sai khoá xuất dữ liệu");
         }
+    }
+
+    /** Toàn bộ phản hồi dạng CSV (UTF-8 có BOM để Excel đọc đúng tiếng Việt). Cần khoá FEEDBACK_EXPORT_KEY. */
+    @Transactional(readOnly = true)
+    public String exportCsv(String key) {
+        checkKey(key);
 
         List<Feedback> rows = repository.findAllByOrderByIdAsc();
         List<Map<String, Object>> answers = new ArrayList<>(rows.size());

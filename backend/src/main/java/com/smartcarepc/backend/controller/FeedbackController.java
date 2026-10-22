@@ -33,6 +33,12 @@ public class FeedbackController {
         return feedbackService.save(request);
     }
 
+    /** Dữ liệu cho trang xem phản hồi (/feedback). Khoá gửi qua header để không lộ trong địa chỉ / log truy cập */
+    @GetMapping("/list")
+    public ResponseEntity<java.util.List<FeedbackService.Row>> list(@org.springframework.web.bind.annotation.RequestHeader(value = "X-Export-Key", required = false) String key) {
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(feedbackService.list(key));
+    }
+
     /** Mở trong trình duyệt: /api/feedback/export.csv?key=... */
     @GetMapping("/export.csv")
     public ResponseEntity<String> export(@RequestParam(required = false) String key) {
