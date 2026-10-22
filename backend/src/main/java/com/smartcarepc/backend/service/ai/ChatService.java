@@ -730,6 +730,7 @@ public class ChatService {
         // Bo / RAM lệch DDR thì sửa trước (chạy cả khi dưới trần); RAM / SSD dưới mức nhu cầu thì nâng lên nếu còn chỗ
         c = repairDdr(c, cap, notes);
         c = raiseToNeeds(c, cap, needs, notes);
+        c = raiseGpuToNeeds(c, cap, needs, notes);
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) c = normalized(refit(c, tier, cap), aiTitles);
         // Vẫn vượt trần với hàng cùng thông số: dùng quạt kèm CPU (Intel Box) thay tản rời, rồi hạ RAM / SSD xuống mức tối
         // thiểu theo nhu cầu (học Word 8GB / 256GB; game 16GB / 512GB), lấy link và giá trang lần nữa
@@ -1555,6 +1556,42 @@ public class ChatService {
             if (found != null && rank(found.url()) == 3) return found;
         }
         return null;
+    }
+
+    /**
+     * Card ít VRAM hơn mức nhu cầu (ca thật n34: máy học AI cần 12GB mà trợ lý chọn card 8GB): đổi sang chip cùng hoặc mạnh hơn
+     * có VRAM đủ, đúng hãng bắt buộc (máy AI: NVIDIA), còn hàng, trong phần dư tới trần. Không có thì giữ nguyên.
+     */
+    private Checked raiseGpuToNeeds(Checked c, Long cap, Needs needs, List<String> notes) {
+        if (needs == null || needs.vramMin() == null) return c;
+        var item = c.request().items().stream().filter(i -> "gpu".equals(categoryOf(i.code()))).findFirst().orElse(null);
+        var now = item == null ? null : c.picks().get(item.code());
+        Integer v = now == null || now.title() == null ? null : vram(now.title());
+        String chip = now == null || now.title() == null ? null : gpuChip(now.title());
+        if (v == null || chip == null || v >= needs.vramMin() || now.priceVnd() == null) return c;
+        Long line = price(c.details().getOrDefault(item.code(), Map.of()), now, item.qty())[1];
+        long was = line != null ? line : now.priceVnd() * item.qty();
+        long room = cap == null ? Long.MAX_VALUE / 4 : cap - total(c.request(), c.details(), c.picks());
+        List<String> chips = new ArrayList<>(List.of(chip));
+        chips.addAll(gpuUpgrades(chip));
+        // Cùng chip bản nhiều VRAM hơn trước (vd 4060 Ti 8GB -> 16GB), rồi chip mạnh hơn gần nhất
+        var found = otherChip(item.code(), now, chips, needs.vramMin(), (was + Math.max(0, room)) / Math.max(1, item.qty()), c.picks(),
+                needs.allowedVendor());
+        if (found == null) {
+            log.info("Card {} {}GB dưới mức {}GB của nhu cầu: không tìm được card đủ VRAM có link trong trần", chip, v, needs.vramMin());
+            return c;
+        }
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
+        picks.put(item.code(), found);
+        links.put(item.code(), CompletableFuture.completedFuture(found.url()));
+        details.computeIfAbsent(item.code(), k -> new LinkedHashMap<>()).put("spec", coreQuery("gpu", found.title()));
+        String note = "Card " + v + "GB -> " + vram(found.title()) + "GB cho đủ nhu cầu (" + found.title() + ")";
+        log.info("Dưới mức nhu cầu: nâng {}", note);
+        notes.add(note);
+        return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
     /**
