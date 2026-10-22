@@ -425,6 +425,11 @@ public class ChatService {
         boolean orderNudged = false;
         int proposeLimit = MAX_PROPOSE_ROUNDS;
         String lastUser = String.valueOf(messages.getLast().get("content"));
+        // Câu hỏi tiếp chỉ hỏi "vì sao" (vd "Sao không có phương án Rẻ?") mà không nhờ đổi gì: trả lời bằng lời, không cho gọi
+        // công cụ (ca thật n24: trợ lý bỏ qua lời dặn ADVICE bước 8, dựng lại cả ba phương án thay vì giải thích tài chính)
+        boolean whyOnly = "advice".equals(request.mode()) && request.messages().stream().anyMatch(m -> "assistant".equals(m.role()))
+                && WHY_ASK.matcher(lastUser).find() && !CHANGE_ASK.matcher(lastUser).find() && !hasBudget(lastUser);
+        if (whyOnly) log.info("Chat: câu hỏi vì sao, trả lời bằng lời, không dựng lại phương án");
         for (int round = 0; round < MAX_ROUNDS; round++) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
@@ -437,7 +442,7 @@ public class ChatService {
             // Đã đề xuất đủ MAX_PROPOSE_ROUNDS vòng: chỉ còn viết câu trả lời (mỗi vòng đề xuất tốn ~50 giây; giá thật
             // quá cao so với ngân sách thì trợ lý đề xuất lại mãi). Bước dựng thẻ vẫn lọc option theo trần giá
             body.put("tools", offered);
-            if (proposeRounds >= proposeLimit) body.put("tool_choice", "none");
+            if (proposeRounds >= proposeLimit || whyOnly) body.put("tool_choice", "none");
 
             long t0 = System.nanoTime();
             Map<String, Object> res;
@@ -472,7 +477,7 @@ public class ChatService {
                 // Câu hỏi tiếp yêu cầu đổi cấu hình (ca thật n9: "đổi sang card AMD", trợ lý viết "ba phương án đều dùng card
                 // này" mà không dựng thẻ, không ghi nhãn tier)
                 boolean changeAsk = CHANGE_ASK.matcher(lastUser).find() && (MONEY_MENTION.matcher(draft).find() || draft.toLowerCase().contains("phương án"));
-                if (turn.advice && !toolNudged && turn.tiers.isEmpty() && !turn.userAmounts.isEmpty() && proposeRounds < proposeLimit
+                if (turn.advice && !whyOnly && !toolNudged && turn.tiers.isEmpty() && !turn.userAmounts.isEmpty() && proposeRounds < proposeLimit
                         && (TIER_MENTION.matcher(draft).find() && MONEY_MENTION.matcher(draft).find() || changeAsk)) {
                     toolNudged = true;
                     log.info("Chat vòng {}: AI viết phương án kèm giá mà chưa gọi propose_build, nhắc gọi công cụ", round + 1);
@@ -1650,6 +1655,10 @@ public class ChatService {
     private static final java.util.regex.Pattern TIER_MENTION = java.util.regex.Pattern.compile(
             "\\*\\*\\s*(Rẻ|Phù hợp|Chất lượng)|(Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|phương án\\s+(rẻ|phù hợp|chất lượng)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** Người dùng hỏi lý do ("sao không có...", "vì sao", "tại sao", "why") */
+    private static final java.util.regex.Pattern WHY_ASK = java.util.regex.Pattern.compile(
+            "\\b(vì sao|tại sao|sao không|sao lại|sao chỉ|why)\\b|^\\s*sao\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
     /** Người dùng yêu cầu đổi cấu hình đã có (đổi / thay / chuyển / nâng / hạ / bỏ / thêm món, làm lại phương án) */
     private static final java.util.regex.Pattern CHANGE_ASK = java.util.regex.Pattern.compile(
             "\\b(đổi|thay|chuyển|nâng|hạ|bỏ|thêm|chọn lại|làm lại|dựng lại)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
