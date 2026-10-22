@@ -315,12 +315,15 @@ public class PriceEngine {
             }
             long waited = (System.nanoTime() - w0) / 1_000_000;
             long t0 = System.nanoTime();
-            found = fresh(query);
+            var incomplete = new java.util.concurrent.atomic.AtomicBoolean();
+            found = fresh(query, incomplete);
             if (waited > 1000) log.info("So giá \"{}\": chờ lượt {} ms", query, waited);
-            log.info("So giá \"{}\": {} sản phẩm trong {} ms", query, found.size(), (System.nanoTime() - t0) / 1_000_000);
+            log.info("So giá \"{}\": {} sản phẩm trong {} ms{}", query, found.size(), (System.nanoTime() - t0) / 1_000_000,
+                    incomplete.get() ? " (có nguồn hết giờ / lỗi)" : "");
             if (cache.size() > 500) cache.clear();
-            // Kết quả rỗng chỉ nhớ EMPTY_CACHE (có thể là cửa hàng chậm nhất thời), có hàng nhớ CACHE
-            cache.put(key, new Cached(Instant.now(), found));
+            // Kết quả rỗng chỉ nhớ EMPTY_CACHE (có thể là cửa hàng chậm nhất thời), có hàng nhớ CACHE. Rỗng vì nguồn hết giờ / lỗi
+            // thì không nhớ: lần tìm sau thử lại thật (ca thật n18: dòng card trống mọi truy vấn trả rỗng trong cùng câu tư vấn)
+            if (!found.isEmpty() || !incomplete.get()) cache.put(key, new Cached(Instant.now(), found));
             return found;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -342,7 +345,7 @@ public class PriceEngine {
     /** Kết quả rỗng chỉ nhớ ngắn: đủ để không tìm lại trong cùng một câu tư vấn, rồi thử lại */
     static final Duration EMPTY_CACHE = Duration.ofMinutes(2);
 
-    private List<Offer> fresh(String query) {
+    private List<Offer> fresh(String query, java.util.concurrent.atomic.AtomicBoolean incomplete) {
         Instant at = Instant.now();
         // Ô tìm kiếm của cửa hàng tìm theo mọi chữ: bỏ chữ thừa ("giá rẻ", số đo) để không ra rỗng
         String shopQuery = shopQuery(query);
@@ -356,12 +359,12 @@ public class PriceEngine {
         var links = CompletableFuture.supplyAsync(() -> searxng.productUrls(query, 6), pool);
 
         Map<String, Offer> all = new LinkedHashMap<>();
-        for (var f : shops) join(f).forEach(o -> all.putIfAbsent(clean(o.url()), o));
+        for (var f : shops) join(f, incomplete).forEach(o -> all.putIfAbsent(clean(o.url()), o));
         List<Offer> ranked = rank(query, all.values());
 
         // Đọc trang sản phẩm: link SearXNG chưa có trong kết quả cửa hàng, và vài món đầu để biết còn hàng / bảo hành
         List<String> pages = new ArrayList<>();
-        for (String url : join(links)) if (!all.containsKey(clean(url)) && pages.size() < PAGES) pages.add(url);
+        for (String url : join(links, incomplete)) if (!all.containsKey(clean(url)) && pages.size() < PAGES) pages.add(url);
         for (var o : ranked) if (o.inStock() == null && pages.size() < PAGES * 2) pages.add(o.url());
         var read = pages.stream()
                 .map(url -> CompletableFuture.supplyAsync(() -> ProductPage.parse(fetcher.get(url, Duration.ofSeconds(3)), url, Instant.now()), pool))
@@ -386,14 +389,21 @@ public class PriceEngine {
     }
 
     private <T> List<T> join(CompletableFuture<List<T>> f) {
+        return join(f, new java.util.concurrent.atomic.AtomicBoolean());
+    }
+
+    /** Như join, ghi lại incomplete khi nguồn hết giờ hoặc lỗi (kết quả rỗng khi đó không phải "không có hàng") */
+    private <T> List<T> join(CompletableFuture<List<T>> f, java.util.concurrent.atomic.AtomicBoolean incomplete) {
         try {
             return f.get(DEADLINE.toMillis(), TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
+            incomplete.set(true);
             return List.of();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return List.of();
         } catch (java.util.concurrent.ExecutionException e) {
+            incomplete.set(true);
             log.debug("Nguồn giá lỗi: {}", e.getCause().getMessage());
             return List.of();
         }

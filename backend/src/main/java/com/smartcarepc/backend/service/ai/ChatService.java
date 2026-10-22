@@ -1820,7 +1820,7 @@ public class ChatService {
                         log.debug("Tìm thêm \"{}\" lỗi: {}", q, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c), vramMin);
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c) && glassOk(details, code, c), vramMin);
             }));
         }
         for (var f : found.entrySet()) {
@@ -1906,7 +1906,8 @@ public class ChatService {
                     // tản cùng kiểu; quạt cùng cỡ)
                     if ("case".equals(category)) {
                         Integer x = caseBoardSize(now.title()), y = caseBoardSize(s.title());
-                        return x != null && y != null && y >= x && (!glass(now.title()) || glass(s.title()));
+                        // Kính chỉ bắt buộc khi người dùng thích kính (glassOk ở bước gọi), không theo tên vỏ cũ
+                        return x != null && y != null && y >= x;
                     }
                     if ("cooler".equals(category) || "fans".equals(category)) return sameSpec(category, now.title(), s.title());
                     if (!SPEC_SWAPPABLE.contains(category) || need == null) return false;
@@ -1934,7 +1935,8 @@ public class ChatService {
             boolean cheap, boolean noGpu, java.util.function.Predicate<ProductSearch.Product> fits, Integer vramMin) {
         // Lọc lắp chung / cỡ 3D TRƯỚC khi giới hạn 4 lần thử: món đầu bị loại lúc gắn thì không mất cả dòng (vd H610 hợp lệ
         // đứng sau một bo bị loại)
-        var tries = equivalents(category, now, group, kit, cheap, noGpu, vramMin).stream().filter(fits).limit(4)
+        // Bỏ món trùng link (kết quả tìm của nhiều từ khoá hay trùng nhau, chiếm hết lượt thử)
+        var tries = equivalents(category, now, group, kit, cheap, noGpu, vramMin).stream().filter(fits).filter(distinctUrl()).limit(6)
                 .map(c -> Io.async(() -> {
                     String l = search.directLink(c.title(), c.shop(), c.url());
                     if (l == null || rank(l) < 1) return null;
@@ -2545,7 +2547,7 @@ public class ChatService {
                         log.debug("Tìm thêm \"{}\" lỗi: {}", q, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c), vramMin);
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c) && glassOk(details, code, c), vramMin);
             }));
         });
         while (total(req, details, picks) > cap) {
@@ -3009,6 +3011,11 @@ public class ChatService {
         if (r == null) return List.of();
         return GPU_RANK.entrySet().stream().filter(e -> e.getValue() < r && r - e.getValue() <= maxDrop)
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()).map(Map.Entry::getKey).toList();
+    }
+
+    /** Dòng vỏ người dùng thích kính (need_glass): vỏ thay phải ghi rõ có kính */
+    static boolean glassOk(Map<String, Map<String, Object>> details, String code, ProductSearch.Product p) {
+        return !Boolean.TRUE.equals(details.getOrDefault(code, Map.of()).get("need_glass")) || glass(p.title());
     }
 
     /** Dòng card ghi hãng bắt buộc (máy AI: NVIDIA; người dùng đòi hãng): card thay phải đúng hãng đó */
@@ -3756,6 +3763,9 @@ public class ChatService {
                     // Card: máy game được đổi sang chip ngang / mạnh hơn rẻ hơn nếu đủ VRAM tối thiểu (Needs.vramMin)
                     if (turn.advice && turn.needs != null && turn.needs.vramMin() != null) {
                         details.forEach((code, d) -> { if ("gpu".equals(categoryOf(code))) d.put("vram_min", turn.needs.vramMin()); });
+                    }
+                    if (turn.advice && turn.needs != null && turn.needs.glass()) {
+                        details.forEach((code, d) -> { if ("case".equals(categoryOf(code))) d.put("need_glass", true); });
                     }
                     if (turn.advice && turn.needs != null && turn.needs.allowedVendor() != null) {
                         details.forEach((code, d) -> { if ("gpu".equals(categoryOf(code))) d.put("gpu_vendor", turn.needs.allowedVendor()); });

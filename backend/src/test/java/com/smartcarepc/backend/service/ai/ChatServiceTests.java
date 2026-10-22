@@ -1570,10 +1570,13 @@ class ChatServiceTests {
         assertThat(ChatService.fitsCode("aio_240", "Tản nhiệt khí Jonsbo CR-1200E")).isFalse();
         assertThat(ChatService.fitsCode("psu_sfx", "Nguồn máy tính Jetek J400 (400W)")).isFalse();
         assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Xigmatek Gaming X II ATX")).isFalse();
-        // Vỏ rẻ hơn: cùng cỡ, giữ kính
+        // Vỏ rẻ hơn: cùng cỡ; kính chỉ bắt buộc khi người dùng thích kính (need_glass, kiểm ở glassOk), không theo tên vỏ cũ
         var glassCase = product("Vỏ máy tính Montech AIR 903 ATX kính cường lực", 2_000_000L);
         assertThat(ChatService.cheaperEquivalent("case", glassCase, List.of(product("Vỏ Jetek EM4 ATX hông kín", 330_000L),
-                product("Vỏ Xigmatek Gaming X II ATX mặt kính", 790_000L)), false).title()).isEqualTo("Vỏ Xigmatek Gaming X II ATX mặt kính");
+                product("Vỏ Xigmatek Gaming X II ATX mặt kính", 790_000L)), false).title()).isEqualTo("Vỏ Jetek EM4 ATX hông kín");
+        assertThat(ChatService.glassOk(Map.of("case_gaming", Map.of("need_glass", true)), "case_gaming", product("Vỏ Jetek EM4 ATX hông kín", 330_000L))).isFalse();
+        assertThat(ChatService.glassOk(Map.of("case_gaming", Map.of("need_glass", true)), "case_gaming", product("Vỏ Xigmatek Gaming X II ATX mặt kính", 790_000L))).isTrue();
+        assertThat(ChatService.glassOk(Map.of(), "case_gaming", product("Vỏ Jetek EM4 ATX hông kín", 330_000L))).isTrue();
         var tower = product("Tản nhiệt Cooler Master Hyper 612 Apex", 1_590_000L);
         assertThat(ChatService.cheaperEquivalent("cooler", tower, List.of(product("Tản nhiệt khí Jonsbo CR-1200E", 190_000L),
                 product("Tản nhiệt ID-COOLING IS-40X low profile", 300_000L)), false).title()).isEqualTo("Tản nhiệt khí Jonsbo CR-1200E");
