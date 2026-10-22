@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Flask, NotePencil } from '@phosphor-icons/react'
+import { Flask, NotePencil, Star } from '@phosphor-icons/react'
 import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
 import { FEEDBACK } from './questions'
@@ -44,6 +44,7 @@ export function StudyDialogs() {
   const dialog = useStudy((s) => s.dialog)
   if (dialog === 'join') return <JoinDialog />
   if (dialog === 'feedback') return <FeedbackDialog />
+  if (dialog === 'rating') return <RatingDialog />
   return null
 }
 
@@ -131,6 +132,82 @@ function FeedbackDialog() {
       }
     >
       <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">Khoảng 2 phút. Không có câu trả lời đúng hay sai, bạn có thể bỏ qua câu nào cũng được.</p>
+      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} />
+    </Dialog>
+  )
+}
+
+const STAR_WORDS = ['', 'Rất tệ', 'Chưa tốt', 'Tạm được', 'Tốt', 'Rất tốt']
+
+/** Chấm 1 đến 5 sao. Dùng radio thật để đọc được bằng trình đọc màn hình và chọn được bằng phím mũi tên */
+function Stars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <div className="flex gap-1" role="radiogroup" aria-label="Số sao">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <label key={n} className="relative cursor-pointer">
+            <input
+              type="radio"
+              name="stars"
+              checked={value === n}
+              onChange={() => onChange(n)}
+              aria-label={`${n} sao, ${STAR_WORDS[n]}`}
+              className="peer absolute inset-0 cursor-pointer opacity-0"
+            />
+            <Star
+              size={36}
+              weight={n <= value ? 'fill' : 'regular'}
+              aria-hidden
+              className={`rounded-lg transition-colors duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${
+                n <= value ? 'text-[#f5a524]' : 'text-ink-3 hover:text-ink-2'
+              }`}
+            />
+          </label>
+        ))}
+      </div>
+      <p className="mt-1 h-5 text-[13px] text-ink-2">{value ? STAR_WORDS[value] : 'Chọn số sao'}</p>
+    </div>
+  )
+}
+
+/**
+ * Hiện khi người dùng đánh dấu xong mọi bước lắp (mọi người dùng, không cần mã thử nghiệm): chấm sao trải nghiệm,
+ * dưới là các câu phản hồi cũ (questions.ts), câu nào cũng bỏ qua được. Gửi chung một lần, kèm máy đang xem.
+ */
+function RatingDialog() {
+  const { open, markAnswered } = useStudy()
+  const machine = useViewer((s) => s.familyId ?? s.buildId)
+  const [stars, setStars] = useState(0)
+  const [a, setA] = useState<AnswerMap>({})
+  const [busy, setBusy] = useState(false)
+  const { answers } = collect(FEEDBACK, a)
+
+  const submit = async () => {
+    setBusy(true)
+    await sendFeedback({ machine, answers: { stars, source: 'guide_done', ...answers } })
+    markAnswered('feedback')
+    setBusy(false)
+    open(null)
+  }
+
+  return (
+    <Dialog
+      title="Bạn đã lắp xong cả máy!"
+      onClose={() => open(null)}
+      footer={
+        <>
+          <QuietButton onClick={() => open(null)}>Để sau</QuietButton>
+          <PrimaryButton onClick={submit} disabled={busy || stars === 0}>
+            Gửi đánh giá
+          </PrimaryButton>
+        </>
+      }
+    >
+      <p className="text-[14px] leading-[1.5] text-ink-2">Bạn thấy trải nghiệm chọn và lắp máy với web app thế nào?</p>
+      <div className="mt-3">
+        <Stars value={stars} onChange={setStars} />
+      </div>
+      <p className="mt-5 mb-1 text-[13px] text-ink-3">Nếu có thêm 2 phút, trả lời vài câu dưới đây giúp nhóm làm app tốt hơn. Bỏ qua câu nào cũng được.</p>
       <QuestionList questions={FEEDBACK} answers={a} onChange={setA} />
     </Dialog>
   )

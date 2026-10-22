@@ -43,8 +43,8 @@ interface StudyState {
   code: string | null
   phase: Phase
   answered: string[]
-  /** Hộp thoại đang mở: nhập mã hoặc form phản hồi */
-  dialog: 'join' | 'feedback' | null
+  /** Hộp thoại đang mở: nhập mã, form phản hồi, hoặc chấm sao sau khi lắp xong cả máy (form phản hồi nằm dưới) */
+  dialog: 'join' | 'feedback' | 'rating' | null
   join: (code: string, phase: Phase) => void
   leave: () => void
   open: (dialog: StudyState['dialog']) => void

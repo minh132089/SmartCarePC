@@ -36,8 +36,8 @@ export function GuidePanel() {
   const [confirmReset, setConfirmReset] = useState(false)
   const listRef = useRef<HTMLOListElement>(null)
   const current = steps[Math.min(index, steps.length - 1)]
-  // Người tham gia thử nghiệm lắp xong cả máy: mời gửi phản hồi ngay trong ô chúc mừng
-  const askFeedback = useStudy((s) => s.code != null && !s.answered.includes('feedback'))
+  // Lắp xong cả máy: mời chấm sao + phản hồi (mọi người dùng). Người tham gia thử nghiệm đã gửi phản hồi thì thôi mời
+  const askFeedback = useStudy((s) => !s.answered.includes('feedback'))
   const openStudy = useStudy((s) => s.open)
 
   useEffect(() => saveDone(machine, done), [machine, done])
@@ -96,6 +96,17 @@ export function GuidePanel() {
   const allDone = count === steps.length
   const pending = firstUndone(steps, done)
 
+  // Vừa tick xong bước cuối (chưa xong -> xong hết): tự hiện hộp chấm sao, mỗi máy một lần. Mở lại trang khi đã xong
+  // từ trước thì không bật lên nữa (nút trong ô chúc mừng vẫn mở được)
+  const wasDone = useRef(allDone)
+  useEffect(() => {
+    if (allDone && !wasDone.current && !ratedBefore(machine)) {
+      markRated(machine)
+      openStudy('rating')
+    }
+    wasDone.current = allDone
+  }, [allDone, machine, openStudy])
+
   return (
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
       <FlowSteps current={2} />
@@ -139,10 +150,10 @@ export function GuidePanel() {
           <p className="mt-1">Nếu máy chưa lên hình, mở lại bước cuối để xem các lỗi hay gặp.</p>
           {askFeedback && (
             <button
-              onClick={() => openStudy('feedback')}
+              onClick={() => openStudy('rating')}
               className={`mt-3 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
             >
-              Gửi phản hồi cho nhóm nghiên cứu (2 phút)
+              Đánh giá trải nghiệm
             </button>
           )}
         </div>
@@ -313,6 +324,26 @@ function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: ()
       </span>
     </label>
   )
+}
+
+const RATED = 'pcsc-rated'
+
+/** Máy này đã tự hiện hộp chấm sao chưa (lưu trên trình duyệt; bị chặn lưu thì coi như chưa) */
+function ratedBefore(machine: string) {
+  try {
+    return (JSON.parse(localStorage.getItem(RATED) ?? '[]') as string[]).includes(machine)
+  } catch {
+    return false
+  }
+}
+
+function markRated(machine: string) {
+  try {
+    const list = JSON.parse(localStorage.getItem(RATED) ?? '[]') as string[]
+    localStorage.setItem(RATED, JSON.stringify([...list.filter((m) => m !== machine), machine].slice(-50)))
+  } catch {
+    /* bỏ qua */
+  }
 }
 
 /** Dòng chữ trên hình 3D: đang ở bước nào */
