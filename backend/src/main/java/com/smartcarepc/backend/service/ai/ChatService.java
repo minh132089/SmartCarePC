@@ -601,8 +601,11 @@ public class ChatService {
         }
         if (!missing.isEmpty()) {
             Long budget = turn.tiers.get(missing.getFirst()).budgetVnd();
-            reply += "\n\n" + missing.stream().map(t -> "Phương án " + TIER_NAME.get(t) + ": chưa tìm được cấu hình lắp chung được, "
-                    + "có link mua" + (budget == null ? "" : " trong mức tối đa " + millions(tierCap(budget, t))) + ", nên app không hiển thị.")
+            // Tổng thấp nhất của các phương án đang hiện: còn phương án hiện được trong mức tối đa của tier bị ẩn thì không phải
+            // thiếu tiền (vd Chất lượng 50tr bị ẩn trong khi Phù hợp 30tr hiện)
+            Long minShown = chosen.values().stream().map(List::getFirst).filter(x -> !x.picks().isEmpty())
+                    .map(x -> total(x.request(), x.details(), x.picks())).min(Long::compare).orElse(null);
+            reply += "\n\n" + missing.stream().map(t -> "Phương án " + TIER_NAME.get(t) + ": " + notShownReason(turn.tiers.get(t), t, budget, minShown))
                     .collect(Collectors.joining("\n"));
         }
         // Trợ lý chỉ viết thông số / lý do cho món khác balanced (trả lời nhanh hơn): điền phần trống từ tier khác có
@@ -1486,6 +1489,37 @@ public class ChatService {
      * cũng phải có link mua hàng mới còn bán). Hàng có link mà trang không ghi tình trạng thì vẫn hiện, thẻ ghi "hỏi cửa
      * hàng còn hàng không" (CONDITIONAL).
      */
+    /**
+     * Lý do một phương án không hiện, nói thật với người dùng: đủ link mà vượt mức tối đa thì nói rõ ngân sách chưa đủ, cấu hình rẻ
+     * nhất app dựng được là bao nhiêu và cần nới ngân sách tới khoảng bao nhiêu (ca thật itx 25tr / low 8tr: câu cũ "chưa tìm được
+     * cấu hình lắp chung được" không cho biết là thiếu tiền); thiếu link thì nêu món chưa mua được.
+     */
+    private String notShownReason(Checked c, String tier, Long budget, Long minShown) {
+        Long cap = budget == null ? null : tierCap(budget, tier);
+        if (c != null && !c.picks().isEmpty() && (minShown == null || cap == null || minShown > cap)) {
+            long t = total(c.request(), c.details(), c.picks());
+            var noBuy = missingBuy(c);
+            boolean fits = c.result() == null || c.result().compatible();
+            if (noBuy.isEmpty() && fits && productIssues(c.picks()).isEmpty() && cap != null && t > cap) {
+                // Ngân sách cần để phương án này vừa mức tối đa (Rẻ = 90% ngân sách, Chất lượng = ngân sách + 3 triệu)
+                long need = switch (tier) {
+                    case "cheap" -> Math.round(t / CHEAP_SHARE);
+                    case "quality" -> t - QUALITY_OVER;
+                    default -> t;
+                };
+                return "với giá hiện tại, cấu hình rẻ nhất app dựng được (có link mua, lắp chung được) là " + millions(t)
+                        + ", vượt mức tối đa " + millions(cap) + " của phương án này. Ngân sách hiện tại chưa đủ cho phương án này; "
+                        + "nới lên khoảng " + millions(need) + " thì app hiện được.";
+            }
+            if (!noBuy.isEmpty()) {
+                return "chưa tìm được link mua còn hàng cho " + noBuy.stream().map(this::partName).distinct().collect(Collectors.joining(", "))
+                        + (cap == null ? "" : " trong mức tối đa " + millions(cap)) + ", nên app không hiển thị.";
+            }
+        }
+        return "chưa tìm được cấu hình lắp chung được, có link mua" + (cap == null ? "" : " trong mức tối đa " + millions(cap))
+                + ", nên app không hiển thị.";
+    }
+
     private List<String> missingBuy(Checked c) {
         return c.request().items().stream().map(BuildCheckRequest.Item::code).filter(code -> {
             var p = c.picks().get(code);

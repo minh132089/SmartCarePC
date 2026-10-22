@@ -946,7 +946,9 @@ class ChatServiceTests {
 
         assertThat(res.build()).as("15 triệu > trần 12 triệu: không hiện").isNull();
         assertThat((String) messages(2).get(5).get("content")).contains("over_budget");
-        assertThat(res.reply()).contains("Phương án Phù hợp: chưa tìm được").contains("12 triệu");
+        // Đủ link, lắp được mà vượt trần, không có phương án nào khác hiện: nói thật là thiếu tiền và cần khoảng bao nhiêu
+        assertThat(res.reply()).contains("Phương án Phù hợp: với giá hiện tại, cấu hình rẻ nhất app dựng được").contains("vượt mức tối đa 12 triệu")
+                .contains("Ngân sách hiện tại chưa đủ").contains("nới lên khoảng 15 triệu");
     }
 
     @Test
