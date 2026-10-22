@@ -1322,8 +1322,10 @@ public class ChatService {
      */
     private Checked upgraded(Checked base, Long cap, long minTotal, Needs needs, List<String> notes) {
         boolean gpuFirst = needs == null || needs.vramMin() != null;
-        List<String> order = needs != null && needs.office() ? List.of("ram", "ssd")
-                : gpuFirst ? List.of("gpu", "ram", "ssd") : List.of("ram", "gpu", "ssd");
+        // CPU cùng socket nâng cuối cùng: card / RAM / SSD không nâng được trong trần thì CPU (ca thật n23 ai: Chất lượng
+        // không hơn Phù hợp vì không còn món nâng)
+        List<String> order = needs != null && needs.office() ? List.of("ram", "ssd", "cpu")
+                : gpuFirst ? List.of("gpu", "ram", "ssd", "cpu") : List.of("ram", "gpu", "ssd", "cpu");
         Map<String, Map<String, Object>> details = new LinkedHashMap<>();
         base.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
         Checked c = new Checked(base.request(), base.result(), details, base.summary(), base.budgetVnd(), new LinkedHashMap<>(base.picks()),
@@ -1372,6 +1374,11 @@ public class ChatService {
             if (found == null) return null;
             spec = coreQuery("gpu", found.title());
             note = "Card " + chipQuery(chip).substring(4) + " -> " + chipQuery(gpuChip(found.title())).substring(4);
+        } else if ("cpu".equals(kind)) {
+            found = higherCpu(code, now, (was + room) / Math.max(1, item.qty()), c.picks());
+            if (found == null) return null;
+            spec = cpuModel(found.title());
+            note = "CPU " + cpuModel(now.title()) + " -> " + cpuModel(found.title());
         } else {
             if ("ram".equals(kind) && d.get("user_layout") != null) return null;
             Integer have = "ram".equals(kind) ? ramTotal(text(d.get("spec"))) : amount("ssd", now.title());
@@ -1401,6 +1408,49 @@ public class ChatService {
         notes.add(note);
         var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
         return cap == null || total(out.request(), out.details(), out.picks()) <= cap ? out : null;
+    }
+
+    /** CPU mạnh hơn cùng socket, rẻ trước (không bản K: thường không kèm quạt, cần tản / bo khác), để nâng phương án Chất lượng */
+    static final Map<String, List<String>> CPU_UPGRADES = Map.of(
+            "LGA1700", List.of("i3-12100f", "i3-13100f", "i3-14100f", "i5-12400f", "i5-13400f", "i5-14400f", "i7-12700f", "i7-13700f", "i7-14700f"),
+            "AM4", List.of("ryzen5-5500", "ryzen5-5600", "ryzen5-5600x", "ryzen7-5700x", "ryzen7-5800x"),
+            "AM5", List.of("ryzen5-7500f", "ryzen5-7600", "ryzen7-7700", "ryzen5-9600x", "ryzen7-9700x"));
+
+    /**
+     * CPU kế tiếp cao hơn CPU đang chọn trong CPU_UPGRADES cùng socket (thử tối đa 2 mã), có link còn hàng, giá không quá maxPrice,
+     * qua phép kiểm chung; máy không card rời thì giữ đồ họa tích hợp. null nếu không có
+     */
+    private ProductSearch.Product higherCpu(String code, ProductSearch.Product now, long maxPrice, Map<String, ProductSearch.Product> picks) {
+        String socket = ProductRules.read("cpu", now.title()).socket();
+        String model = cpuModel(now.title());
+        var ladder = socket == null ? null : CPU_UPGRADES.get(socket.toUpperCase().replace(" ", ""));
+        if (ladder == null || model == null) return null;
+        // Bản không F (có đồ họa tích hợp) xếp cùng bậc bản F
+        int at = Math.max(ladder.indexOf(model), ladder.indexOf(model + "f"));
+        if (at < 0) return null;
+        boolean noGpu = picks.keySet().stream().noneMatch(k -> "gpu".equals(categoryOf(k)));
+        for (String next : ladder.subList(at + 1, Math.min(ladder.size(), at + 3))) {
+            String want = noGpu ? next.replaceAll("f$", "") : next;
+            List<ProductSearch.Product> pool = new ArrayList<>();
+            try {
+                pool.addAll(search.search(cpuQuery(want)));
+            } catch (RuntimeException e) {
+                log.debug("Tìm \"{}\" lỗi: {}", want, e.getMessage());
+            }
+            var list = pool.stream()
+                    .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() > now.priceVnd() && p.priceVnd() <= maxPrice)
+                    .filter(p -> !JUNK.matcher(p.title()).find() && cpuModel(p.title()) != null
+                            && cpuModel(p.title()).replaceAll("f$", "").equals(want.replaceAll("f$", "")))
+                    .filter(p -> !noGpu || Boolean.TRUE.equals(ProductRules.hasIgpu(p.title())))
+                    .filter(p -> !recentlyNoLink(p) && swapOk(code, p, picks))
+                    .filter(distinctUrl())
+                    .filter(p -> stockOrder(p) < 2)
+                    .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd))
+                    .toList();
+            var found = bestLinked(list, null, 6);
+            if (found != null && rank(found.url()) == 3) return found;
+        }
+        return null;
     }
 
     /**
