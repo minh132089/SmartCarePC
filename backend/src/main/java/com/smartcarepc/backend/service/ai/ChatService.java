@@ -1025,9 +1025,11 @@ public class ChatService {
 
     private static final java.util.regex.Pattern ANY_VENDOR = java.util.regex.Pattern.compile("hãng nào cũng (được|ok)");
     private static final java.util.regex.Pattern AMD_GPU = java.util.regex.Pattern.compile(
-            "(card|vga|gpu|đồ họa|đồ hoạ)[^.,;!?]{0,20}\\b(amd|radeon)\\b|\\bradeon\\b|\\brx\\s?\\d{4}");
+            "(card|vga|gpu|đồ họa|đồ hoạ)[^.,;!?]{0,20}\\b(amd|radeon|radeo)\\b|\\bradeon\\b|\\brx\\s?\\d{4}");
+    /** Cả cách viết sai hay gặp (ca thật 23/10: "card NVIDA" không nhận ra, app đổi sang card AMD) */
+    private static final String NVIDIA_WORDS = "nvidia|nvida|nvdia|nvidea|nividia|nivida|invidia|nvidiaa|geforce|gefore";
     private static final java.util.regex.Pattern NVIDIA_GPU = java.util.regex.Pattern.compile(
-            "(card|vga|gpu|đồ họa|đồ hoạ)[^.,;!?]{0,20}\\b(nvidia|geforce)\\b|\\b(nvidia|geforce)\\b|\\b[rg]tx\\s?\\d{4}");
+            "\\b(" + NVIDIA_WORDS + ")\\b|\\b[rg]tx\\s?\\d{4}");
     private static final java.util.regex.Pattern INTEL_GPU = java.util.regex.Pattern.compile("\\b(intel\\s*)?arc\\s?[ab]\\d{3}|card[^.,;!?]{0,20}\\bintel\\b");
 
     /** Hãng card người dùng đòi, đọc từ tin mới nhất trước (yêu cầu mới ghi đè cũ; "hãng nào cũng được" gỡ khoá) */
@@ -1437,6 +1439,7 @@ public class ChatService {
         nd.put("spec", spec);
         nd.remove("buy_qty");
         nd.remove("downgrade_note");
+        nd.remove("reason");
         log.info("Nâng {} ({}, {} đồng)", note, found.title(), found.priceVnd());
         notes.add(note);
         var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
@@ -1587,7 +1590,9 @@ public class ChatService {
         c.details().forEach((k, d) -> details.put(k, new LinkedHashMap<>(d)));
         picks.put(item.code(), found);
         links.put(item.code(), CompletableFuture.completedFuture(found.url()));
-        details.computeIfAbsent(item.code(), k -> new LinkedHashMap<>()).put("spec", coreQuery("gpu", found.title()));
+        var gd = details.computeIfAbsent(item.code(), k -> new LinkedHashMap<>());
+        gd.put("spec", coreQuery("gpu", found.title()));
+        gd.remove("reason");
         String note = "Card " + v + "GB -> " + vram(found.title()) + "GB cho đủ nhu cầu (" + found.title() + ")";
         log.info("Dưới mức nhu cầu: nâng {}", note);
         notes.add(note);
@@ -3430,6 +3435,7 @@ public class ChatService {
         links.put(code, CompletableFuture.completedFuture(best.url()));
         var d = details.computeIfAbsent(code, k -> new LinkedHashMap<>());
         d.put("spec", coreQuery("gpu", best.title()));
+        d.remove("reason");
         d.put("downgrade_note", "Card " + chipQuery(gpuChip(best.title())).substring(4) + " yếu hơn card ban đầu một chút nhưng rẻ hơn để vừa ngân sách.");
         String note = "Card " + chipQuery(chip).substring(4) + " -> " + chipQuery(gpuChip(best.title())).substring(4) + " (" + best.title()
                 + ", rẻ hơn " + (was - best.priceVnd()) + " đồng)";
@@ -3530,7 +3536,10 @@ public class ChatService {
                 details = new LinkedHashMap<>();
                 for (var d : c.details().entrySet()) details.put(d.getKey(), new LinkedHashMap<>(d.getValue()));
             }
-            details.computeIfAbsent(e.getKey(), k -> new LinkedHashMap<>()).put("spec", coreQuery("gpu", e.getValue().title()));
+            var gd = details.computeIfAbsent(e.getKey(), k -> new LinkedHashMap<>());
+            gd.put("spec", coreQuery("gpu", e.getValue().title()));
+            // Lý do trợ lý viết cho card cũ (vd "VRAM 12GB") không còn đúng với card mới
+            gd.remove("reason");
         }
         // Tản khí thấp (vỏ Mini) rất hiếm hàng: không tìm được món có link mà CPU là Intel bản Box (kèm quạt tản thấp
         // ~47 mm) thì bỏ dòng tản, dùng quạt kèm CPU

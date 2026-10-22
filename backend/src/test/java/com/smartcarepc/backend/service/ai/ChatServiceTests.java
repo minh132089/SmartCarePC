@@ -1688,6 +1688,9 @@ class ChatServiceTests {
         assertThat(ChatService.gpuVendor(List.of("Thôi hãng nào cũng được", "Đổi sang card AMD"))).isNull();
         assertThat(ChatService.gpuVendor(List.of("Mình muốn dùng CPU AMD Ryzen, chơi game 25 triệu"))).as("CPU AMD không phải card AMD").isNull();
         assertThat(ChatService.gpuVendor(List.of("cần RTX 4060 cho game"))).isEqualTo("nvidia");
+        assertThat(ChatService.gpuVendor(List.of("cần máy chơi game 20 triệu có card NVIDA"))).as("viết sai NVIDIA").isEqualTo("nvidia");
+        assertThat(ChatService.gpuVendor(List.of("muốn card nvdia"))).isEqualTo("nvidia");
+        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).allowedVendor()).isEqualTo("nvidia");
         assertThat(ChatService.gpuVendor(List.of("RTX 4060 hay RX 7600 tốt hơn?"))).as("so sánh hai hãng").isNull();
         var n = ChatService.needs(List.of("Đổi sang card AMD giúp mình", "Mình chơi game và livestream, 25 triệu, thích kính"));
         assertThat(n.allowedVendor()).isEqualTo("amd");
