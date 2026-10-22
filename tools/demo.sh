@@ -75,14 +75,23 @@ wait_port 4173 30 || { echo "Không chạy được bản build, xem $LOG/previe
 wait_port 8083 120 || { echo "Backend không lên, xem $LOG/backend.log"; exit 1; }
 
 say "5/6 Mở link công khai"
-: >"$LOG/tunnel.log"
-cloudflared tunnel --no-autoupdate --url http://localhost:4173 --http-host-header localhost:4173 >"$LOG/tunnel.log" 2>&1 &
-PIDS="$PIDS $!"
+# Xin quick tunnel có lúc hết giờ ("failed to request quick Tunnel"): thử lại tối đa 3 lần. Bỏ địa chỉ api.trycloudflare.com nằm
+# trong dòng báo lỗi (lần 22/10 đọc nhầm nó thành link, /api của trang demo hỏng mà không ai biết)
 URL=""
-i=0
-while [ -z "$URL" ] && [ $i -lt 40 ]; do
-  URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG/tunnel.log" | head -1)
-  i=$((i + 1)); sleep 1
+for attempt in 1 2 3; do
+  : >"$LOG/tunnel.log"
+  cloudflared tunnel --no-autoupdate --url http://localhost:4173 --http-host-header localhost:4173 >"$LOG/tunnel.log" 2>&1 &
+  TUNNEL_PID=$!
+  i=0
+  while [ -z "$URL" ] && [ $i -lt 40 ]; do
+    URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG/tunnel.log" | grep -v '^https://api\.' | head -1)
+    grep -q "failed to request quick Tunnel" "$LOG/tunnel.log" && break
+    i=$((i + 1)); sleep 1
+  done
+  [ -n "$URL" ] && { PIDS="$PIDS $TUNNEL_PID"; break; }
+  kill $TUNNEL_PID 2>/dev/null
+  echo "Xin tunnel lần $attempt chưa được, thử lại sau 10 giây..."
+  sleep 10
 done
 [ -n "$URL" ] || { echo "Không lấy được link, xem $LOG/tunnel.log"; exit 1; }
 
