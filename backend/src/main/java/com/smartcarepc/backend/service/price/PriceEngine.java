@@ -88,7 +88,7 @@ public class PriceEngine {
     private final boolean enabled;
     /** Luồng ảo: mỗi lượt gọi web một luồng, không xếp hàng chờ nhau (xem service/Io) */
     private final ExecutorService pool = com.smartcarepc.backend.service.Io.POOL;
-    private record Cached(Instant at, List<Offer> offers) { }
+    private record Cached(Instant at, List<Offer> offers, boolean incomplete) { }
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
     /** Mọi offer đã thấy theo link, để thẻ cấu hình hiện được còn hàng, bảo hành, lúc kiểm tra */
     private final Map<String, Offer> byUrl = new ConcurrentHashMap<>();
@@ -286,7 +286,9 @@ public class PriceEngine {
         }
         String key = query.strip().toLowerCase();
         var hit = cache.get(key);
-        if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? EMPTY_CACHE : CACHE))) return hit.offers();
+        if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? (hit.incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE))) {
+            return hit.offers();
+        }
         // Cùng từ khoá đang được tìm (ba phương án chốt song song hay tìm trùng, vd "tản nhiệt khí CPU" 19 lần trong một câu):
         // chờ chung một lượt, không bắn thêm request vào cửa hàng (ca thật v10: quá tải, 272/401 lượt hết giờ, trả rỗng)
         var mine = new CompletableFuture<List<Offer>>();
@@ -323,7 +325,9 @@ public class PriceEngine {
             if (cache.size() > 500) cache.clear();
             // Kết quả rỗng chỉ nhớ EMPTY_CACHE (có thể là cửa hàng chậm nhất thời), có hàng nhớ CACHE. Rỗng vì nguồn hết giờ / lỗi
             // thì không nhớ: lần tìm sau thử lại thật (ca thật n18: dòng card trống mọi truy vấn trả rỗng trong cùng câu tư vấn)
-            if (!found.isEmpty() || !incomplete.get()) cache.put(key, new Cached(Instant.now(), found));
+            // Rỗng vì nguồn lỗi chỉ nhớ FAILED_CACHE: đủ để không gửi lại cùng từ khoá liên tục vào cửa hàng (ca thật n32: cùng một
+            // từ khoá 9 lần trong vài phút, càng bị chặn), vẫn thử lại sớm
+            cache.put(key, new Cached(Instant.now(), found, found.isEmpty() && incomplete.get()));
             return found;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -344,6 +348,8 @@ public class PriceEngine {
     private final Map<String, CompletableFuture<List<Offer>>> inFlight = new ConcurrentHashMap<>();
     /** Kết quả rỗng chỉ nhớ ngắn: đủ để không tìm lại trong cùng một câu tư vấn, rồi thử lại */
     static final Duration EMPTY_CACHE = Duration.ofMinutes(2);
+    /** Kết quả rỗng do nguồn hết giờ / lỗi: nhớ rất ngắn */
+    static final Duration FAILED_CACHE = Duration.ofSeconds(30);
 
     private List<Offer> fresh(String query, java.util.concurrent.atomic.AtomicBoolean incomplete) {
         Instant at = Instant.now();
