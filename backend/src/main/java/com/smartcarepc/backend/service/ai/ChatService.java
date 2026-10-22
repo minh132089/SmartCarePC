@@ -3406,7 +3406,10 @@ public class ChatService {
         Long line = price(c.details().getOrDefault(code, Map.of()), now, gpu.qty())[1];
         long was = line != null ? line : now.priceVnd() * gpu.qty();
         ProductSearch.Product best = null;
-        for (String other : gpuDowngrades(chip, 15)) {
+        // Người dùng đòi một hãng (máy AI chỉ NVIDIA, "card NVIDIA"...): ít chip để chọn hơn, cho hạ xa hơn (vd RTX 4060 -> RTX 3050
+        // 8GB, ca thật 23/10: 4060 rẻ nhất còn hàng 8,99 triệu, máy game 20 triệu vượt trần cả Rẻ lẫn Phù hợp)
+        int maxDrop = needs != null && needs.allowedVendor() != null ? 20 : 15;
+        for (String other : gpuDowngrades(chip, maxDrop)) {
             var found = otherChip(code, now, List.of(other), floor, was / gpu.qty() - 1, c.picks(), needs == null ? null : needs.allowedVendor());
             if (found == null) continue;
             if (best == null || found.priceVnd() < best.priceVnd()) best = found;
@@ -3424,7 +3427,7 @@ public class ChatService {
             }
         }
         if (best == null) {
-            log.info("Vượt trần {}: không hạ được card {} (VRAM tối thiểu {}, chip yếu hơn {})", cap, chip, floor, gpuDowngrades(chip, 15));
+            log.info("Vượt trần {}: không hạ được card {} (VRAM tối thiểu {}, chip yếu hơn {})", cap, chip, floor, gpuDowngrades(chip, maxDrop));
             return c;
         }
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
