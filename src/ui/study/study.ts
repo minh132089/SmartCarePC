@@ -23,12 +23,14 @@ function read<T>(key: string, fallback: T): T {
     return fallback
   }
 }
+/** Ghi localStorage; trả về false khi bị chặn (ẩn danh, chặn cookie, đầy) */
 function write(key: string, value: unknown) {
   try {
     if (value == null) localStorage.removeItem(key)
     else localStorage.setItem(key, JSON.stringify(value))
+    return true
   } catch {
-    /* bỏ qua */
+    return false
   }
 }
 
@@ -128,20 +130,30 @@ export async function flushQueue() {
   write(QUEUE, left.length ? left : null)
 }
 
+export type SendResult = 'sent' | 'queued' | 'failed'
+
+/** Đang gửi phản hồi (dùng chung giữa các lần mở hộp thoại): chặn gửi trùng khi đóng rồi mở lại giữa chừng */
+export const useSending = create<{ sending: boolean }>(() => ({ sending: false }))
+
 /**
- * Gửi phản hồi kèm mã và lần đo hiện tại. Không gửi được thì cất vào hàng đợi trên máy
- * để lần sau gửi bù, nên người tham gia không mất câu trả lời. Trả về false nếu đang nằm trong hàng đợi.
+ * Gửi phản hồi kèm mã và lần đo hiện tại. Mỗi lần gửi có submission_id cố định để máy chủ bỏ bản trùng (gửi lại từ hàng
+ * đợi, bấm hai lần). Không tới được máy chủ thì cất vào hàng đợi trên máy để gửi bù.
+ * Trả về 'sent' (máy chủ đã nhận), 'queued' (đã cất trên máy), 'failed' (không gửi được và không cất được: giữ form để thử lại).
  */
-export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phase'>) {
+export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phase'>): Promise<SendResult> {
+  if (useSending.getState().sending) return 'failed'
+  useSending.setState({ sending: true })
   const { code, phase } = useStudy.getState()
-  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data }
+  const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...data.answers, submission_id: id } }
   try {
     await post(payload)
     void flushQueue()
-    return true
+    return 'sent'
   } catch {
-    write(QUEUE, [...read<Payload[]>(QUEUE, []), payload].slice(-200))
-    return false
+    return write(QUEUE, [...read<Payload[]>(QUEUE, []), payload].slice(-200)) ? 'queued' : 'failed'
+  } finally {
+    useSending.setState({ sending: false })
   }
 }
 

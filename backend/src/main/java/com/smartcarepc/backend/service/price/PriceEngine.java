@@ -137,8 +137,20 @@ public class PriceEngine {
         saver.scheduleWithFixedDelay(this::saveCache, 5, 5, TimeUnit.MINUTES);
     }
 
+    /** Tắt backend: dừng lịch lưu và chờ lượt đang chạy xong, rồi lưu lần cuối (không để hai lượt ghi cùng lúc) */
     @jakarta.annotation.PreDestroy
-    void saveCache() {
+    void saveOnShutdown() {
+        saver.shutdown();
+        try {
+            saver.awaitTermination(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        saveCache();
+    }
+
+    /** Ghi file tuần tự (synchronized): lịch lưu và lần lưu khi tắt không ghi đè file tạm của nhau */
+    synchronized void saveCache() {
         if (cacheFile == null || cacheFile.isBlank()) return;
         try {
             prune();

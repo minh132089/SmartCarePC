@@ -72,6 +72,13 @@ export function FeedbackAdmin() {
     void load(key)
   }, [key, load])
 
+  // Cùng khoá mà lần trước lỗi tạm thời (mạng, 503): setKey không đổi giá trị nên effect không chạy lại, phải tải trực tiếp
+  const submitKey = () => {
+    const k = draft.trim()
+    if (k === key) void load(k)
+    else setKey(k)
+  }
+
   const shown = useMemo(
     () =>
       (rows ?? []).filter((r) =>
@@ -84,7 +91,8 @@ export function FeedbackAdmin() {
   const maxCount = Math.max(1, ...starCount)
 
   const download = async () => {
-    const res = await fetch(`/api/feedback/export.csv?key=${encodeURIComponent(key)}`)
+    // Khoá gửi qua header, không nằm trong địa chỉ (tránh lưu vào log truy cập)
+    const res = await fetch('/api/feedback/export.csv', { headers: { 'X-Export-Key': key } })
     if (!res.ok) return setError(`Không tải được CSV (lỗi ${res.status})`)
     const url = URL.createObjectURL(await res.blob())
     const a = document.createElement('a')
@@ -100,7 +108,7 @@ export function FeedbackAdmin() {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            setKey(draft.trim())
+            submitKey()
           }}
           className="w-full max-w-[420px] rounded-[24px] bg-panel p-6 ring-1 ring-line"
         >
@@ -116,7 +124,7 @@ export function FeedbackAdmin() {
           />
           {error && <p className="mt-2 text-[13px] text-bad">{error}</p>}
           <div className="mt-4 flex justify-end">
-            <PrimaryButton onClick={() => setKey(draft.trim())} disabled={!draft.trim() || busy}>
+            <PrimaryButton onClick={submitKey} disabled={!draft.trim() || busy}>
               Xem dữ liệu
             </PrimaryButton>
           </div>

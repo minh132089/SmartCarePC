@@ -45,8 +45,16 @@ public class FeedbackService {
         this.exportKey = exportKey.strip().getBytes(StandardCharsets.UTF_8);
     }
 
+    private static final java.util.regex.Pattern SUBMISSION_ID = java.util.regex.Pattern.compile("[A-Za-z0-9-]{8,64}");
+
     @Transactional
     public FeedbackSaved save(FeedbackRequest request) {
+        // Cùng một lần gửi (mã submission_id do app tạo) tới hai lần (bấm hai lần, gửi lại từ hàng đợi): trả bản đã lưu
+        Object sid = request.answers().get("submission_id");
+        if (sid instanceof String id && SUBMISSION_ID.matcher(id).matches()) {
+            var dup = repository.findFirstByAnswersContaining("\"submission_id\":\"" + id + "\"");
+            if (dup.isPresent()) return new FeedbackSaved(dup.get().getId());
+        }
         String answers = json.writeValueAsString(request.answers());
         if (answers.length() > MAX_ANSWERS_CHARS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu trả lời quá dài");

@@ -39,9 +39,11 @@ public class FeedbackController {
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(feedbackService.list(key));
     }
 
-    /** Mở trong trình duyệt: /api/feedback/export.csv?key=... */
+    /** Tải CSV: khoá gửi qua header X-Export-Key (trang /feedback); ?key=... vẫn nhận để mở tay trong trình duyệt */
     @GetMapping("/export.csv")
-    public ResponseEntity<String> export(@RequestParam(required = false) String key) {
+    public ResponseEntity<String> export(@RequestParam(required = false) String key,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Export-Key", required = false) String headerKey) {
+        if (headerKey != null && !headerKey.isBlank()) key = headerKey;
         return ResponseEntity.ok()
                 .contentType(new MediaType("text", "csv", java.nio.charset.StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"pcsmartcare-feedback.csv\"")

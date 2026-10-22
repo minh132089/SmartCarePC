@@ -4,7 +4,7 @@ import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
 import { FEEDBACK } from './questions'
 import { QuestionList } from './QuestionList'
-import { CODE_PATTERN, PHASE_LABEL, sendFeedback, useStudy, type Phase } from './study'
+import { CODE_PATTERN, PHASE_LABEL, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, PrimaryButton, Question, QuietButton } from './StudyParts'
 
 /** Nút nhỏ "Tham gia thử nghiệm" cho người chưa có mã (người dùng bình thường bỏ qua được) */
@@ -107,26 +107,29 @@ function FeedbackDialog() {
   const { open, markAnswered } = useStudy()
   const machine = useViewer((s) => s.familyId ?? s.buildId)
   const [a, setA] = useState<AnswerMap>({})
-  const [busy, setBusy] = useState(false)
+  const busy = useSending((s) => s.sending)
+  const [failed, setFailed] = useState(false)
   const { answers, empty } = collect(FEEDBACK, a)
+  // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
+  const close = () => !busy && open(null)
 
   const submit = async () => {
-    setBusy(true)
-    await sendFeedback({ machine, answers })
+    const r = await sendFeedback({ machine, answers })
+    if (r === 'failed') return setFailed(true)
     markAnswered('feedback')
-    setBusy(false)
     open(null)
   }
 
   return (
     <Dialog
       title="Phản hồi về web app"
-      onClose={() => open(null)}
+      onClose={close}
       footer={
         <>
-          <QuietButton onClick={() => open(null)}>Để sau</QuietButton>
+          {failed && <p className="mr-auto text-[13px] text-bad">Chưa gửi được, kiểm tra mạng rồi bấm Gửi lại.</p>}
+          <QuietButton onClick={close}>Để sau</QuietButton>
           <PrimaryButton onClick={submit} disabled={busy || empty}>
-            Gửi
+            {busy ? 'Đang gửi…' : failed ? 'Gửi lại' : 'Gửi'}
           </PrimaryButton>
         </>
       }
@@ -179,26 +182,30 @@ function RatingDialog() {
   const machine = useViewer((s) => s.familyId ?? s.buildId)
   const [stars, setStars] = useState(0)
   const [a, setA] = useState<AnswerMap>({})
-  const [busy, setBusy] = useState(false)
+  const busy = useSending((s) => s.sending)
+  const [failed, setFailed] = useState(false)
   const { answers } = collect(FEEDBACK, a)
+  // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
+  const close = () => !busy && open(null)
 
   const submit = async () => {
-    setBusy(true)
-    await sendFeedback({ machine, answers: { stars, source: 'guide_done', ...answers } })
+    const r = await sendFeedback({ machine, answers: { stars, source: 'guide_done', ...answers } })
+    // Không tới được máy chủ và không cất được trên máy: giữ form và câu trả lời để thử lại
+    if (r === 'failed') return setFailed(true)
     markAnswered('feedback')
-    setBusy(false)
     open(null)
   }
 
   return (
     <Dialog
       title="Bạn đã lắp xong cả máy!"
-      onClose={() => open(null)}
+      onClose={close}
       footer={
         <>
-          <QuietButton onClick={() => open(null)}>Để sau</QuietButton>
+          {failed && <p className="mr-auto text-[13px] text-bad">Chưa gửi được, kiểm tra mạng rồi bấm Gửi lại.</p>}
+          <QuietButton onClick={close}>Để sau</QuietButton>
           <PrimaryButton onClick={submit} disabled={busy || stars === 0}>
-            Gửi đánh giá
+            {busy ? 'Đang gửi…' : failed ? 'Gửi lại' : 'Gửi đánh giá'}
           </PrimaryButton>
         </>
       }
