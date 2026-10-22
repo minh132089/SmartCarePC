@@ -119,10 +119,24 @@ public class ProductSearch {
      * sản phẩm ở cửa hàng khác. Chờ tối đa 6 giây; món tìm chưa xong thì chỉ so trong nhóm tìm kiếm cũ.
      */
     public void warmCompare(java.util.Collection<Product> picks) {
+        warmCompare(picks, 6000);
+    }
+
+    /** Đang tìm cùng model cho link nào (gọi sớm lúc chốt phương án rồi gọi lại lúc dựng thẻ: dùng chung, không tìm hai lần) */
+    private final Map<String, CompletableFuture<?>> warming = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Như trên, chờ tối đa waitMs (0: chạy nền, không chờ). App gọi ngay sau khi mỗi phương án chốt xong (không chờ) nên lúc
+     * dựng thẻ phần lớn đã xong, chỉ chờ thêm chút ít thay vì 6 giây.
+     */
+    public void warmCompare(java.util.Collection<Product> picks, long waitMs) {
         if (!engine.enabled()) return;
         var jobs = picks.stream()
                 .filter(p -> p.title() != null && p.url() != null && !sameModel.containsKey(p.url()))
-                .map(p -> Io.run(() -> {
+                .map(p -> {
+                    // Gắn bước dọn sau computeIfAbsent: việc xong ngay thì whenComplete chạy luôn trong luồng này, dọn bên trong
+                    // computeIfAbsent sẽ lỗi "Recursive update"
+                    CompletableFuture<?> f = warming.computeIfAbsent(p.url(), url -> Io.run(() -> {
                     var found = engine.search(shortTitle(p.title()));
                     sameModel.put(p.url(), found);
                     // Mở trang sản phẩm của 2 nơi bán rẻ nhất cùng model (compare chỉ hiện nơi đã kiểm trang, còn hàng)
@@ -133,10 +147,14 @@ public class ProductSearch {
                             .sorted(java.util.Comparator.comparingLong(Offer::priceVnd))
                             .limit(2)
                             .forEach(o -> engine.readPage(o.url(), p.title()));
-                }))
+                    }));
+                    f.whenComplete((v, e) -> warming.remove(p.url(), f));
+                    return f;
+                })
                 .toArray(CompletableFuture[]::new);
+        if (waitMs <= 0) return;
         try {
-            CompletableFuture.allOf(jobs).get(6, java.util.concurrent.TimeUnit.SECONDS);
+            CompletableFuture.allOf(jobs).get(waitMs, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
             log.debug("Tìm cùng model chưa xong hết: {}", e.getMessage());
         } catch (InterruptedException e) {

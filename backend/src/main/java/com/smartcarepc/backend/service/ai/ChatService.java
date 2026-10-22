@@ -77,8 +77,8 @@ public class ChatService {
             Người dùng nói "nhỏ gọn", "gọn", "bàn chật" thì chọn vỏ Tower nhỏ gọn (Micro-ATX); CHỈ chọn vỏ Mini / SFF \
             (Mini-ITX) khi người dùng nói rõ muốn máy rất nhỏ / mini / ITX, vì bo Mini-ITX, tản thấp và nguồn SFX đắt \
             và hiếm hàng hơn nhiều.
-            4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề) và \
-            check_build cho cấu hình định chọn, để tiết kiệm thời gian. Từ khoá ngắn, mỗi lần một loại hoặc một model, vd \
+            4. Tìm hàng thật, NGAY TRONG LƯỢT ĐẦU TIÊN: gọi cùng lúc search_products cho mọi linh kiện (trừ đồ nghề), \
+            để tiết kiệm thời gian. KHÔNG gọi check_build: propose_build tự kiểm tra lắp chung. Từ khoá ngắn, mỗi lần một loại hoặc một model, vd \
             "RAM DDR4 16GB 3200", "RTX 3050 8GB"; muốn so hai model thì gọi hai lần. Mỗi kết quả có một id ngắn (vd "s3-2"). Kết quả có nhiều mức giá: dùng chúng cho cả \
             ba phương án ở bước 5, ưu tiên cửa hàng máy tính Việt Nam có ghi giá. Bỏ qua hàng \
             cũ, "like new", hàng trưng bày, phụ kiện bán kèm, và giá rẻ bất thường (thấp hơn nhiều so với các kết quả \
@@ -225,8 +225,8 @@ public class ChatService {
             gộp thành một câu hỏi ngắn. Có rồi thì làm luôn, đừng hỏi thêm.
             2. Chọn linh kiện từ danh mục của app (list_components). Một máy cần đủ: vỏ, bo mạch chủ, CPU, tản nhiệt, \
             RAM, SSD, nguồn; thêm card đồ họa khi chơi game hoặc làm đồ họa, hoặc khi CPU không có sẵn đồ họa.
-            3. Luôn chạy check_build với cấu hình định đề xuất. Còn lỗi (errors) thì đổi linh kiện rồi chạy lại cho tới \
-            khi lắp được. Cảnh báo (warnings) thì nói lại cho người dùng bằng lời dễ hiểu.
+            3. Luôn chạy check_build với cấu hình định đề xuất (trang tư vấn có propose_build thì bỏ bước này, propose_build \
+            đã tự kiểm tra). Còn lỗi (errors) thì đổi linh kiện rồi chạy lại cho tới khi lắp được. Cảnh báo (warnings) thì nói lại cho người dùng bằng lời dễ hiểu.
             4. App sẽ tự vẽ danh sách linh kiện thành một thẻ ngay dưới câu trả lời, nên đừng liệt kê lại cả danh sách. \
             Chỉ nói vài món quan trọng nhất và lý do chọn.
             5. Danh mục của app chỉ là bộ mẫu nhỏ. Nếu nhu cầu vượt quá danh mục thì nói rõ điều đó.
@@ -638,7 +638,8 @@ public class ChatService {
             Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
             chosen.values().forEach(list -> list.forEach(c -> c.picks().values().forEach(p -> picks.putIfAbsent(p.url(), p))));
             long w0 = System.nanoTime();
-            search.warmCompare(picks.values());
+            // Đã bắt đầu tìm từ lúc chốt từng phương án (propose_build): chỉ chờ thêm phần còn dở
+            search.warmCompare(picks.values(), 1500);
             log.info("Chat: so giá phụ (warmCompare) {} ms", (System.nanoTime() - w0) / 1_000_000);
         }
         List<BuildCard> options = new ArrayList<>();
@@ -707,27 +708,45 @@ public class ChatService {
      * là bản cuối: trợ lý đọc đúng tên, giá, tổng này, và sau đó app không đổi món nào nữa (thẻ và lời tư vấn khớp nhau).
      */
     private Checked finalizeTier(Checked base, String tier, Long cap, Map<String, String> aiTitles, Needs needs, List<String> notes) {
+        return finalizeTier(base, tier, cap, aiTitles, needs, notes, TIER_BUDGET);
+    }
+
+    /**
+     * budget: thời gian tối đa cho các bước cứu sau bước lấy link (hạ thông số, đổi DDR4, ép giá, vỏ nhỏ gọn...). Hết giờ thì
+     * dừng, giữ kết quả tốt nhất đang có (phương án vẫn vượt trần thì không hiện, app ghi rõ lý do như cũ). Đo thật 22/10:
+     * propose_build trung bình 82 giây, có lúc 309 giây vì các bước cứu chạy nối tiếp và mỗi bước mở 6 - 8 trang cửa hàng.
+     */
+    private Checked finalizeTier(Checked base, String tier, Long cap, Map<String, String> aiTitles, Needs needs, List<String> notes,
+            java.time.Duration budget) {
+        long until = System.nanoTime() + budget.toNanos();
+        boolean[] warned = { false };
+        java.util.function.BooleanSupplier go = () -> {
+            if (System.nanoTime() < until) return true;
+            if (!warned[0]) log.info("finalize {}: hết {} giây cho các bước cứu, giữ kết quả hiện có", tier, budget.toSeconds());
+            warned[0] = true;
+            return false;
+        };
         Checked c = normalized(withPagePrices(withLinkedPicks(base, tier, cap)), aiTitles);
         // Bo / RAM lệch DDR thì sửa trước (chạy cả khi dưới trần); RAM / SSD dưới mức nhu cầu thì nâng lên nếu còn chỗ
         c = repairDdr(c, cap, notes);
         c = raiseToNeeds(c, cap, needs, notes);
-        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(refit(c, tier, cap), aiTitles);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) c = normalized(refit(c, tier, cap), aiTitles);
         // Vẫn vượt trần với hàng cùng thông số: dùng quạt kèm CPU (Intel Box) thay tản rời, rồi hạ RAM / SSD xuống mức tối
         // thiểu theo nhu cầu (học Word 8GB / 256GB; game 16GB / 512GB), lấy link và giá trang lần nữa
-        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = withoutExtraCooler(c, notes);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) c = withoutExtraCooler(c, notes);
         // Nền DDR5 mà CPU dùng được DDR4 (Intel 12 - 14, AM4): đổi bo + RAM sang DDR4 cùng dung lượng (ca thật v32: RAM DDR5
         // 16GB 6,49 triệu, DDR4 16GB 3,39 triệu; Rẻ vượt trần 1 triệu)
-        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(toDdr4(c, cap, notes)), aiTitles);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) c = normalized(withPagePrices(toDdr4(c, cap, notes)), aiTitles);
         // Card đắt (vd 25,99 triệu trong phương án 31,5 triệu): hạ chip trước khi cắt RAM / SSD
-        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(lowerGpu(c, cap, needs, notes)), aiTitles);
-        if (cap != null && total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(downgrade(c, cap, needs, notes)), aiTitles);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) c = normalized(withPagePrices(lowerGpu(c, cap, needs, notes)), aiTitles);
+        if (cap != null && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) c = normalized(withPagePrices(downgrade(c, cap, needs, notes)), aiTitles);
         // Máy học / văn phòng mà CPU đắt (ca thật v12: CPU 5,69 triệu cho máy học Word): hạ xuống CPU phổ thông cùng socket
-        if (cap != null && needs != null && needs.office() && total(c.request(), c.details(), c.picks()) > cap) {
+        if (cap != null && needs != null && needs.office() && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) {
             c = normalized(withPagePrices(lowerCpuForNeeds(c, notes)), aiTitles);
             if (total(c.request(), c.details(), c.picks()) > cap) c = withoutExtraCooler(c, notes);
         }
         boolean over = cap != null && total(c.request(), c.details(), c.picks()) > cap;
-        if (over || !productIssues(c.picks()).isEmpty()) {
+        if ((over || !productIssues(c.picks()).isEmpty()) && go.getAsBoolean()) {
             var low = normalized(withPagePrices(cheapest(c, tier, cap)), aiTitles);
             long lowTotal = total(low.request(), low.details(), low.picks());
             boolean lowOk = (cap == null || lowTotal <= cap) && productIssues(low.picks()).isEmpty();
@@ -737,7 +756,7 @@ public class ChatService {
         // Vượt trần ít (SQUEEZE_GAP): ép thêm một lượt, mọi dòng đổi sang hàng cùng thông số rẻ hơn có link (kể cả tier Rẻ,
         // vốn chỉ chạy cheapen một món mỗi dòng), món tiết kiệm nhiều nhất trước
         long nowTotal = cap == null ? 0 : total(c.request(), c.details(), c.picks());
-        if (cap != null && nowTotal > cap && nowTotal - cap <= SQUEEZE_GAP) {
+        if (cap != null && nowTotal > cap && nowTotal - cap <= SQUEEZE_GAP && go.getAsBoolean()) {
             Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
             Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
             Map<String, Map<String, Object>> details = new LinkedHashMap<>();
@@ -755,7 +774,7 @@ public class ChatService {
         }
         // Máy game (card rời, không phải máy AI / đồ họa) vẫn vượt trần: hạ CPU xuống dòng game phổ thông cùng socket
         boolean gameNeeds = needs != null && !needs.office() && !needs.cuda() && needs.vramMin() != null && needs.vramMin() <= 8;
-        if (cap != null && gameNeeds && total(c.request(), c.details(), c.picks()) > cap) {
+        if (cap != null && gameNeeds && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) {
             c = normalized(withPagePrices(lowerCpuForNeeds(c, notes, true)), aiTitles);
         }
         if (cap != null && total(c.request(), c.details(), c.picks()) > cap) {
@@ -765,18 +784,22 @@ public class ChatService {
         }
         // Máy game mà dòng bo ATX không có link mua nào (ca thật v26: bo B550 ATX không cửa hàng nào có, cả Phù hợp / Chất
         // lượng bị ẩn dù dưới trần): thử mẫu vỏ nhỏ gọn (bo Micro-ATX); compactSwitch chỉ nhận khi bản mới hiện được
-        if (needs != null && needs.vramMin() != null && !needs.miniItx() && missingBuy(c).contains("mb_atx")) {
+        if (needs != null && needs.vramMin() != null && !needs.miniItx() && missingBuy(c).contains("mb_atx") && go.getAsBoolean()) {
             log.info("finalize {}: dòng bo ATX không có link, thử vỏ nhỏ gọn", tier);
             c = compactSwitch(c, tier, cap, needs, aiTitles, notes);
         }
         // Chỉ khi vượt không quá COMPACT_GAP (bo mATX + tản khí rẻ hơn bo ATX + tản nước cỡ 1 - 4 triệu): vượt xa hơn thì đổi
         // vỏ cũng không vào trần, khỏi tốn vài chục lượt tìm
         if (cap != null && needs != null && needs.vramMin() != null && total(c.request(), c.details(), c.picks()) > cap
-                && total(c.request(), c.details(), c.picks()) - cap <= COMPACT_GAP) {
+                && total(c.request(), c.details(), c.picks()) - cap <= COMPACT_GAP && go.getAsBoolean()) {
             c = compactSwitch(c, tier, cap, needs, aiTitles, notes);
         }
         return c;
     }
+
+    /** Thời gian tối đa cho các bước cứu của một phương án (propose_build); dựng lại phương án từ phương án bên cạnh dùng REBUILD_BUDGET */
+    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(40);
+    static final java.time.Duration REBUILD_BUDGET = java.time.Duration.ofSeconds(25);
 
     /** Khoản vượt trần tối đa còn ép giá thêm một lượt (đổi hàng cùng thông số rẻ hơn) */
     static final long SQUEEZE_GAP = 1_500_000;
@@ -1246,7 +1269,7 @@ public class ChatService {
         var base = new Checked(b.request(), b.result(), details, b.summary(), b.budgetVnd(), new LinkedHashMap<>(b.picks()),
                 new LinkedHashMap<>(b.links()), b.siblings());
         List<String> notes = new ArrayList<>();
-        var cand = finalizeTier(base, "cheap", target, Map.of(), turn.needs, notes);
+        var cand = finalizeTier(base, "cheap", target, Map.of(), turn.needs, notes, REBUILD_BUDGET);
         long tc = total(cand.request(), cand.details(), cand.picks());
         if (showable(cand, target) && !signature(cand.picks()).equals(signature(b.picks()))) {
             log.info("Rẻ dựng lại từ Phù hợp: {} (Phù hợp {}), {}", tc, tb, notes);
@@ -1291,7 +1314,7 @@ public class ChatService {
         var base = new Checked(q.request(), q.result(), details, q.summary(), q.budgetVnd(), new LinkedHashMap<>(q.picks()),
                 new LinkedHashMap<>(q.links()), q.siblings());
         List<String> notes = new ArrayList<>();
-        var cand = finalizeTier(base, "balanced", target, Map.of(), turn.needs, notes);
+        var cand = finalizeTier(base, "balanced", target, Map.of(), turn.needs, notes, REBUILD_BUDGET);
         long tc = total(cand.request(), cand.details(), cand.picks());
         if (showable(cand, target) && !signature(cand.picks()).equals(signature(q.picks()))) {
             log.info("Phù hợp dựng lại từ Chất lượng: {} (Chất lượng {}), {}", tc, tq, notes);
@@ -4059,6 +4082,8 @@ public class ChatService {
                     if (turn.advice && search.enabled()) {
                         var before = checked.request();
                         checked = finalizeTier(checked, tier, capNow, aiTitles, turn.needs, downgrades);
+                        // Bảng so giá cùng model ở cửa hàng khác: bắt đầu tìm nền ngay, trong lúc trợ lý viết câu trả lời
+                        search.warmCompare(checked.picks().values(), 0);
                         if (!checked.request().equals(before)) {
                             var r = withoutFalseGpuError(matched(compatibilityService.check(checked.request()), checked.request(), turn), checked.picks());
                             checked = new Checked(checked.request(), r, checked.details(), checked.summary(), checked.budgetVnd(),
