@@ -12,4 +12,7 @@ public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
 
     /** Bản đã lưu có cùng mã lần gửi: chống lưu trùng khi gửi lại */
     java.util.Optional<Feedback> findFirstBySubmissionId(String submissionId);
+
+    /** Bản lưu trước khi có cột submission_id (mã chỉ nằm trong JSON câu trả lời) */
+    java.util.Optional<Feedback> findFirstByAnswersContaining(String fragment);
 }

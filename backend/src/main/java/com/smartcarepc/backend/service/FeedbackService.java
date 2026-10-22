@@ -53,7 +53,7 @@ public class FeedbackService {
         Object sid = request.answers().get("submission_id");
         String submission = sid instanceof String id && SUBMISSION_ID.matcher(id).matches() ? id : null;
         if (submission != null) {
-            var dup = repository.findFirstBySubmissionId(submission);
+            var dup = findSubmission(submission);
             if (dup.isPresent()) return new FeedbackSaved(dup.get().getId());
         }
         String answers = json.writeValueAsString(request.answers());
@@ -75,7 +75,13 @@ public class FeedbackService {
     public java.util.Optional<FeedbackSaved> existing(FeedbackRequest request) {
         Object sid = request.answers().get("submission_id");
         if (!(sid instanceof String id) || !SUBMISSION_ID.matcher(id).matches()) return java.util.Optional.empty();
-        return repository.findFirstBySubmissionId(id).map(f -> new FeedbackSaved(f.getId()));
+        return findSubmission(id).map(f -> new FeedbackSaved(f.getId()));
+    }
+
+    /** Tìm theo cột submission_id, rồi trong JSON câu trả lời (bản lưu trước khi có cột) */
+    private java.util.Optional<Feedback> findSubmission(String id) {
+        var byColumn = repository.findFirstBySubmissionId(id);
+        return byColumn.isPresent() ? byColumn : repository.findFirstByAnswersContaining("\"submission_id\":\"" + id + "\"");
     }
 
     /** Một dòng phản hồi cho trang xem dữ liệu (mới nhất trước) */
