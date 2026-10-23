@@ -63,7 +63,7 @@ public class PriceEngine {
             Map.entry("cooler", Pattern.compile("\\btan nhiet\\b|\\btan nuoc\\b|\\btan khi\\b|\\bcooler\\b|\\baio\\b|^tan\\b")),
             Map.entry("case", Pattern.compile("^vo\\b|\\bvo may tinh\\b|\\bvo case\\b|^case\\b")),
             Map.entry("mainboard", Pattern.compile("\\bbo mach chu\\b|\\bmainboard\\b|^main\\b")),
-            Map.entry("gpu", Pattern.compile("\\bcard man hinh\\b|\\bcard do hoa\\b|\\bvga\\b")),
+            Map.entry("gpu", Pattern.compile("\\b(?:card|cac) (?:man hinh|do hoa)\\b|\\bvga\\b")),
             Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b")),
             Map.entry("ssd", Pattern.compile("\\bo cung\\b|\\bssd\\b")),
             // "bộ nhớ cache / đệm" trong tên CPU không phải RAM
@@ -208,6 +208,10 @@ public class PriceEngine {
      * null nếu không xác minh được. Kết quả được nhớ theo link, thẻ cấu hình dùng giá này thay giá Google Shopping.
      */
     public Offer readPage(String url, String expectTitle) {
+        return readPage(url, expectTitle, false);
+    }
+
+    private Offer readPage(String url, String expectTitle, boolean refresh) {
         if (url == null || !Shops.productLike(url) || blocked(url) || blocked(url + "|" + expectTitle)) return null;
         // Trang máy nguyên bộ không phải trang của một linh kiện (trừ khi đang tìm đúng một bộ)
         if (BUNDLE_PATH.matcher(url.toLowerCase().replaceFirst("[?#].*$", "")).find() && !BUNDLE.matcher(expectTitle.toLowerCase()).find()) {
@@ -216,7 +220,7 @@ public class PriceEngine {
         var known = byUrl.get(url);
         // Đã đọc chính trang sản phẩm: dùng lại. Chỉ mới thấy trên trang tìm kiếm / danh mục của cửa hàng (giá, còn hàng
         // ở đó có thể cũ hoặc của bản khác): mở trang sản phẩm để xác minh, không coi kết quả danh sách là đã kiểm trang
-        if (known != null && pageChecked(url)) {
+        if (!refresh && known != null && pageChecked(url)) {
             return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
                     ? known : null;
         }
@@ -265,12 +269,30 @@ public class PriceEngine {
                 && !usedGoods(known.title(), url) ? known : null;
     }
 
+    /** Chốt báo giá: dành thời gian cho bước dựng thẻ và đối chiếu, không dùng chứng cứ sắp hết hạn. */
+    public Offer quote(String url, String expectedTitle) {
+        if (url == null) return null;
+        String key = clean(url);
+        Long at = pageRead.get(key);
+        // Giữ chứng cứ còn hạn trong khi đọc lại. Xoá timestamp trước khi tải làm yêu cầu đồng thời
+        // nhìn thấy giá chưa xác minh dù chứng cứ cũ vẫn còn trong hạn 10 phút.
+        boolean refresh = at != null && System.currentTimeMillis() - at > Duration.ofMinutes(5).toMillis();
+        Offer result = readPage(url, expectedTitle, refresh);
+        if (!pageChecked(url) && !blocked(url) && !blocked(url + "|" + expectedTitle)) {
+            // Bước chốt được thử lại một lần sau lỗi mạng / HTML tạm thời. Các lượt tìm kiếm thường vẫn
+            // giữ backoff; fetcher tiếp tục tôn trọng robots và giãn cách. Không làm mới giờ của giá cũ.
+            unreadableUntil.remove(url);
+            result = readPage(url, expectedTitle);
+        }
+        return result;
+    }
+
     /** Trang sản phẩm tải được nhưng không đọc được nội dung: thử lại sau từng này */
     static final Duration UNREADABLE_TTL = Duration.ofMinutes(10);
     /** Trang bị loại (hết hàng, ngừng bán, sai biến thể, hàng cũ): không tải lại trong từng này */
     static final Duration REJECT_TTL = Duration.ofMinutes(30);
     /** Giá / tồn kho đọc trên trang sản phẩm chỉ coi là còn đúng trong từng này */
-    static final Duration VERIFIED_TTL = Duration.ofHours(2);
+    static final Duration VERIFIED_TTL = Duration.ofMinutes(10);
     private final Map<String, Long> unreadableUntil = new ConcurrentHashMap<>();
 
     private boolean unreadable(String url) {
@@ -381,7 +403,8 @@ public class PriceEngine {
         String key = cacheKey(query);
         var hit = cache.get(key);
         if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? (hit.incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE))) {
-            return hit.offers();
+            // Cache từ khoá chỉ là gợi ý; URL sản phẩm tìm được sau lần cache vẫn phải được xét và đọc lại.
+            return recoverIncomplete(query, hit.offers(), true);
         }
         // Cùng từ khoá đang được tìm (ba phương án chốt song song hay tìm trùng, vd "tản nhiệt khí CPU" 19 lần trong một câu):
         // chờ chung một lượt, không bắn thêm request vào cửa hàng (ca thật v10: quá tải, 272/401 lượt hết giờ, trả rỗng)
@@ -421,7 +444,7 @@ public class PriceEngine {
             // thì không nhớ: lần tìm sau thử lại thật (ca thật n18: dòng card trống mọi truy vấn trả rỗng trong cùng câu tư vấn)
             // Rỗng vì nguồn lỗi chỉ nhớ FAILED_CACHE: đủ để không gửi lại cùng từ khoá liên tục vào cửa hàng (ca thật n32: cùng một
             // từ khoá 9 lần trong vài phút, càng bị chặn), vẫn thử lại sớm
-            cache.put(key, new Cached(Instant.now(), found, found.isEmpty() && incomplete.get()));
+            cache.put(key, new Cached(Instant.now(), found, incomplete.get()));
             return found;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -450,6 +473,7 @@ public class PriceEngine {
         // Ô tìm kiếm của cửa hàng tìm theo mọi chữ: bỏ chữ thừa ("giá rẻ", số đo) để không ra rỗng
         String shopQuery = shopQuery(query);
         var shops = Arrays.stream(ShopSearch.values())
+                .filter(s -> s.supports(shopQuery))
                 .map(s -> CompletableFuture.supplyAsync(() -> {
                     // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có
                     String html = fetcher.get(s.url(shopQuery), s.maxWait);
@@ -487,7 +511,25 @@ public class PriceEngine {
             return old != null && pageChecked(o.url()) && !readNow.contains(clean(o.url())) ? old : o;
         }).toList();
         result.forEach(o -> byUrl.put(o.url(), o));
-        return result;
+        return recoverIncomplete(query, result, incomplete.get());
+    }
+
+    /** Một nguồn lỗi vẫn có thể trả vài model sai VRAM; không vì kết quả chưa rỗng mà bỏ URL đúng đã biết. */
+    private List<Offer> recoverIncomplete(String query, List<Offer> result, boolean incomplete) {
+        if (!incomplete) return result;
+        Map<String, Offer> merged = new LinkedHashMap<>();
+        result.forEach(o -> merged.put(clean(o.url()), o));
+        recheckKnown(query).forEach(o -> merged.put(clean(o.url()), o));
+        return rank(query, merged.values());
+    }
+
+    /** Khi nguồn tìm kiếm lỗi, dùng URL cũ làm gợi ý và xác minh lại trang; không dùng giá đã hết hạn. */
+    List<Offer> recheckKnown(String query) {
+        var jobs = rank(query, byUrl.values()).stream().limit(PAGES)
+                .map(o -> CompletableFuture.supplyAsync(() -> quote(o.url(), o.title()), pool)).toList();
+        return jobs.stream().map(this::joinOne).filter(java.util.Objects::nonNull)
+                .filter(o -> OfferEvidence.verified(o.title(), o, pageChecked(o.url())))
+                .toList();
     }
 
     private <T> List<T> join(CompletableFuture<List<T>> f) {
@@ -650,6 +692,9 @@ public class PriceEngine {
 
     /** Loại linh kiện khớp sớm nhất trong chuỗi đã bỏ dấu, null nếu không nhận ra */
     public static String kind(String normalized) {
+        if (normalized.matches(".*\\b(de tan nhiet|tan nhiet laptop|tan nhiet notebook|cooling ?pad|notepal|notebook cooler)\\b.*")) return "accessory";
+        if (normalized.matches(".*\\b(quat|fan)\\b.*")
+                && normalized.matches(".*\\b(cam tay|du lich|quat ban|quat de ban|quat sac|tich dien|jisulife)\\b.*")) return "appliance";
         String best = null;
         int at = Integer.MAX_VALUE;
         for (var k : KINDS) {

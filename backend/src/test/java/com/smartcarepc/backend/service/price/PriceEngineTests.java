@@ -16,6 +16,30 @@ class PriceEngineTests {
 
     private static final Instant AT = Instant.parse("2026-10-20T10:00:00Z");
 
+    @Test
+    void docNguonDuPhongHtcKhongLayGiaGachVaHangLienQuan() {
+        var offers = ShopSearch.HTCGEARS.parse("""
+                <div class="listProduct-filter"><div class="product-loop">
+                <h3><a href="/products/vga-card-man-hinh-5">VGA ASUS Dual RX 6600 V3 8GB</a></h3>
+                <div class="proloop--price"><span class="price">5,450,000₫</span><span class="price-del">5,950,000₫</span></div>
+                </div></div><div class="product-loop"><h3><a href="/products/other">VGA khác</a></h3>
+                <div class="proloop--price"><span class="price">1,000,000₫</span></div></div>
+                """, AT);
+        assertThat(offers).hasSize(1);
+        assertThat(offers.getFirst().priceVnd()).isEqualTo(5_450_000L);
+        assertThat(offers.getFirst().url()).isEqualTo("https://htcgears.com/products/vga-card-man-hinh-5");
+        assertThat(ShopSearch.HTCGEARS.url("RX 6600")).isEqualTo("https://htcgears.com/collections/vga");
+        assertThat(ShopSearch.HTCGEARS.supports("VGA RX 6600")).isTrue();
+        assertThat(ShopSearch.HTCGEARS.supports("RAM 16GB")).isFalse();
+        var page = ProductPage.parseLoose("""
+                <meta property="og:title" content="VGA ASUS Dual RX 6600 V3 8GB">
+                <meta property="og:price:amount" content="5450000"><button>Thêm vào giỏ</button>
+                <script>var product={"price":545000000.0}</script>
+                """, offers.getFirst().url(), AT);
+        assertThat(page.priceVnd()).isEqualTo(5_450_000L);
+        assertThat(page.inStock()).isTrue();
+    }
+
     private static String fixture(String name) throws IOException {
         try (InputStream in = PriceEngineTests.class.getResourceAsStream("/shops/" + name)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);

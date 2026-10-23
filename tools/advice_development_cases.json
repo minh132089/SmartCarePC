@@ -1,0 +1,360 @@
+[
+  {
+    "id": "qa2-why",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy chơi game khoảng 20 triệu, dùng card NVIDA."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình hiểu bạn cần máy chơi game Full HD (1080p), ngân sách khoảng 20 triệu, ưu tiên card NVIDIA — mình giả định bạn không cần máy mini và chơi game phổ thông chứ không phải e-sport thi đấu.\n\nLưu ý mua hàng: app đã đổi sang món rẻ hơn cùng loại cho vừa tiền, nên vài món trong thẻ không phải bản cao cấp như ban đầu. Bạn hỏi cửa hàng xem bo mạch đã có BIOS nhận CPU đời mới chưa trước khi mua nhé.\n\nBạn muốn mình thử lại với ngân sách cao hơn một chút, hay giữ nguyên 20 triệu và tối ưu theo hướng khác?\n\n- **Phù hợp: 18,99 triệu** - gợi ý chính: Zotac GEFORCE RTX 3050 TWIN EDGE OC 6GB GDDR6; CPU Intel Core i5 12400F Chính Hãng\n- **Chất lượng: 21,69 triệu** - khác Phù hợp: SSD Kingston NV3 1TB M.2 PCIe NVMe Gen4\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Rẻ: với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là 18,2 triệu, vượt mức tối đa 18 triệu của phương án Rẻ (90% ngân sách). Ngân sách này đã ở sát giá sàn, nên app chỉ đưa hai phương án Phù hợp và Chất lượng."
+      },
+      {
+        "role": "user",
+        "content": "Vì sao không có phương án Rẻ?"
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "mustExplainMoney": true
+    }
+  },
+  {
+    "id": "qa2-amd",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy chơi game khoảng 20 triệu, dùng card NVIDA."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình hiểu bạn cần máy chơi game Full HD (1080p), ngân sách khoảng 20 triệu, ưu tiên card NVIDIA — mình giả định bạn không cần máy mini và chơi game phổ thông chứ không phải e-sport thi đấu.\n\nLưu ý mua hàng: app đã đổi sang món rẻ hơn cùng loại cho vừa tiền, nên vài món trong thẻ không phải bản cao cấp như ban đầu. Bạn hỏi cửa hàng xem bo mạch đã có BIOS nhận CPU đời mới chưa trước khi mua nhé.\n\nBạn muốn mình thử lại với ngân sách cao hơn một chút, hay giữ nguyên 20 triệu và tối ưu theo hướng khác?\n\n- **Phù hợp: 18,99 triệu** - gợi ý chính: Zotac GEFORCE RTX 3050 TWIN EDGE OC 6GB GDDR6; CPU Intel Core i5 12400F Chính Hãng\n- **Chất lượng: 21,69 triệu** - khác Phù hợp: SSD Kingston NV3 1TB M.2 PCIe NVMe Gen4\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Rẻ: với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là 18,2 triệu, vượt mức tối đa 18 triệu của phương án Rẻ (90% ngân sách). Ngân sách này đã ở sát giá sàn, nên app chỉ đưa hai phương án Phù hợp và Chất lượng."
+      },
+      {
+        "role": "user",
+        "content": "Đổi card sang AMD giúp mình, vẫn giữ ngân sách đó."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "gpuVendor": "amd",
+      "minGpuVramGb": 8,
+      "allowUnavailable": true,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "qa2-itx",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình muốn máy mini ITX đặt cạnh TV, chơi Valorant, ngân sách 25 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "miniItx": true,
+      "minGpuVramGb": 6,
+      "allowUnavailable": true,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "qa2-vram12",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy chơi game 30 triệu, card NVIDIA tối thiểu 12GB VRAM, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "allowUnavailable": true,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "qa3-office-negative",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy chơi game khoảng 20 triệu, dùng card NVIDA."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình hiểu bạn cần máy chơi game Full HD (1080p), ngân sách khoảng 20 triệu, ưu tiên card NVIDIA — mình giả định bạn không cần máy mini và chơi game phổ thông chứ không phải e-sport thi đấu.\n\nLưu ý mua hàng: app đã đổi sang món rẻ hơn cùng loại cho vừa tiền, nên vài món trong thẻ không phải bản cao cấp như ban đầu. Bạn hỏi cửa hàng xem bo mạch đã có BIOS nhận CPU đời mới chưa trước khi mua nhé.\n\nBạn muốn mình thử lại với ngân sách cao hơn một chút, hay giữ nguyên 20 triệu và tối ưu theo hướng khác?\n\n- **Phù hợp: 18,99 triệu** - gợi ý chính: Zotac GEFORCE RTX 3050 TWIN EDGE OC 6GB GDDR6; CPU Intel Core i5 12400F Chính Hãng\n- **Chất lượng: 21,69 triệu** - khác Phù hợp: SSD Kingston NV3 1TB M.2 PCIe NVMe Gen4\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Rẻ: với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là 18,2 triệu, vượt mức tối đa 18 triệu của phương án Rẻ (90% ngân sách). Ngân sách này đã ở sát giá sàn, nên app chỉ đưa hai phương án Phù hợp và Chất lượng."
+      },
+      {
+        "role": "user",
+        "content": "Mình không chơi game nữa, chỉ học online và Word, giữ ngân sách 20 triệu, không cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "noDiscreteGpu": true,
+      "allowUnavailable": true
+    }
+  },
+  {
+    "id": "qa5-exact-gpu",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình chơi game Full HD, ngân sách 30 triệu. Phải dùng RTX 4060 8GB và RAM tối thiểu 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "gpuVendor": "nvidia",
+      "gpuModel": "rtx4060",
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "allowUnavailable": true
+    }
+  },
+  {
+    "id": "qa6-no-gpu-from-model",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình chơi game Full HD, ngân sách 30 triệu. Phải dùng RTX 4060 8GB và RAM tối thiểu 16GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn cần máy để bàn, ngân sách 30 triệu, card NVIDIA.\n\nCái mình làm được là nâng những món còn lại cho bền và dư hơn:\n- **Nguồn 650W** thay cho 550W, thương hiệu lớn hơn - dư tải nhiều hơn nếu sau này bạn đổi card.\n- **Bo mạch có WIFI sẵn**, bảo hành 36 tháng, 4 khe RAM.\n- **RAM hãng lớn có tản nhiệt**, bảo hành 36 tháng thay vì RAM phổ thông.\n- Vỏ thoáng hơn, tản khí tốt hơn bản Phù hợp.\n\nLưu ý: bo mạch có thể cần BIOS mới mới nhận đúng CPU, bạn hỏi cửa hàng xác nhận trước khi mua; giá là giá lúc tìm và có thể thay đổi.\n\n- **Rẻ: 22,60 triệu** - khác Phù hợp: Nguồn máy tính Jetek MaxWatt 550 V2; Bo mạch chủ GIGABYTE H610M-H V3; Vỏ máy tính EDRA ECS1105 Micro-ATX\n- **Phù hợp: 28,70 triệu** - gợi ý chính: MSI GeForce RTX 4060 VENTUS 2X WHITE 8G; CPU Intel Core i5 12400F Chính Hãng\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp trong mức tiền này, nên app không hiển thị."
+      },
+      {
+        "role": "user",
+        "content": "KHÔNG CHƠI GAME NỮA, CHỈ HỌC ONLINE VÀ WORD. KHÔNG CẦN CARD ĐỒ HOẠ RỜI, GIỮ NGÂN SÁCH CŨ."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minRamGb": 16,
+      "noDiscreteGpu": true,
+      "allowUnavailable": true
+    }
+  },
+  {
+    "id": "qa6-why-current",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy chơi game khoảng 20 triệu, dùng card NVIDA."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình hiểu bạn cần máy chơi game Full HD (1080p), ngân sách khoảng 20 triệu, ưu tiên card NVIDIA — mình giả định bạn không cần máy mini và chơi game phổ thông chứ không phải e-sport thi đấu.\n\nLưu ý mua hàng: app đã đổi sang món rẻ hơn cùng loại cho vừa tiền, nên vài món trong thẻ không phải bản cao cấp như ban đầu. Bạn hỏi cửa hàng xem bo mạch đã có BIOS nhận CPU đời mới chưa trước khi mua nhé.\n\nBạn muốn mình thử lại với ngân sách cao hơn một chút, hay giữ nguyên 20 triệu và tối ưu theo hướng khác?\n\n- **Phù hợp: 18,99 triệu** - gợi ý chính: Zotac GEFORCE RTX 3050 TWIN EDGE OC 6GB GDDR6; CPU Intel Core i5 12400F Chính Hãng\n- **Chất lượng: 21,69 triệu** - khác Phù hợp: SSD Kingston NV3 1TB M.2 PCIe NVMe Gen4\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Rẻ: với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là 18,2 triệu, vượt mức tối đa 18 triệu của phương án Rẻ (90% ngân sách). Ngân sách này đã ở sát giá sàn, nên app chỉ đưa hai phương án Phù hợp và Chất lượng."
+      },
+      {
+        "role": "user",
+        "content": "Đổi card sang AMD giúp mình, vẫn giữ ngân sách đó."
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn cần máy để bàn, ngân sách 20 triệu, card AMD.\n\nLưu ý: bo mạch đời cũ hơn CPU nên bạn hỏi cửa hàng xem đã cập nhật BIOS nhận CPU chưa. Giá là giá lúc tìm, có thể thay đổi; món nào không có link thì app chỉ đưa giá tham khảo.\n\nMuốn mình thử giữ CPU i5 bằng cách chọn card AMD thấp hơn một bậc không?\n\nLưu ý phương án chính: CPU i3-13100f đủ chơi game Full HD phổ thông cùng card rời (game nặng CPU sẽ thấp FPS hơn); rẻ hơn để vừa ngân sách.\n\n- **Phù hợp: 19,52 triệu** - gợi ý chính: ASUS Dual Radeon RX 7600 V2 OC Edition 8GB GDDR6; CPU Intel Core i3 13100F\n- **Chất lượng: 22,22 triệu** - khác Phù hợp: SSD Kingston NV3 1TB M.2 PCIe NVMe Gen4\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Rẻ: với giá tìm được, cấu hình đã thử cho phương án Rẻ là 19,5 triệu, vượt mức tối đa 18 triệu (90% ngân sách). App chưa tìm được bản Rẻ đủ yêu cầu dưới mức này, nên không hiển thị phương án Rẻ."
+      },
+      {
+        "role": "user",
+        "content": "Vì sao không có phương án Rẻ?"
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "mustExplainMoney": true
+    }
+  },
+  {
+    "id": "control-no-budget",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy chơi Valorant và học bài."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "ngân sách|bao nhiêu tiền|tầm bao nhiêu"
+    }
+  },
+  {
+    "id": "control-no-purpose",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình có ngân sách 15 triệu để mua máy tính."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "mục đích|nhu cầu|làm gì|dùng.*(gì|việc)"
+    }
+  },
+  {
+    "id": "control-ai-amd",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình học AI, 35 triệu, phải dùng card AMD."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "chưa kiểm chứng|chưa xác minh"
+    }
+  },
+  {
+    "id": "control-cheapest-office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy rẻ nhất có thể, chỉ để học online và gõ Word, ngân sách tối đa 15 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 15000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true,
+      "allowUnavailable": true
+    }
+  },
+  {
+    "id": "dev-ram-kit",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy chơi game 30 triệu, RAM 2x16GB DDR4, card NVIDIA."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "dev-no-mini",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game 30 triệu, không cần mini ITX, dùng mATX bình thường."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "notMiniItx": true
+    }
+  },
+  {
+    "id": "dev-office32",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy văn phòng Excel, 20 triệu, RAM 32GB, SSD 1TB, không cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 32,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "dev-specific4060",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 32 triệu, đúng RTX 4060 8GB, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuModel": "rtx4060"
+    }
+  },
+  {
+    "id": "dev-amd25",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy chơi game AAA 25 triệu, card AMD, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "dev-AAA2k",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi game AAA 2K, 35 triệu, NVIDIA ít nhất 12GB VRAM, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "dev-ai40",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần máy học AI CUDA 40 triệu, RAM 32GB, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 40000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "dev-missing-both",
+    "group": "clarification",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình muốn mua máy tính."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "ngân sách"
+    }
+  }
+]

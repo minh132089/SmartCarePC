@@ -58,6 +58,89 @@ class ChatServiceTests {
     }
 
     @Test
+    void thongSoHienThiTheoHangThatKhongGiuBaoHanhHayGenAiDoan() {
+        assertThat(ChatService.purchasedSpec("psu", "JETEK Revolve B650 650W 80 Plus Bronze", "650W Bronze, bảo hành 60 tháng"))
+                .isEqualTo("650W");
+        assertThat(ChatService.purchasedSpec("ssd", "SSD Kingston 1 TB M.2 NVMe - Đọc 2100 MB/s", "NVMe Gen4 1TB"))
+                .isEqualTo("1000GB");
+        assertThat(ChatService.purchasedSpec("ram", "Lexar THOR 32GB (2x16GB)", "4x16GB DDR4, 2 bộ kit"))
+                .isEqualTo("4x16GB DDR4, 2 bộ kit");
+        assertThat(ChatService.purchasedSpec("cooler", "Jonsbo CR-1200", "3 ống đồng, 155mm" )).isNull();
+    }
+
+    @Test
+    void boBaQuatTinhGiaTheoBoVaGiuSoQuatSuDung() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        when(components.findByCode("fan120_argb")).thenReturn(part("fan120_argb","fans","Quạt"));
+        when(search.enabled()).thenReturn(true);
+        var product = new ProductSearch.Product("Bộ 3 quạt Xigmatek STARLINK ARGB BLACK","A",490_000L,"https://a.vn/fans",null);
+        when(search.search(any())).thenReturn(List.of(product));
+        when(search.offer(product.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(product.title(),"A",490_000L,null,product.url(),null,true,12,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        for (int qty : List.of(1,3,4,6)) {
+            org.mockito.Mockito.reset(client);
+            reply(toolCall("s","search_products","{\"query\":\"quạt\"}"),toolCall("p","propose_build","""
+                    {"tier":"balanced","budget_vnd":1000000,"items":[{"code":"fan120_argb","quantity":%d,"product_id":"s1-1"}]}
+                    """.formatted(qty)),answer("Xong."),answer("Xong."));
+            var res=service.reply(new ChatRequest(List.of(new Message("user","Mua quạt vỏ, ngân sách 1 triệu")),null,null,"advice"));
+            assertThat(res.build()).isNotNull();
+            var fan=res.build().items().getFirst();
+            assertThat(fan.quantity()).isEqualTo(qty);
+            assertThat(fan.priceMaxVnd()).isEqualTo(((qty+2)/3)*490_000L);
+            assertThat(fan.spec()).contains(qty+" quạt sử dụng", "mua "+((qty+2)/3)+" bộ");
+            if(qty%3!=0)assertThat(fan.spec()).contains("dư");
+        }
+    }
+
+    @Test
+    void sparkleTitanBaQuatKhongDuocGanMauGpu240() {
+        String title="Card màn hình SPARKLE Intel Arc B580 TITAN OC 12GB GDDR6 (SB580T-12GOC)";
+        assertThat(ChatService.gpuFans(title)).isEqualTo(3);
+        assertThat(ChatService.fitsCode("gpu_240",title)).isFalse();
+        assertThat(ChatService.fitsCode("gpu_280",title)).isTrue();
+        assertThat(ChatService.gpuFans("SPARKLE Intel Arc B580 GUARDIAN 2 fans")).isEqualTo(2);
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        var gpu=part("gpu_240","gpu","Card");
+        when(components.findByCode("gpu_240")).thenReturn(gpu);
+        var gpuLarge=part("gpu_280","gpu","Card lớn");
+        var casePart=part("case_mini_sff","case","Mini");
+        when(components.findByCode("gpu_280")).thenReturn(gpuLarge);
+        when(components.findByCode("case_mini_sff")).thenReturn(casePart);
+        when(components.findAll(null)).thenReturn(List.of(gpu,gpuLarge,casePart));
+        when(builds.findByCode("mini_sff")).thenReturn(new PcBuildResponse(1L,"mini_sff","Mini","",BuildType.PRESET,null,
+                List.of(new PcBuildResponse.Item(1,gpu))));
+        when(search.enabled()).thenReturn(true);
+        var bad=new ProductSearch.Product(title,"A",9_490_000L,"https://a.vn/b580",null);
+        var good=new ProductSearch.Product("VGA ASUS Dual GeForce RTX 4060 8GB","A",8_450_000L,"https://a.vn/4060",null);
+        var pcCase=new ProductSearch.Product("Vỏ Silverstone SG13 Mini ITX","A",1_090_000L,"https://a.vn/sg13",null);
+        when(search.search(any())).thenReturn(List.of(bad,good,pcCase));
+        for(var product:List.of(bad,good,pcCase))when(search.offer(product.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(product.title(),"A",product.priceVnd(),null,product.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"VGA\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","budget_vnd":24000000,"items":[{"code":"case_mini_sff","product_id":"s1-3"},{"code":"gpu_240","product_id":"s1-1"}]}
+                """),answer("Xong."),answer("Xong."));
+        var res=service.reply(new ChatRequest(List.of(new Message("user","PC mini ITX game 24 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).noneSatisfy(line -> assertThat(line.productName()).contains("TITAN"));
+    }
+
+    @Test
+    void chuaTraGiaThiKhongTuBaoGiaThiTruongHayNganSachThayThe() {
+        when(search.enabled()).thenReturn(true);
+        for (String draft : List.of("RTX 4090 giá khoảng 40 - 50 triệu; bạn cần 60 triệu để dựng máy.",
+                "RTX 4090 giá 40.000.000đ.", "RTX 4090 giá khoảng 40 củ.")) {
+            org.mockito.Mockito.reset(client);
+            reply(answer(draft), answer(draft));
+            var res = service.reply(new ChatRequest(List.of(new Message("user",
+                    "Máy game 1 triệu, phải có RTX 4090 24GB mới.")), null, null, "advice"));
+            assertThat(res.build()).isNull();
+            assertThat(res.reply()).contains("1 triệu", "RTX 4090", "chưa có cấu hình và giá bán đã xác minh")
+                    .doesNotContain("40 - 50", "60 triệu", "40.000.000", "40 củ");
+        }
+        org.mockito.Mockito.verifyNoInteractions(compatibility);
+    }
+
+    @Test
     void traLoiThangKhiKhongCanCongCu() {
         reply(answer("Chào bạn!"));
 
@@ -67,6 +150,313 @@ class ChatServiceTests {
         assertThat(res.build()).isNull();
         assertThat(sent.getFirst()).containsEntry("model", "test-model").containsEntry("max_tokens", 512);
         assertThat(messages(0).getFirst()).containsEntry("role", "system");
+    }
+
+    @Test
+    void cauTraLoiRongThiThuLaiMotLanKhongTraXinLoiGiaThanhCong() {
+        reply(answer(""), answer("Đặt RAM thẳng theo khe."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "lắp RAM thế nào?")), null));
+        assertThat(res.reply()).isEqualTo("Đặt RAM thẳng theo khe.");
+        assertThat(sent).hasSize(2);
+        assertThat(sent.get(1)).containsEntry("max_tokens", 8192);
+    }
+
+    @Test
+    void congCuBiCatGiuaChungThiKhongThucThiDanhSachHong() {
+        var truncated = Map.<String, Object>of("choices", List.of(Map.of("finish_reason", "length", "message",
+                Map.of("role", "assistant", "content", "", "tool_calls", List.of(Map.of("id", "cut"))))));
+        reply(truncated, answer("Mình cần kiểm tra lại trước khi chốt."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "xem hộ máy này")), null));
+        assertThat(res.reply()).isEqualTo("Mình cần kiểm tra lại trước khi chốt.");
+        org.mockito.Mockito.verifyNoInteractions(compatibility);
+    }
+
+    @Test
+    void itemsLaChuoiThiGuiLaiLoiSchemaDeAiSua() {
+        reply(toolCall("bad", "propose_build", "{\"tier\":\"balanced\",\"items\":\"như lần trước\"}"), answer("Mình sẽ gửi đúng danh sách."));
+        service.reply(new ChatRequest(List.of(new Message("user", "xem cấu hình")), null, null, "advice"));
+        assertThat((String) messages(1).get(3).get("content")).contains("items phải là mảng");
+        org.mockito.Mockito.verifyNoInteractions(compatibility);
+    }
+
+    @Test
+    void yeuCauMoiBoMiniVaDungLuongKitRamKhongBiDocSai() {
+        assertThat(ChatService.needs(List.of("không cần mini ITX, dùng mATX", "máy mini game 30 triệu")).miniItx()).isFalse();
+        assertThat(ChatService.needs(List.of("máy game RAM 2x16GB 30 triệu")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("RAM 32GB đủ rồi", "RAM 2x32GB")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("game AAA và dựng video, card VRAM 8GB, 29 triệu")).ramMin()).isEqualTo(16);
+        assertThat(ChatService.needs(List.of("chơi game VRAM 8GB, RAM 32GB, 30 triệu")).ramMin()).isEqualTo(32);
+        for (String text : List.of("dạy Teams, soạn giáo án", "PowerPoint, trình chiếu", "xem bài giảng và bảng tính", "luận văn và tra cứu web")) {
+            assertThat(ChatService.needs(List.of(text)).office()).as(text).isTrue();
+        }
+        assertThat(ChatService.noDiscreteGpu(List.of("Đổi sang chơi game AAA, phải có card rời", "không cần card rời"))).isFalse();
+    }
+
+    @Test
+    void doiDongBoNenTangDeGiuDungLuongVaCardTrongNganSach() {
+        var res = platformBudgetResponse("PC chơi game 24 triệu, đúng RX 7600 8GB, RAM 32GB");
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("16GB DDR4");
+            assertThat(line.quantity()).isEqualTo(2);
+        });
+        assertThat(res.build().items().stream().mapToLong(l -> l.priceMaxVnd()).sum()).isLessThanOrEqualTo(24_000_000);
+    }
+
+    @Test
+    void thayDoiDungLuongTrongCauNoiMoiGhiDeMucCu() {
+        assertThat(ChatService.needs(List.of("Đổi RAM lên 32GB, giữ ngân sách đó.", "PC game 30 triệu, RAM 16GB.")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("ĐỔI RAM XUỐNG 16GB", "PC game RAM 32GB 30 triệu")).ramMin()).isEqualTo(16);
+        assertThat(ChatService.needs(List.of("SSD lên 1TB, giữ ngân sách", "PC game SSD 512GB 30 triệu")).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.needs(List.of("PC game VRAM ít nhất 8GB 30 triệu")).ramMin()).isEqualTo(16);
+        assertThat(ChatService.noDiscreteGpu(List.of("Bỏ card rời, chỉ Word và học online", "PC game có RTX 4060"))).isTrue();
+        assertThat(ChatService.noDiscreteGpu(List.of("Không bỏ card rời", "PC không cần card rời"))).isFalse();
+        assertThat(ChatService.requestedGpu(List.of("Bỏ card rời", "PC game RTX 4060 8GB"))).isNull();
+    }
+
+    @Test
+    void nguoiDungChotDdr5ThiKhongDoiDdr4DeLamDepNganSach() {
+        assertThat(platformBudgetResponse("PC chơi game 24 triệu, đúng RX 7600 8GB, RAM 32GB DDR5").build()).isNull();
+    }
+
+    private ChatResponse platformBudgetResponse(String user) {
+        return platformBudgetResponse(user, false);
+    }
+
+    @Test
+    void boItxAm4KhongMuaDuocThiDoiDongBoIntelGiuMaItx() {
+        var res = platformBudgetResponse("PC mini ITX chơi Valorant 36 triệu, RAM16GB", true);
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.code()).isEqualTo("mb_itx");
+            assertThat(line.productName()).contains("H610I");
+        });
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("cpu");
+            assertThat(line.productName()).contains("12400F");
+        });
+        assertThat(res.reply()).contains("giữ vỏ Mini-ITX");
+    }
+
+    @Test
+    void khongTimDuocBoItxVanGiuCpuNguoiDungChot() {
+        assertThat(platformBudgetResponse("PC mini ITX Valorant36 triệu, phải dùng CPU AMD Ryzen5 5600X, RAM16GB", true).build()).isNull();
+    }
+
+    private ChatResponse platformBudgetResponse(String user, boolean missingMini) {
+        return platformBudgetResponse(user, missingMini, false);
+    }
+
+    @Test
+    void cuuBoItxThieuThiDoiRamDdr5DongBoGiuDungLuong() {
+        var res = platformBudgetResponse("PC mini ITX chơi Valorant36 triệu, RAM32GB", true, true);
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.code()).isEqualTo("mb_itx");
+            assertThat(line.productName()).contains("H610I");
+        });
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("16GB DDR4");
+            assertThat(line.quantity()).isEqualTo(2);
+        });
+    }
+
+    private ChatResponse platformBudgetResponse(String user, boolean missingMini, boolean ddr5) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"cpu_std","cpu"},new String[]{missingMini ? "mb_itx" : "mb_matx","motherboard"},new String[]{"ram_ddr4","ram"},new String[]{"gpu_240","gpu"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var products=List.of(new ProductSearch.Product(missingMini ? "CPU AMD Ryzen 5 5600X" : "CPU AMD Ryzen 5 7500F","A",4_600_000L,"https://a.vn/cpu",null),
+                new ProductSearch.Product("Mainboard ASUS A620M-K DDR5","A",2_500_000L,"https://a.vn/mb",null),
+                new ProductSearch.Product(missingMini && !ddr5 ? "RAM Corsair 32GB (2x16GB) DDR4" : "RAM Corsair 32GB (2x16GB) DDR5","A",13_890_000L,"https://a.vn/ram",null),
+                new ProductSearch.Product("VGA ASUS RX 7600 8GB","A",7_790_000L,"https://a.vn/gpu",null),
+                new ProductSearch.Product("CPU Intel Core i5 12400F","A",3_790_000L,"https://a.vn/intel",null),
+                new ProductSearch.Product("Mainboard GIGABYTE H610M-H DDR4","A",1_790_000L,"https://a.vn/h610",null),
+                new ProductSearch.Product("RAM SSTC 16GB DDR4","A",2_990_000L,"https://a.vn/ddr4",null),
+                new ProductSearch.Product("Mainboard ASUS PRIME H610I-PLUS D4 ITX LGA1700 DDR4","A",2_390_000L,"https://a.vn/h610i",null));
+        when(search.search(any())).thenReturn(products);
+        for(var p:products)when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        String proposal = """
+                {"tier":"balanced","summary":"Game","budget_vnd":24000000,"items":[{"code":"cpu_std","product_id":"s1-1"},
+                {"code":"mb_matx","product_id":"s1-2"},{"code":"ram_ddr4","quantity":2,"spec":"32GB DDR5","product_id":"s1-3"},
+                {"code":"gpu_240","product_id":"s1-4"}]}
+                """;
+        if (missingMini) proposal = proposal.replace("mb_matx", "mb_itx").replace("24000000", "36000000").replace("32GB DDR5", "32GB DDR4");
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build",proposal),answer("Xong."),answer("Xong."),answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user",user)),null,null,"advice"));
+    }
+
+    @Test
+    void bonThanhRamThiDoiSangBoBonKheVaGiu64Gb() {
+        var res = ramSlotsResponse(true);
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("motherboard");
+            assertThat(line.productName()).contains("GAMING PLUS");
+        });
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.quantity()).isEqualTo(4);
+        });
+    }
+
+    @Test
+    void gpuDuVramNhungSaiHangVanPhaiSua() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280","gpu","Card"));
+        when(search.enabled()).thenReturn(true);
+        var bad = new ProductSearch.Product("VGA ASUS Dual RX 6700 XT 12GB","A",7_990_000L,"https://a.vn/rx",null);
+        var good = new ProductSearch.Product("VGA MSI RTX 3060 Ventus 2X 12GB","A",9_200_000L,"https://a.vn/rtx",null);
+        when(search.search(any())).thenReturn(List.of(bad,good));
+        for(var p:List.of(bad,good))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"AI","budget_vnd":38000000,"items":[{"code":"gpu_280","product_id":"s1-1"}]}
+                """),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","PC Stable Diffusion 38 triệu, GPU NVIDIA ít nhất 12GB VRAM")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> assertThat(line.productName()).contains("RTX 3060"));
+    }
+
+    @Test
+    void khongTimDuocBoBonKheThiKhongHienBonThanhTrenHaiKhe() {
+        assertThat(ramSlotsResponse(false).build()).isNull();
+    }
+
+    private ChatResponse ramSlotsResponse(boolean replacement) {
+        return ramSlotsResponse(replacement, false);
+    }
+
+    @Test
+    void yeuCau64GbThiMuaDuHaiKit32GbDuaTrenHangThat() {
+        var res = ramSlotsResponse(true, true);
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("2x16GB");
+            assertThat(line.quantity()).isEqualTo(4);
+            assertThat(line.priceMaxVnd()).isEqualTo(9_398_000L);
+        });
+    }
+
+    @Test
+    void h610mEHaiKhePhaiDoiBoKhiMuaBonThanhTuHaiKit() {
+        var res = ramSlotsResponse(true, true, "Mainboard MSI PRO H610M-E DDR4 | LGA 1700, mATX, 2 khe RAM");
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("motherboard");
+            assertThat(line.productName()).contains("GAMING PLUS");
+        });
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.quantity()).isEqualTo(4);
+            assertThat(line.priceMaxVnd()).isEqualTo(9_398_000L);
+        });
+    }
+
+    @Test
+    void h610mEKhongCoBoThayThiAnPhuongAnBonThanh() {
+        assertThat(ramSlotsResponse(false, true, "Mainboard MSI PRO H610M-E DDR4").build()).isNull();
+    }
+
+    private ChatResponse ramSlotsResponse(boolean replacement, boolean misleadingKit) {
+        return ramSlotsResponse(replacement, misleadingKit, "Mainboard MSI PRO B760M-E DDR4");
+    }
+
+    private ChatResponse ramSlotsResponse(boolean replacement, boolean misleadingKit, String boardTitle) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product(boardTitle,"A",2_390_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product(misleadingKit ? "RAM Lexar Thor 32GB (2x16GB) DDR4" : "RAM Kingston 16GB DDR4",
+                "A",misleadingKit ? 4_699_000L : 2_000_000L,"https://a.vn/ram",null);
+        var four = new ProductSearch.Product("Mainboard GIGABYTE B760M GAMING PLUS WIFI DDR4","A",3_290_000L,"https://a.vn/four",null);
+        var products = replacement ? List.of(mb,ram,four) : List.of(mb,ram);
+        when(search.search(any())).thenReturn(products);
+        for(var p:products)when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":4,"spec":"%s","product_id":"s1-2"}]}
+                """.formatted(misleadingKit ? "2x16GB DDR4" : "64GB DDR4")),answer("Xong."),answer("Xong."),answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user","máy RAM 64GB 36 triệu")),null,null,"advice"));
+    }
+
+    @Test
+    void mayVanPhongVuotTranDoiVoMatxDeCoBanTrongNganSach() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"case_standard_tower","case"},new String[]{"case_compact_tower","case"},
+                new String[]{"cpu_std","cpu"},new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"},
+                new String[]{"ssd_m2_2280","ssd"},new String[]{"psu_atx","psu"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(builds.findByCode("compact_tower")).thenReturn(new PcBuildResponse(1L,"compact_tower","Gọn","",BuildType.PRESET,null,
+                List.of(new PcBuildResponse.Item(1,part("mb_matx","motherboard","Bo mATX")))));
+        when(search.enabled()).thenReturn(true);
+        var products=List.of(
+                new ProductSearch.Product("Vỏ máy tính ATX Corsair FRAME 4000D","A",1_990_000L,"https://a.vn/big",null),
+                new ProductSearch.Product("CPU Intel Core i3 12100 Box","A",3_390_000L,"https://a.vn/cpu",null),
+                new ProductSearch.Product("Mainboard GIGABYTE H610M-H V3 DDR4","A",1_790_000L,"https://a.vn/mb",null),
+                new ProductSearch.Product("RAM SSTC 8GB DDR4","A",2_190_000L,"https://a.vn/ram",null),
+                new ProductSearch.Product("SSD SSTC M2 NVMe 256GB","A",1_590_000L,"https://a.vn/ssd",null),
+                new ProductSearch.Product("Nguồn AIGO VK450 450W ATX","A",449_000L,"https://a.vn/psu",null),
+                new ProductSearch.Product("Vỏ máy tính EDRA ECS1105 Micro-ATX","A",290_000L,"https://a.vn/small",null));
+        when(search.search(any())).thenReturn(products);
+        for(var p:products)when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Văn phòng","budget_vnd":11000000,"items":[
+                {"code":"case_standard_tower","product_id":"s1-1"},{"code":"cpu_std","product_id":"s1-2"},
+                {"code":"mb_matx","product_id":"s1-3"},{"code":"ram_ddr4","quantity":2,"spec":"16GB DDR4","product_id":"s1-4"},
+                {"code":"ssd_m2_2280","spec":"256GB","product_id":"s1-5"},{"code":"psu_atx","product_id":"s1-6"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res=service.reply(new ChatRequest(List.of(new Message("user","PC xem phim, Word 11 triệu, rẻ nhất, không cần card rời")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> assertThat(line.code()).isEqualTo("case_compact_tower"));
+        assertThat(res.build().items()).noneSatisfy(line -> assertThat(line.category()).isEqualTo("gpu"));
+        assertThat(res.build().items().stream().mapToLong(Line::priceMaxVnd).sum()).isLessThanOrEqualTo(11_000_000L);
+    }
+
+    @Test
+    void giaiThichLayDungDungLuongKitTuTheKhongDoanBios() {
+        var cpu = new Line("cpu", "cpu", "CPU", 1, null, null, 4_000_000L, 4_000_000L, null, "https://a/cpu", "Intel Core i3 12100 Box", "A");
+        var ram = new Line("ram", "ram", "RAM", 2, null, null, 3_000_000L, 3_000_000L, null, "https://a/ram", "RAM Corsair 2x16GB DDR4", "A");
+        var card = new ChatResponse.BuildCard(List.of(cpu, ram), true, List.of(), List.of(), null, 15_000_000L, null, "balanced", 1);
+        String out = ChatService.adviceExplanation(ChatService.needs(List.of("máy học online 15 triệu")), card);
+        assertThat(out).contains("đồ họa tích hợp").contains("RAM 32GB").doesNotContain("64GB").doesNotContain("BIOS");
+        assertThat(ChatService.safeReason("cpu", 1, "6 nhân, chơi game mượt hơn")).isNull();
+        assertThat(ChatService.safeReason("motherboard", 1, "Có WiFi, bảo hành 36 tháng")).isNull();
+        assertThat(ChatService.safeReason("ram", 1, "Đúng 16GB, chạy 2 kênh")).isNull();
+    }
+
+    @Test
+    void giaDoiLucChotThiKiemLaiTranTien() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        var product = new ProductSearch.Product("SSD Kingston NV3 1TB", "A", 1_500_000L, "https://a.vn/ssd", null);
+        var offer = new java.util.concurrent.atomic.AtomicReference<>(new com.smartcarepc.backend.service.price.Offer(
+                product.title(), "A", 1_500_000L, null, product.url(), null, true, 36, java.time.Instant.now()));
+        when(search.search(any())).thenReturn(List.of(product));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        when(search.offer(product.url())).thenAnswer(inv -> offer.get());
+        when(search.refreshQuote(product.url(), product.title())).thenAnswer(inv -> {
+            offer.set(new com.smartcarepc.backend.service.price.Offer(product.title(), "A", 2_500_000L, null, product.url(), null, true, 36, java.time.Instant.now()));
+            return offer.get();
+        });
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":2000000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-1"}]}
+                """), answer("Xong."), answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "máy học SSD 1TB 2 triệu")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("2,5 triệu").contains("vượt mức tối đa 2 triệu");
     }
 
     @Test
@@ -146,6 +536,69 @@ class ChatServiceTests {
     }
 
     @Test
+    void giaChiTuTrangDanhSachLaGiaThamKhao() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var gpu = new ProductSearch.Product("VGA ASUS Dual RTX 4060 8GB", "Shop", 7_990_000L, "https://shop.vn/4060", null);
+        when(search.search("VGA RTX 4060")).thenReturn(List.of(gpu));
+        when(search.offer(gpu.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                gpu.title(), gpu.shop(), 9_000_000L, null, gpu.url(), null, true, 36, java.time.Instant.now()));
+        when(search.pageChecked(gpu.url())).thenReturn(false);
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"VGA RTX 4060\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":20000000,"items":[{"code":"gpu_280","spec":"RTX 4060 8GB","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var response = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu")), null, null, "advice"));
+
+        assertThat((String) messages(1).get(3).get("content")).contains("\"verified\":false");
+        assertThat(response.build().items().getFirst().priceMaxVnd()).isEqualTo(7_990_000L);
+        assertThat(response.build().items().getFirst().priceChecked()).isFalse();
+    }
+
+    @Test
+    void giaTrangBanDuocUuTienDuGiaDanhSachSaiNhieu() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var gpu = new ProductSearch.Product("VGA ASUS Dual RTX 4060 8GB", "Shop", 1_000_000L, "https://shop.vn/4060", null);
+        when(search.search("VGA RTX 4060")).thenReturn(List.of(gpu));
+        when(search.offer(gpu.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                gpu.title(), gpu.shop(), 8_000_000L, null, gpu.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"VGA RTX 4060\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":20000000,"items":[{"code":"gpu_280","spec":"RTX 4060 8GB","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var response = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu")), null, null, "advice"));
+
+        assertThat((String) messages(1).get(3).get("content")).contains("\"price_vnd\":8000000").contains("\"verified\":true");
+        assertThat(response.build().items().getFirst().priceMaxVnd()).isEqualTo(8_000_000L);
+        assertThat(response.build().items().getFirst().priceChecked()).isTrue();
+    }
+
+    @Test
+    void trangDaDocNhungSaiBienTheKhongDuocGanCoGiaDaXacMinh() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var gpu = new ProductSearch.Product("VGA ASUS Dual RTX 4060 8GB", "Shop", 7_990_000L, "https://shop.vn/4060", null);
+        when(search.search("VGA RTX 4060")).thenReturn(List.of(gpu));
+        when(search.offer(gpu.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                "VGA ASUS Dual RTX 4060 Ti 8GB", gpu.shop(), 9_000_000L, null, gpu.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"VGA RTX 4060\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":20000000,"items":[{"code":"gpu_280","spec":"RTX 4060 8GB","product_id":"s1-1"}]}
+                """), answer("Xong."));
+
+        var response = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu")), null, null, "advice"));
+
+        assertThat(response.build().items().getFirst().priceMaxVnd()).isEqualTo(7_990_000L);
+        assertThat(response.build().items().getFirst().priceChecked()).isFalse();
+    }
+
+    @Test
     void monChuaCoSanPhamThiAppTuTimVaGan() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("low_profile_47")).thenReturn(part("low_profile_47", "cooler", "Tản khí thấp 47 mm"));
@@ -165,7 +618,7 @@ class ChatServiceTests {
                   {"code":"tool_kit","spec":"Tua vít đầu từ","reason":"Để tự lắp"}]}
                 """), answer("Xong."));
 
-        var card = service.reply(new ChatRequest(List.of(new Message("user", "máy văn phòng nhỏ")), null, null, "advice")).build();
+        var card = service.reply(new ChatRequest(List.of(new Message("user", "máy văn phòng nhỏ, thêm bộ đồ nghề")), null, null, "advice")).build();
 
         assertThat(card.items().get(0).productName()).isEqualTo("Tản ID-Cooling IS-40X");
         assertThat(card.items().get(0).sourceUrl()).isEqualTo("https://b/is40");
@@ -239,13 +692,14 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD 1TB")).thenReturn(List.of(
                 new ProductSearch.Product("SSD A 1TB", "Shop A", 1_500_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 1TB", "Shop B", 1_850_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD B 2TB", "Shop B", 1_850_000L, "https://b.vn/1", null),
                 new ProductSearch.Product("SSD C 1TB", "Shop C", 1_100_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         // Ba tier ba sản phẩm (Chất lượng phải đắt hơn và khác Phù hợp, Rẻ rẻ hơn rõ rệt)
         var calls = new ArrayList<Map<String, Object>>();
         for (String[] t : List.of(new String[] { "cheap", "s1-1" }, new String[] { "balanced", "s1-1" }, new String[] { "quality", "s1-2" })) {
-            String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ chỗ\",\"product_id\":\"" + t[1] + "\"}";
+            String capacity = "quality".equals(t[0]) ? "2 TB" : "1 TB";
+            String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"" + capacity + "\",\"reason\":\"Đủ chỗ\",\"product_id\":\"" + t[1] + "\"}";
             calls.add(Map.of("id", "p-" + t[0], "type", "function", "function", Map.of("name", "propose_build",
                     "arguments", "{\"tier\":\"" + t[0] + "\",\"summary\":\"Học\",\"items\":[" + item + "]}")));
         }
@@ -260,7 +714,7 @@ class ChatServiceTests {
         assertThat(res.options()).extracting(ChatResponse.BuildCard::tier).containsExactly("cheap", "balanced", "quality");
         assertThat(res.options()).extracting(ChatResponse.BuildCard::variant).containsOnly(1);
         // Phương án Rẻ do code chọn hàng: cùng 1TB nhưng rẻ hơn
-        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB", "SSD A 1TB", "SSD B 1TB");
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB", "SSD A 1TB", "SSD B 2TB");
         assertThat(res.build().variant()).isEqualTo(1);
         assertThat(res.build().tier()).isEqualTo("balanced");
     }
@@ -271,8 +725,8 @@ class ChatServiceTests {
         when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
         when(search.enabled()).thenReturn(true);
         when(search.search("RTX 3060")).thenReturn(List.of(
-                new ProductSearch.Product("RTX 3060 Shop Nho", "Tân Thành", 7_000_000L, "https://www.google.com/x", null),
-                new ProductSearch.Product("RTX 3060 Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
+                new ProductSearch.Product("RTX 3060 12GB Shop Nho", "Tân Thành", 7_000_000L, "https://www.google.com/x", null),
+                new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> "Phong Vũ".equals(inv.getArgument(1)) ? "https://phongvu.vn/rtx3060" : null);
         reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060\"}"),
                 toolCall("p1", "propose_build", """
@@ -281,7 +735,7 @@ class ChatServiceTests {
 
         var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
 
-        assertThat(line.productName()).isEqualTo("RTX 3060 Phong Vu");
+        assertThat(line.productName()).isEqualTo("RTX 3060 12GB Phong Vu");
         assertThat(line.sourceUrl()).isEqualTo("https://phongvu.vn/rtx3060");
         assertThat(line.priceMinVnd()).isEqualTo(7_200_000L);
     }
@@ -292,8 +746,8 @@ class ChatServiceTests {
         when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
         when(search.enabled()).thenReturn(true);
         when(search.search("RTX 3060")).thenReturn(List.of(
-                new ProductSearch.Product("RTX 3060 Shop Nho", "hotgear.vn", 7_000_000L, "https://www.google.com/x", null),
-                new ProductSearch.Product("RTX 3060 Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
+                new ProductSearch.Product("RTX 3060 12GB Shop Nho", "hotgear.vn", 7_000_000L, "https://www.google.com/x", null),
+                new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
         // Shop nhỏ tìm không ra trang sản phẩm nên chỉ có trang chủ
         when(search.directLink(any(), any(), any())).thenAnswer(inv ->
                 "Phong Vũ".equals(inv.getArgument(1)) ? "https://phongvu.vn/rtx3060" : "https://hotgear.vn/");
@@ -304,7 +758,7 @@ class ChatServiceTests {
 
         var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
 
-        assertThat(line.productName()).isEqualTo("RTX 3060 Phong Vu");
+        assertThat(line.productName()).isEqualTo("RTX 3060 12GB Phong Vu");
         assertThat(line.sourceUrl()).isEqualTo("https://phongvu.vn/rtx3060");
     }
 
@@ -345,10 +799,10 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         // Món trợ lý chọn không có link; món giá gần nhất (B) làm vượt ngân sách nên phải lấy món rẻ hơn (C)
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A", "A", 950_000L, "https://www.google.com/a", null),
-                new ProductSearch.Product("SSD B", "B", 1_020_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD C", "C", 870_000L, "https://c.vn/1", null)));
-        when(search.directLink(any(), any(), any())).thenAnswer(inv -> "SSD A".equals(inv.getArgument(0)) ? null : inv.getArgument(2));
+                new ProductSearch.Product("SSD A 512GB", "A", 950_000L, "https://www.google.com/a", null),
+                new ProductSearch.Product("SSD B 512GB", "B", 1_020_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 512GB", "C", 870_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> "SSD A 512GB".equals(inv.getArgument(0)) ? null : inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
@@ -356,7 +810,7 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD C");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD C 512GB");
         assertThat(res.build().items().getFirst().sourceUrl()).isEqualTo("https://c.vn/1");
     }
 
@@ -365,7 +819,7 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A", "A", 1_000_000L, "https://a.vn/1", null)));
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 512GB", "A", 1_000_000L, "https://a.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         when(client.complete(any())).thenReturn(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
@@ -375,7 +829,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
         assertThat(res.reply()).startsWith(ChatService.BUILDS_READY);
-        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A 512GB");
     }
 
     @Test
@@ -427,7 +881,7 @@ class ChatServiceTests {
         when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD Kingston NV2 1TB", "A", 1_400_000L, "https://a.vn/ssd", null)));
-        when(search.search("Card")).thenReturn(List.of(new ProductSearch.Product("Card RTX 4060", "B", 8_000_000L, "https://b.vn/gpu", null)));
+        when(search.search("Card")).thenReturn(List.of(new ProductSearch.Product("Card RTX 4060 8GB", "B", 8_000_000L, "https://b.vn/gpu", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         var at = java.time.Instant.parse("2026-10-20T10:00:00Z");
         // Trang SSD bán giá khác Google Shopping: thẻ dùng giá trang
@@ -435,7 +889,7 @@ class ChatServiceTests {
                 "SSD Kingston NV2 1TB", "A", 1_550_000L, null, "https://a.vn/ssd", null, true, 36, at));
         // Trang card ghi giá sai đơn vị (x100): bỏ, giữ giá cũ và ghi là chưa kiểm tra
         when(search.offer("https://b.vn/gpu")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
-                "Card RTX 4060", "B", 800_000_000L, null, "https://b.vn/gpu", null, true, null, at));
+                "Card RTX 4060 8GB", "B", 800_000_000L, null, "https://b.vn/gpu", null, true, null, at));
         reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"Card\"}"),
                 toolCall("p1", "propose_build", """
                 {"summary":"Game","items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Nhanh","product_id":"s1-1"},
@@ -609,7 +1063,7 @@ class ChatServiceTests {
                 {"code":"mb_atx","spec":"ATX, DDR4, 4 khe RAM","reason":"Đủ","product_id":"s2-1"}]}
                 """), answer("Xong."));
 
-        var items = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items();
+        var items = service.reply(new ChatRequest(List.of(new Message("user", "tìm bo phù hợp cho CPU này")), null, null, "advice")).build().items();
 
         assertThat(items).filteredOn(i -> i.category().equals("motherboard")).extracting(Line::productName)
                 .containsExactly("Bo mạch chủ MSI PRO B760-P DDR4 ATX");
@@ -726,9 +1180,9 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         // Ngân sách 1 triệu, trợ lý chọn món 1 triệu: món 1,2 triệu (gần giá nhất) làm vượt ngân sách nên phải dùng món rẻ hơn
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A", "A", 1_000_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD Dat", "B", 1_200_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD Re", "C", 850_000L, "https://c.vn/1", null)));
+                new ProductSearch.Product("SSD A 512GB", "A", 1_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD Dat 512GB", "B", 1_200_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD Re 512GB", "C", 850_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
@@ -739,7 +1193,7 @@ class ChatServiceTests {
 
         // Build trợ lý chọn nằm trong ngân sách: giữ nguyên, không thêm build tham khảo
         assertThat(res.options()).isNull();
-        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A 512GB");
     }
 
     @Test
@@ -922,6 +1376,8 @@ class ChatServiceTests {
         assertThat(ChatService.amounts(List.of("có sẵn màn hình 3 triệu, ngân sách 20tr"))).first().isEqualTo(20_000_000L);
         assertThat(ChatService.amounts(List.of("budget 25.000.000"))).containsExactly(25_000_000L);
         assertThat(ChatService.amounts(List.of("học online"))).isEmpty();
+        assertThat(ChatService.amounts(List.of("Máy game 1 triệu, RTX 4090 24GB"))).containsExactly(1_000_000L);
+        assertThat(ChatService.amounts(List.of("ngân sách 0,5 triệu"))).containsExactly(500_000L);
         // Trợ lý ghi đúng khoản người dùng nói: dùng; ghi khác hay quên: lấy lời người dùng; người dùng chưa nói: số trợ lý
         assertThat(ChatService.budgetOf(List.of(40_000_000L), 40_000_000L)).isEqualTo(40_000_000L);
         assertThat(ChatService.budgetOf(List.of(40_000_000L), 50_000_000L)).isEqualTo(40_000_000L);
@@ -947,7 +1403,7 @@ class ChatServiceTests {
         assertThat(res.build()).as("15 triệu > trần 12 triệu: không hiện").isNull();
         assertThat((String) messages(2).get(5).get("content")).contains("over_budget");
         // Đủ link, lắp được mà vượt trần, không có phương án nào khác hiện: nói thật là thiếu tiền và cần khoảng bao nhiêu
-        assertThat(res.reply()).contains("Phương án Phù hợp: với giá hiện tại, cấu hình rẻ nhất app dựng được").contains("vượt mức tối đa 12 triệu")
+        assertThat(res.reply()).contains("Phương án Phù hợp: với giá hiện tại, cấu hình đã thử cho phương án này").contains("vượt mức tối đa 12 triệu")
                 .contains("Ngân sách hiện tại chưa đủ").contains("nới lên khoảng 15 triệu");
     }
 
@@ -1409,15 +1865,394 @@ class ChatServiceTests {
                 "SSD Samsung 990 EVO 1TB", "B", true, null, null, List.of(), true);
         var b = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1, List.of(), List.of(), null);
         var q = new ChatResponse.BuildCard(List.of(line2), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1, List.of(), List.of(), null);
-        String ai = "Mình hiểu bạn cần máy học.\n- **Phù hợp cho bạn - 25,0 triệu:** vỏ kính, Ryzen 5 5600\n- **Chất lượng - 40 triệu**\nNhớ xả tĩnh điện trước khi lắp."
+        String ai = "Mình hiểu bạn cần máy học, ngân sách 2 triệu.\n\n- **Phù hợp cho bạn - 25,0 triệu:** vỏ kính, Ryzen 5 5600\n- **Chất lượng - 40 triệu**\n\nNhớ xả tĩnh điện trước khi lắp."
+                + "\n\nNâng những món còn lại:\n- RAM bảo hành 36 tháng dù thẻ chưa có dữ liệu.\n- Vỏ tốt hơn bản Phù hợp."
+                + "\nPhương án \"Phù hợp\" dùng bo 4 khe dù chưa kiểm tra."
                 + "\n\nPhương án Rẻ: chưa tìm được cấu hình lắp chung được, có link mua trong mức tối đa 1,8 triệu, nên app không hiển thị.";
 
-        String out = ChatService.withTierRows(ai, List.of(b, q));
+        String out = ChatService.withTierRows(ai, List.of(b, q), List.of("Phương án Rẻ: chưa tìm được cấu hình lắp chung được, nên app không hiển thị."));
 
-        assertThat(out).startsWith("Mình hiểu bạn cần máy học.").contains("Nhớ xả tĩnh điện")
+        assertThat(out).startsWith("Mình hiểu bạn cần máy học, ngân sách 2 triệu.").contains("Nhớ xả tĩnh điện")
                 .doesNotContain("25,0 triệu").doesNotContain("Ryzen 5 5600")
-                .contains("**Phù hợp: 1,50 triệu** - gợi ý chính").contains("**Chất lượng: 2,39 triệu** - khác Phù hợp: SSD Samsung 990 EVO 1TB")
+                .doesNotContain("dùng bo 4 khe dù chưa kiểm tra")
+                .doesNotContain("RAM bảo hành 36 tháng dù thẻ chưa có dữ liệu")
+                .contains("**Phù hợp: 1,50 triệu** - gợi ý chính")
+                .contains("**Chất lượng: 2,39 triệu** - tham khảo, vượt ngân sách 0,39 triệu - khác Phù hợp: SSD Samsung 990 EVO 1TB")
                 .contains("Phương án Rẻ: chưa tìm được");
+    }
+
+    @Test
+    void cauTraLoiUuTienKhacBietCardVaNoiRoGiaThamKhao() {
+        var base = new ChatResponse.BuildCard(List.of(
+                new Line("case", "case", "Vỏ", 1, null, null, 500_000L, 500_000L, null, "https://a.vn/case", "Vỏ A", "A"),
+                new Line("cpu", "cpu", "CPU", 1, null, null, 3_000_000L, 3_000_000L, null, "https://a.vn/cpu", "Intel Core i5 12400F", "A"),
+                new Line("gpu", "gpu", "Card", 1, null, null, 8_000_000L, 8_000_000L, null, "https://a.vn/gpu", "NVIDIA RTX 4060 8GB", "A")),
+                true, List.of(), List.of(), null, 15_000_000L, null, "balanced", 1, List.of(),
+                List.of(new CompatibilityResponse.Issue("DOWNGRADE", "6GB VRAM dưới mức khuyến nghị 8GB cho game.")));
+        var cheap = new ChatResponse.BuildCard(List.of(
+                new Line("case", "case", "Vỏ", 1, null, null, 400_000L, 400_000L, null, "https://a.vn/case2", "Vỏ B", "A"),
+                new Line("cpu", "cpu", "CPU", 1, null, null, 2_500_000L, 2_500_000L, null, "https://a.vn/cpu2", "Intel Core i3 12100F", "A"),
+                new Line("gpu", "gpu", "Card", 1, null, null, 6_000_000L, 6_000_000L, null, "https://a.vn/gpu2", "NVIDIA RTX 3050 6GB", "A")),
+                true, List.of(), List.of(), null, 15_000_000L, null, "cheap", 1);
+
+        String out = ChatService.withTierRows("Mình hiểu bạn chơi game Full HD.\nBạn muốn mình thử ngân sách cao hơn?", List.of(cheap, base));
+
+        assertThat(out).contains("gợi ý chính: NVIDIA RTX 4060 8GB; Intel Core i5 12400F")
+                .contains("khác Phù hợp: NVIDIA RTX 3050 6GB; Intel Core i3 12100F; Vỏ B")
+                .contains("giá tham khảo chưa xác minh trên trang bán")
+                .contains("Lưu ý phương án chính: 6GB VRAM dưới mức khuyến nghị 8GB cho game.")
+                .doesNotContain("Bạn muốn mình thử ngân sách cao hơn?");
+    }
+
+    @Test
+    void khongHienLyDoRamMauThuanVoiSoThanh() {
+        assertThat(ChatService.safeReason("ram", 1, "Chạy 2 thanh, mở nhiều tab mượt")).isNull();
+        assertThat(ChatService.safeReason("ram", 2, "Đủ 32GB cho dữ liệu")).isEqualTo("Đủ 32GB cho dữ liệu");
+    }
+
+    @Test
+    void khongCoTheThiKhongDuocNoiDaChotPhuongAn() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 1TB", "A", 25_000_000L, "https://a.vn/ssd", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":20000000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-1"}]}
+                """), answer("Cả ba phương án đều lắp ăn khớp, hãy chọn phương án Rẻ."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 20 triệu")), null, null, "advice"));
+
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("chưa chốt được cấu hình").contains("Phương án Phù hợp:")
+                .doesNotContain("Cả ba phương án").doesNotContain("hãy chọn phương án Rẻ");
+    }
+
+    @Test
+    void banReVuotTranRiengNhungVuaNganSachThiDungLamPhuHop() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A 1TB", "A", 19_000_000L, "https://a.vn/a", null),
+                new ProductSearch.Product("SSD B 1TB", "B", 25_000_000L, "https://b.vn/b", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
+                {"tier":"cheap","summary":"Học","budget_vnd":20000000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-1"}]}
+                """), toolCall("p2", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":20000000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-2"}]}
+                """), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 20 triệu")), null, null, "advice"));
+
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().tier()).isEqualTo("balanced");
+        assertThat(res.build().items().getFirst().priceMaxVnd()).isEqualTo(19_000_000L);
+        assertThat(res.reply()).contains("Phương án Rẻ:").contains("App chưa tìm được");
+    }
+
+    @Test
+    void giuDungVramNguoiDungYeuCauVaUuTienTinMoi() {
+        assertThat(ChatService.needs(List.of("chơi game cần card NVIDIA 12GB")).vramMin()).isEqualTo(12);
+        assertThat(ChatService.needs(List.of("chơi game cần RTX 4060 Ti 16GB")).vramMin()).isEqualTo(16);
+        assertThat(ChatService.needs(List.of("RX 7600 8GB chơi game, RAM 32GB")).vramMin()).isEqualTo(8);
+        assertThat(ChatService.needs(List.of("đổi sang card 16GB", "card 12GB chơi game")).vramMin()).isEqualTo(16);
+        assertThat(ChatService.needs(List.of("chơi game nhẹ card 6GB")).vramMin()).isEqualTo(6);
+        assertThat(ChatService.needs(List.of("học AI card 6GB")).vramMin()).isEqualTo(12);
+        assertThat(ChatService.sameSpec("cpu", "Intel Core i3 12100 Box", "Intel Core i3 12100")).isFalse();
+        assertThat(ChatService.cpuUpgrade("Intel Core i3 12100 Box", "Intel Core i5 12400")).isFalse();
+        assertThat(ChatService.needs(List.of("chỉ học online, không chơi game")).office()).isTrue();
+        assertThat(ChatService.needs(List.of("chỉ học online, không chơi game")).vramMin()).isNull();
+        assertThat(ChatService.needs(List.of("không chơi game nữa, chỉ học online", "chơi game 20 triệu")).office()).isTrue();
+        assertThat(ChatService.requestedGpu(List.of("cần RTX 4060 Ti 16GB"))).isEqualTo("rtx4060ti");
+        assertThat(ChatService.requestedGpu(List.of("đổi card sang AMD", "cần RTX 4060"))).isNull();
+        assertThat(ChatService.requestedGpu(List.of("so RTX 4060 với RTX 4070"))).isNull();
+        assertThat(ChatService.entryCpu("CPU AMD Athlon 3000G")).isTrue();
+        assertThat(ChatService.entryCpu("CPU Intel Core i3 12100F")).isFalse();
+        assertThat(ChatService.adviceIntro(ChatService.needs(List.of("học online không chơi game")), 20_550_000L))
+                .isEqualTo("Bạn cần máy học tập / văn phòng, ngân sách 20,55 triệu.");
+        var changed = List.of("chỉ học online, không cần card rời", "chơi game RTX 4060 8GB 30 triệu");
+        assertThat(ChatService.noDiscreteGpu(changed)).isTrue();
+        assertThat(ChatService.noDiscreteGpu(List.of("KHÔNG CẦN CARD ĐỒ HOẠ RỜI"))).isTrue();
+        assertThat(ChatService.requestedGpu(changed)).isNull();
+        assertThat(ChatService.needs(changed).office()).isTrue();
+        assertThat(ChatService.needs(changed).vramMin()).isNull();
+    }
+
+    @Test
+    void gameYeuCau12GbDuocChonCardCuHonDeVuaTien() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var old = new ProductSearch.Product("VGA ASUS RTX 4070 Super 12GB", "A", 20_000_000L, "https://a.vn/gpu", null);
+        var fit = new ProductSearch.Product("VGA ASUS Dual RTX 3060 12GB", "B", 10_000_000L, "https://b.vn/gpu", null);
+        when(search.search("GPU")).thenReturn(List.of(old));
+        when(search.search("VGA RTX 3060")).thenReturn(List.of(fit));
+        when(search.offer(fit.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                fit.title(), fit.shop(), fit.priceVnd(), null, fit.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"GPU\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":15000000,"items":[{"code":"gpu_280","spec":"RTX 4070 Super 12GB","product_id":"s1-1"}]}
+                """), answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 15 triệu card NVIDIA tối thiểu 12GB")), null, null, "advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items().getFirst().productName()).contains("RTX 3060 12GB");
+        assertThat(res.reply()).contains("hiệu năng GPU thấp hơn");
+    }
+
+    @Test
+    void mayAiDoiCardMoi8GbSangCardCu12GbDuNhuCau() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var small = new ProductSearch.Product("VGA ASUS RTX 5060 Ti 8GB", "A", 20_000_000L, "https://a.vn/gpu", null);
+        var large = new ProductSearch.Product("VGA ASUS Dual RTX 3060 12GB", "B", 12_000_000L, "https://b.vn/gpu", null);
+        when(search.offer(large.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                large.title(), large.shop(), large.priceVnd(), null, large.url(), null, true, 36, java.time.Instant.now()));
+        when(search.search("GPU")).thenReturn(List.of(small));
+        when(search.search("VGA RTX 3060")).thenReturn(List.of(large));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"GPU\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"AI","budget_vnd":35000000,"items":[{"code":"gpu_280","spec":"RTX 5060 Ti 8GB","product_id":"s1-1"}]}
+                """), answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học AI 35 triệu")), null, null, "advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items().getFirst().productName()).contains("RTX 3060 12GB");
+    }
+
+    @Test
+    void khongTimDuocCardDuVramThiAnThayViHienCardThieu() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var gpu = new ProductSearch.Product("VGA ASUS RTX 5060 Ti 8GB", "A", 10_000_000L, "https://a.vn/gpu", null);
+        when(search.search("GPU")).thenReturn(List.of(gpu));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"GPU\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"AI","budget_vnd":35000000,"items":[{"code":"gpu_280","spec":"RTX 5060 Ti 8GB","product_id":"s1-1"}]}
+                """), answer("Cả ba đều đủ VRAM."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học AI 35 triệu")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("card chưa đủ 12GB VRAM").doesNotContain("đều đủ VRAM");
+    }
+
+    @Test
+    void thieuRamNguoiDungYeuCauThiKhongHienDuGiaVanVuaTran() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(new ProductSearch.Product("RAM Corsair 16GB DDR4", "A", 3_000_000L, "https://a.vn/ram", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":30000000,"items":[{"code":"ram_ddr4","quantity":1,"spec":"1x16GB DDR4","product_id":"s1-1"}]}
+                """), answer("Đủ RAM rồi."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "máy học RAM 32GB 30 triệu")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("RAM chưa đủ 32GB").doesNotContain("Đủ RAM rồi");
+    }
+
+    @Test
+    void chiConBanVuotNganSachThiNoiRoKhoanVuot() {
+        var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 2_500_000L, 2_500_000L, null, "https://a.vn/ssd", "SSD A 1TB", "A");
+        var card = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1);
+        assertThat(ChatService.withTierRows("Mình hiểu bạn cần máy học.", List.of(card)))
+                .contains("tham khảo, vượt ngân sách 0,5 triệu").doesNotContain("gợi ý chính");
+    }
+
+    @Test
+    void khongGiuSoTienTietKiemChoThayDoiChuaKiemTra() {
+        var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 1_000_000L, 1_000_000L, null, "https://a.vn/ssd", "SSD A 1TB", "A");
+        var card = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1);
+        String out = ChatService.withTierRows("Mình hiểu bạn cần máy học, ngân sách 2 triệu.\n\n"
+                + "Bỏ bộ quạt thêm sẽ bớt khoảng 690.000đ vì vỏ có quạt sẵn dù chưa kiểm tra.", List.of(card));
+        assertThat(out).startsWith("Mình hiểu bạn cần máy học, ngân sách 2 triệu.")
+                .doesNotContain("690.000đ").doesNotContain("vỏ có quạt sẵn");
+    }
+
+    @Test
+    void hoiLyDoPhuongAnBiAnThiDungSoDaTinhKhongGoiAi() {
+        String note = "Phương án Rẻ: cấu hình đã thử 18,2 triệu vượt mức 18 triệu. App không hiển thị phương án này.";
+        var res = service.reply(new ChatRequest(List.of(
+                new Message("user", "chơi game 20 triệu"),
+                new Message("assistant", "Các thẻ ở dưới.\n\n" + note),
+                new Message("user", "Vì sao không có phương án Rẻ?")), null, null, "advice"));
+        assertThat(res.reply()).contains(note).doesNotContain("21 triệu");
+        assertThat(res.build()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(client);
+    }
+
+    @Test
+    void aiChotAmdThiKhongAmThamDoiSangNvidia() {
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học AI 35 triệu phải dùng card AMD")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("Bạn đã chốt card AMD").contains("chưa kiểm chứng");
+        org.mockito.Mockito.verifyNoInteractions(client);
+    }
+
+    @Test
+    void chuaNoiMucDichThiHoiLaiKhongTuGanGameVaHoc() {
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "Mình có ngân sách 15 triệu để mua máy tính.")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("dùng máy chủ yếu làm gì");
+        org.mockito.Mockito.verifyNoInteractions(client);
+    }
+
+    @Test
+    void dungLuongRamSatSsdKhongBiDocThanhDungLuongDia() {
+        assertThat(ChatService.needs(List.of("Văn phòng21 triệu, RAM32GB SSD1TB, không card rời.")).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.needs(List.of("Văn phòng21 triệu, 1TB SSD và RAM32GB.")).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.needs(List.of("RAM32GB SSD512GB", "SSD1TB RAM16GB")).ssdMin()).isEqualTo(512);
+    }
+
+    @Test
+    void chatLuongKhongHaGpuDeLaySsdLonHon() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
+        when(components.findByCode("gpu_240")).thenReturn(part("gpu_240", "gpu", "GPU"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("SSD")).thenReturn(List.of(
+                new ProductSearch.Product("SSD A 1TB", "A", 3_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 2TB", "B", 6_000_000L, "https://b.vn/2", null)));
+        when(search.search("GPU")).thenReturn(List.of(
+                new ProductSearch.Product("MSI RTX 4060 8GB", "A", 9_000_000L, "https://a.vn/gpu", null),
+                new ProductSearch.Product("Ninja RTX 3060 12GB", "B", 10_000_000L, "https://b.vn/gpu", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        var calls = new ArrayList<Map<String, Object>>();
+        for (String[] t : List.of(new String[] { "balanced", "s1-1", "s2-1" }, new String[] { "quality", "s1-2", "s2-2" })) {
+            calls.add(Map.of("id", "p-" + t[0], "type", "function", "function", Map.of("name", "propose_build",
+                    "arguments", "{\"tier\":\"" + t[0] + "\",\"summary\":\"Học\",\"budget_vnd\":30000000,\"items\":["
+                            + "{\"code\":\"ssd_m2_2280\",\"spec\":\"" + ("quality".equals(t[0]) ? "2" : "1") + "TB\",\"product_id\":\"" + t[1] + "\"},"
+                            + "{\"code\":\"gpu_240\",\"product_id\":\"" + t[2] + "\"}]}")));
+        }
+        reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"),
+                toolCall("s2", "search_products", "{\"query\":\"GPU\"}"),
+                Map.of("choices", List.of(Map.of("finish_reason", "tool_calls", "message", Map.of("role", "assistant", "content", "", "tool_calls", calls)))),
+                answer("Xong."), answer("Vẫn vậy."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "học 30 triệu")), null, null, "advice"));
+        assertThat(res.build().tier()).isEqualTo("balanced");
+        assertThat(res.options()).isNull();
+        assertThat(res.reply()).contains("Phương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp");
+    }
+
+    @Test
+    void chatLuongCanNangCapThucSuKhongChiDoiCuaHangVaNguonToHon() {
+        assertThat(ChatService.qualityUpgrade("gpu", "RTX 3050 Windforce 6GB", 1, "RTX 3050 Windforce V2 6GB", 1)).isFalse();
+        assertThat(ChatService.qualityUpgrade("gpu", "RX 7600 8GB", 1, "RTX 3060 12GB", 1)).isFalse();
+        assertThat(ChatService.qualityUpgrade("psu", "Thermalright SFX 650W Gold", 1, "Thermalright SFX 850W Gold", 1)).isFalse();
+        assertThat(ChatService.qualityUpgrade("ram", "RAM SSTC 16GB DDR4", 2, "RAM Corsair 16GB DDR4", 2)).isFalse();
+        assertThat(ChatService.qualityUpgrade("ram", "RAM SSTC 16GB DDR4", 1, "RAM SSTC 16GB DDR4", 2)).isTrue();
+        assertThat(ChatService.qualityUpgrade("ssd", "SSD A 512GB", 1, "SSD B 1TB", 1)).isTrue();
+    }
+
+    @Test
+    void cungCpuGpuRamThiUuTienBanReHonRoRetVaDaKiemGia() {
+        java.util.function.BiFunction<String, String, Line> core = (kind, title) -> new Line(kind, kind, kind, 1,
+                null, null, 3_000_000L, 3_000_000L, null, "https://a.vn/" + kind, title, "A", true, 36, null, List.of(), true);
+        var cpu = core.apply("cpu", "Intel Core i5 12400F");
+        var gpu = core.apply("gpu", "RTX 4060 8GB");
+        var ram = core.apply("ram", "RAM Corsair 16GB DDR4");
+        var small = core.apply("ssd", "SSD A 512GB");
+        var large = new Line("ssd", "ssd", "SSD", 1, null, null, 8_000_000L, 8_000_000L, null,
+                "https://a.vn/large", "SSD A 4TB", "A", true, 36, null, List.of(), true);
+        var cheap = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, small), true, List.of(), List.of(), null, 30_000_000L, null, "cheap", 1);
+        var balanced = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, large), true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
+        assertThat(ChatService.recommendedCard(List.of(cheap, balanced))).isSameAs(cheap);
+        assertThat(ChatService.withTierRows("Đã chọn cấu hình.", List.of(cheap, balanced)))
+                .contains("Mình ưu tiên bản Rẻ").contains("**Rẻ: 12,00 triệu** - gợi ý chính");
+        var faster = new ChatResponse.BuildCard(List.of(cpu, core.apply("gpu", "RTX 5060 Ti 8GB"), ram, large),
+                true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
+        assertThat(ChatService.recommendedCard(List.of(cheap, faster))).isSameAs(faster);
+        assertThat(ChatService.recommendedCard(List.of(cheap, faster), true)).isSameAs(cheap);
+        assertThat(ChatService.withTierRows("Đã chọn cấu hình.", List.of(cheap, faster), List.of(), true))
+                .contains("bạn muốn tiết kiệm nhất").doesNotContain("cùng model CPU, chip GPU");
+        assertThat(ChatService.prefersCheapest(List.of("cần máy rẻ nhất có thể"))).isTrue();
+        assertThat(ChatService.prefersCheapest(List.of("không cần rẻ nhất nữa", "cần máy rẻ nhất"))).isFalse();
+        assertThat(ChatService.prefersCheapest(List.of("Không cần card rời nữa, chỉ học online và Word. Giữ 30 triệu là mức tối đa, muốn rẻ nhất."))).isTrue();
+    }
+
+    @Test
+    void dongSoSanhRamKitGhiSoBoVaThanhKhongNhanDoiDungLuong() {
+        var base = new Line("ram", "ram", "RAM", 2, null, null, 5_980_000L, 5_980_000L, null,
+                "https://a.vn/ram", "RAM SSTC 16GB DDR4", "A", true, 36, null, List.of(), true);
+        var kit = new Line("ram", "ram", "RAM", 4, null, null, 9_398_000L, 9_398_000L, null,
+                "https://a.vn/kit", "RAM Lexar Thor 32GB (2x16GB) DDR4", "A", true, 36, null, List.of(), true);
+        var balanced = new ChatResponse.BuildCard(List.of(base), true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
+        var quality = new ChatResponse.BuildCard(List.of(kit), true, List.of(), List.of(), null, 30_000_000L, null, "quality", 1);
+        assertThat(ChatService.withTierRows("Đã chọn.", List.of(balanced, quality)))
+                .contains("mua 2 bộ, 4 thanh").doesNotContain("DDR4 x4");
+    }
+
+    @Test
+    void aiCungGpuVaBoNhoThiUuTienBanTietKiemGiaiThichCpuKhac() {
+        java.util.function.BiFunction<String, String, Line> line = (kind, title) -> new Line(kind, kind, kind, 1,
+                null, null, 3_000_000L, 3_000_000L, null, "https://a.vn/" + kind, title, "A", true, 36, null, List.of(), true);
+        var gpu = line.apply("gpu", "NVIDIA RTX 3060 12GB");
+        var ram = line.apply("ram", "RAM 32GB DDR4");
+        var ssd = line.apply("ssd", "SSD 1TB");
+        var cpu = line.apply("cpu", "CPU Intel Core i5 12400F");
+        var costlyCpu = new Line("cpu", "cpu", "CPU", 1, null, null, 12_000_000L, 12_000_000L, null,
+                "https://a.vn/7700x", "CPU AMD Ryzen 7 7700X", "A", true, 36, null, List.of(), true);
+        var cheap = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, ssd), true, List.of(), List.of(), null, 48_000_000L, null, "cheap", 1);
+        var balanced = new ChatResponse.BuildCard(List.of(costlyCpu, gpu, ram, ssd), true, List.of(), List.of(), null, 48_000_000L, null, "balanced", 1);
+        assertThat(ChatService.recommendedCard(List.of(cheap, balanced), false, false)).isSameAs(balanced);
+        assertThat(ChatService.recommendedCard(List.of(cheap, balanced), false, true)).isSameAs(cheap);
+        assertThat(ChatService.withTierRows("Máy học AI.", List.of(cheap, balanced), List.of(), false, true))
+                .contains("AI trên GPU", "không giảm tổng RAM/SSD", "CPU, nền RAM và bảo hành", "**Rẻ: 12,00 triệu** - gợi ý chính")
+                .doesNotContain("vì bạn muốn tiết kiệm nhất", "cùng model CPU");
+        var small = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, line.apply("ssd", "SSD512GB")), true, List.of(), List.of(), null, 48_000_000L, null, "cheap", 1);
+        assertThat(ChatService.recommendedCard(List.of(small, balanced), false, true)).isSameAs(balanced);
+        var faster = new ChatResponse.BuildCard(List.of(costlyCpu, line.apply("gpu", "RTX4070 SUPER12GB"), ram, ssd), true,
+                List.of(), List.of(), null, 48_000_000L, null, "balanced", 1);
+        assertThat(ChatService.recommendedCard(List.of(cheap, faster), false, true)).isSameAs(faster);
+    }
+
+    @Test
+    void stableDiffusionLaMucDichRoRangKhongHoiLai() {
+        reply(answer("Xong."), answer("Xong."));
+        service.reply(new ChatRequest(List.of(new Message("user", "Cần bộ PC Stable Diffusion cục bộ, 38 triệu, RAM 32GB, GPU NVIDIA 12GB VRAM, SSD 1TB.")), null, null, "advice"));
+        verify(client, org.mockito.Mockito.atLeastOnce()).complete(any());
+    }
+
+    @Test
+    void khongGioiThieuAthlonKemCardGameDuLinhKienLapDuoc() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("parts")).thenReturn(List.of(
+                new ProductSearch.Product("CPU AMD Athlon 3000G", "A", 1_000_000L, "https://a.vn/cpu", null),
+                new ProductSearch.Product("VGA ASUS Radeon RX 7600 8GB", "A", 7_000_000L, "https://a.vn/gpu", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"parts\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":20000000,"items":[
+                {"code":"cpu_std","spec":"Athlon 3000G","product_id":"s1-1"},
+                {"code":"gpu_280","spec":"RX 7600 8GB","product_id":"s1-2"}]}
+                """), answer("Đây là cấu hình game chất lượng."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu card AMD")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("CPU phổ thông quá thấp").doesNotContain("Đây là cấu hình game chất lượng");
+    }
+
+    @Test
+    void yeuCauMoiKhongCardRoiKhongBiModelRtxCuGhiDe() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("parts")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i5 12400", "A", 4_000_000L, "https://a.vn/cpu", null),
+                new ProductSearch.Product("VGA ASUS RTX 4060 8GB", "A", 8_000_000L, "https://a.vn/gpu", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"parts\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Học","budget_vnd":30000000,"items":[
+                {"code":"cpu_std","spec":"Core i5 12400","product_id":"s1-1"},
+                {"code":"gpu_280","spec":"RTX 4060 8GB","product_id":"s1-2"}]}
+                """), answer("Vẫn giữ card RTX như yêu cầu cũ."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game RTX 4060 8GB 30 triệu"),
+                new Message("assistant", "Mình đã chọn RTX 4060."),
+                new Message("user", "chỉ học online, không cần card rời")), null, null, "advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("người dùng yêu cầu không dùng card rời").doesNotContain("Vẫn giữ card RTX");
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
@@ -1540,6 +2375,8 @@ class ChatServiceTests {
         // Ca thật: dòng bo mạch tự tìm ra RAM; dòng tản tự tìm ra cái pát 30 nghìn
         assertThat(ChatService.ofKind("motherboard", "Ram Corsair Vengeance LPX 16GB 3200MHz DDR4")).isFalse();
         assertThat(ChatService.ofKind("motherboard", "Mainboard MSI PRO H610M-E DDR4")).isTrue();
+        assertThat(ChatService.ofKind("gpu", "Cạc màn hình Inno3D GEFORCE RTX 4060 Ti TWIN X2 16GB (GDDR6/ 128 bit)")).isTrue();
+        assertThat(ChatService.ofKind("gpu", "Màn hình ASUS 24 inch")).isFalse();
         assertThat(ChatService.plausible("cooler", 30_000L)).isFalse();
         assertThat(ChatService.plausible("cooler", 190_000L)).isTrue();
         assertThat(ChatService.plausible("cpu", 2_890_000L)).isTrue();
@@ -1652,6 +2489,54 @@ class ChatServiceTests {
     }
 
     @Test
+    void kitGskillGhiSoThanhTrongSkuVanMuaMotBoVaHienHaiThanh() {
+        String title = "RAM G.SKILL Trident Z5 32 GB-DDR5-6000 MHz (F5-6000U4040E16GX2-TZ5K)";
+        assertThat(ChatService.kitSticks(title)).isEqualTo(2);
+        assertThat(ChatService.kitSticks(title.replace("16GX2", "16GA2"))).isEqualTo(2);
+        assertThat(ChatService.kitSticks("RAM G.SKILL Ripjaws S5 16GB DDR5")).isNull();
+        assertThat(ChatService.kitSticks("VGA RTX 4060 X2 8GB")).isNull();
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(new ProductSearch.Product(title,"A",4_199_000L,"https://a.vn/gskill",null)));
+        when(search.offer("https://a.vn/gskill")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                title,"A",4_199_000L,null,"https://a.vn/gskill",null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"RAM\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","budget_vnd":10000000,"items":[{"code":"ram_ddr4","quantity":1,"spec":"32GB DDR5","product_id":"s1-1"}]}
+                """),answer("Xong."));
+        var ram = service.reply(new ChatRequest(List.of(new Message("user","RAM 32GB, ngân sách 10 triệu")),null,null,"advice"))
+                .build().items().getFirst();
+        assertThat(ram.quantity()).isEqualTo(2);
+        assertThat(ram.spec()).contains("2x16GB");
+        assertThat(ram.priceMaxVnd()).isEqualTo(4_199_000L);
+    }
+
+    @Test
+    void giaKhongDoiVanPhaiLaySkuKitTuTrangSanPham() {
+        String generic = "RAM Kingston Fury 32 GB-DDR4-3200 MHz";
+        String actual = generic + " (KF432C16BB1AK2/32)";
+        assertThat(ChatService.kitSticks(actual)).isEqualTo(2);
+        assertThat(ChatService.kitSticks("RAM Kingston 32GB KF432C16BB/32")).isNull();
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM"));
+        when(search.enabled()).thenReturn(true);
+        when(search.search("RAM")).thenReturn(List.of(new ProductSearch.Product(generic,"A",4_390_000L,"https://a.vn/kingston",null)));
+        when(search.offer("https://a.vn/kingston")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                actual,"A",4_390_000L,null,"https://a.vn/kingston",null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"RAM\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","budget_vnd":10000000,"items":[{"code":"ram_ddr4","quantity":1,"spec":"32GB DDR4","product_id":"s1-1"}]}
+                """),answer("Xong."));
+        var ram = service.reply(new ChatRequest(List.of(new Message("user","RAM 32GB, ngân sách 10 triệu")),null,null,"advice"))
+                .build().items().getFirst();
+        assertThat(ram.productName()).contains("KF432C16BB1AK2/32");
+        assertThat(ram.quantity()).isEqualTo(2);
+        assertThat(ram.spec()).contains("2x16GB");
+        assertThat(ram.priceMaxVnd()).isEqualTo(4_390_000L);
+    }
+
+    @Test
     void kitRamQuenBuyQtyThiHieuLaMotBo() {
         // Ca thật: kit 2x16GB với quantity 2 bị tính 2 bộ (64GB, 14 triệu)
         assertThat(ChatService.kitSticks("Ram Corsair Vengeance RGB 32GB (2x16GB) 6000 DDR5")).isEqualTo(2);
@@ -1691,6 +2576,10 @@ class ChatServiceTests {
         assertThat(ChatService.gpuVendor(List.of("cần máy chơi game 20 triệu có card NVIDA"))).as("viết sai NVIDIA").isEqualTo("nvidia");
         assertThat(ChatService.gpuVendor(List.of("muốn card nvdia"))).isEqualTo("nvidia");
         assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).allowedVendor()).isEqualTo("nvidia");
+        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).vramMin()).isEqualTo(8);
+        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDIA 8GB")).explicitGpuVram()).isTrue();
+        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).explicitGpuVram()).isFalse();
+        assertThat(ChatService.needs(List.of("cần card NVIDA và RAM 8GB để chơi game")).explicitGpuVram()).isFalse();
         assertThat(ChatService.gpuVendor(List.of("RTX 4060 hay RX 7600 tốt hơn?"))).as("so sánh hai hãng").isNull();
         var n = ChatService.needs(List.of("Đổi sang card AMD giúp mình", "Mình chơi game và livestream, 25 triệu, thích kính"));
         assertThat(n.allowedVendor()).isEqualTo("amd");
@@ -1701,6 +2590,191 @@ class ChatServiceTests {
         assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isNull();
         assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 25 triệu.")).vramMin())
                 .as("game nhẹ: card 6GB đủ").isEqualTo(6);
+    }
+
+    @Test
+    void gameDoHoaCaoVanLaGameVaGiuSanVram() {
+        var needs = ChatService.needs(List.of("Chơi game đồ họa cao ở Full HD, 33 triệu, RAM 32GB."));
+        assertThat(needs.vramMin()).isEqualTo(8);
+        assertThat(ChatService.adviceIntro(needs, 33_000_000L)).contains("máy chơi game");
+        assertThat(ChatService.needs(List.of("Game Valorant và dựng video, 30 triệu")).vramMin()).isEqualTo(6);
+        assertThat(ChatService.needs(List.of("làm đồ họa Photoshop 30 triệu")).vramMin()).isNull();
+    }
+
+    @Test
+    void khongDoiCardDungVramSangTenKhongDocDuocVram() {
+        var current = product("VGA ASUS RTX 3060 12GB", 12_690_000L);
+        var unclear = product("VGA ASUS Dual Geforce RTX 3060 O8G White", 7_490_000L);
+        assertThat(ChatService.equivalents("gpu", current, List.of(unclear), false, true, false, 8)).isEmpty();
+        assertThat(ChatService.sameSpec("gpu", current.title(), unclear.title())).isFalse();
+        assertThat(ChatService.cudaOk(Map.of("gpu_240", Map.of("vram_min", 8)), "gpu_240", unclear)).isFalse();
+        assertThat(ChatService.fitsCode("case_compact_tower", "Vỏ Corsair FRAME 4000D Modular Mid-Tower White")).isFalse();
+        assertThat(ChatService.fitsCode("case_compact_tower", "Vỏ Micro-ATX Mid-Tower")).isTrue();
+    }
+
+    @Test
+    void giuDungModelKhiAiChonSaiVaTenShopCoThuongHieu() {
+        var res = lockedGpuResponse(true);
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(l -> assertThat(l.productName()).isEqualTo("VGA ASUS Dual GeForce RTX™ 4070 12GB"));
+        assertThat(res.build().items()).noneSatisfy(l -> assertThat(l.category()).isEqualTo("tools"));
+        assertThat(ChatService.gpuChip("ASUS RTX® 4070 Ti SUPER 16GB")).isEqualTo("rtx4070tisuper");
+    }
+
+    @Test
+    void modelBiKhoaHetHangThiKhongTuDoiSangSuper() {
+        assertThat(lockedGpuResponse(false).build()).isNull();
+    }
+
+    private ChatResponse lockedGpuResponse(boolean available) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(components.findByCode("tool_kit")).thenReturn(part("tool_kit", "tools", "Bộ đồ nghề lắp máy"));
+        when(search.enabled()).thenReturn(true);
+        var wrong = new ProductSearch.Product("VGA ASUS RTX 4070 SUPER 12GB", "A", 19_000_000L, "https://a.vn/super", null);
+        var exact = new ProductSearch.Product("VGA ASUS Dual GeForce RTX™ 4070 12GB", "A", 15_590_000L, "https://a.vn/exact", null);
+        when(search.search(any())).thenReturn(available ? List.of(wrong, exact) : List.of(wrong));
+        when(search.engineSearch(any())).thenReturn(List.of());
+        for (var p : List.of(wrong, exact)) when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                p.title(), "A", p.priceVnd(), null, p.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"VGA\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","budget_vnd":48000000,"items":[
+                {"code":"gpu_280","spec":"RTX 4070 SUPER 12GB","product_id":"s1-1"},{"code":"tool_kit"}]}
+                """), answer("Xong."), answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user", "PC chơi game 48 triệu, bắt buộc đúng RTX 4070 12GB, không đổi model card")), null, null, "advice"));
+    }
+
+    @Test
+    void aiCoTheDoiCardChuaCoHangHieuNangTheoSanVramVaNganSach() {
+        var result = unknownGpuBudgetResponse("Stable Diffusion local, 20 triệu, NVIDIA tối thiểu 16GB VRAM");
+        assertThat(result.build()).isNotNull();
+        assertThat(result.build().items().getFirst().productName()).contains("RTX 4060 Ti").contains("16GB");
+        assertThat(result.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("chưa có benchmark").doesNotContain("hiệu năng GPU thấp hơn"));
+    }
+
+    @Test
+    void aiKhoaModelThiKhongDoiCardDuChuaCoTrongBangHang() {
+        assertThat(unknownGpuBudgetResponse("Stable Diffusion, 20 triệu, bắt buộc đúng RTX 4080 SUPER 16GB, không đổi model").build()).isNull();
+    }
+
+    @Test
+    void gameKhongTuDoanXepHangCuaChipChuaBiet() {
+        assertThat(unknownGpuBudgetResponse("Chơi game 20 triệu, NVIDIA ít nhất 16GB VRAM").build()).isNull();
+    }
+
+    private ChatResponse unknownGpuBudgetResponse(String question) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var expensive = new ProductSearch.Product("Card GIGABYTE AORUS GeForce RTX 4080 SUPER XTREME ICE 16G", "A", 39_990_000L, "https://a.vn/4080", null);
+        var affordable = new ProductSearch.Product("Cạc màn hình Inno3D GEFORCE RTX 4060 Ti TWIN X2 16GB", "A", 11_399_000L, "https://a.vn/4060ti", null);
+        when(search.search(any())).thenReturn(List.of(expensive, affordable));
+        when(search.engineSearch(any())).thenReturn(List.of());
+        for (var p : List.of(expensive, affordable)) when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                p.title(), "A", p.priceVnd(), null, p.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"GPU\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","budget_vnd":20000000,"items":[{"code":"gpu_280","spec":"RTX 4080 SUPER 16GB","product_id":"s1-1"}]}
+                """), answer("Xong."), answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user", question)), null, null, "advice"));
+    }
+
+    @Test
+    void cardNvidia6GbChiDungKhiGameVuotTranVaKhongDoi8Gb() {
+        var build = nvidiaBudgetResponse("chơi game 7 triệu, cần card NVIDA").build();
+        var card = build.items().getFirst();
+
+        assertThat(card.productName()).isEqualTo("VGA MSI GeForce RTX 3050 6GB");
+        assertThat(card.priceMaxVnd()).isEqualTo(6_000_000L);
+        assertThat(build.recommendations()).anySatisfy(w -> assertThat(w.message()).contains("6GB VRAM").contains("8GB"));
+    }
+
+    @Test
+    void cardNvidiaGhiRo8GbThiKhongHaXuong6Gb() {
+        assertThat(nvidiaBudgetResponse("chơi game 7 triệu, cần card NVIDA 8GB").build()).isNull();
+    }
+
+    @Test
+    void giamCpuVanGiuDu8GbThiKhongHaVramSom() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var cpu = new ProductSearch.Product("CPU Intel Core i5 12400F", "A", 4_000_000L, "https://a.vn/cpu", null);
+        var small = new ProductSearch.Product("CPU Intel Core i3 13100F", "A", 2_900_000L, "https://a.vn/i3", null);
+        var gpu = new ProductSearch.Product("VGA ASUS RTX 4060 8GB", "A", 9_000_000L, "https://a.vn/gpu", null);
+        var six = new ProductSearch.Product("VGA MSI RTX 3050 6GB", "A", 6_000_000L, "https://a.vn/six", null);
+        when(search.search(any())).thenReturn(List.of(cpu, small, gpu, six));
+        for (var p : List.of(cpu, small, gpu, six)) when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                p.title(), "A", p.priceVnd(), null, p.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"parts\"}"), toolCall("p", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":12000000,"items":[
+                {"code":"cpu_std","product_id":"s1-1"},{"code":"gpu_280","product_id":"s1-3"}]}
+                """), answer("Xong."), answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 12 triệu, dùng card NVIDIA")), null, null, "advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(l -> {
+            assertThat(l.category()).isEqualTo("gpu"); assertThat(l.productName()).contains("RTX 4060 8GB");
+        });
+    }
+
+    @Test
+    void cpuKhacSocketThiSuaTheoBoKhiNguoiDungChuaChotCpu() {
+        var res = mixedSocketResponse("chơi game 32 triệu");
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("cpu"); assertThat(line.productName()).contains("7500F");
+        });
+    }
+
+    @Test
+    void doiNenTangKhongDuocTuDoiCpuNguoiDungDaChiDinh() {
+        assertThat(mixedSocketResponse("chơi game 32 triệu, phải dùng CPU AMD Ryzen 5 5600X").build()).isNull();
+    }
+
+    private ChatResponse mixedSocketResponse(String text) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        for (String[] p : List.of(new String[]{"cpu_std","cpu"}, new String[]{"mb_itx","motherboard"},
+                new String[]{"ram_ddr4","ram"}, new String[]{"gpu_240","gpu"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var products = List.of(new ProductSearch.Product("CPU AMD Ryzen 5 5600X", "A", 4_690_000L, "https://a.vn/am4", null),
+                new ProductSearch.Product("Mainboard JGINYUE B650I NIGHT DEVIL DDR5", "A", 3_290_000L, "https://a.vn/mb", null),
+                new ProductSearch.Product("RAM Kingmax 16GB DDR5", "A", 6_490_000L, "https://a.vn/ram", null),
+                new ProductSearch.Product("VGA MSI RTX 4060 8GB", "A", 8_990_000L, "https://a.vn/gpu", null),
+                new ProductSearch.Product("CPU AMD Ryzen 5 7500F", "A", 4_599_000L, "https://a.vn/am5", null));
+        when(search.search(any())).thenReturn(products);
+        for(var p:products) when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Game","budget_vnd":32000000,"items":[
+                {"code":"cpu_std","product_id":"s1-1"},{"code":"mb_itx","product_id":"s1-2"},
+                {"code":"ram_ddr4","spec":"16GB DDR5","product_id":"s1-3"},{"code":"gpu_240","product_id":"s1-4"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user",text)),null,null,"advice"));
+    }
+
+    private ChatResponse nvidiaBudgetResponse(String userText) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var r4060 = new ProductSearch.Product("Card ASUS Dual GeForce RTX 4060 8GB", "A", 9_000_000L, "https://a.vn/4060", null);
+        var r3050 = new ProductSearch.Product("VGA MSI GeForce RTX 3050 6GB", "B", 6_000_000L, "https://b.vn/3050", null);
+        when(search.search("card")).thenReturn(List.of(r4060));
+        when(search.search("VGA RTX 3050")).thenReturn(List.of(r3050));
+        when(search.offer(r4060.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                r4060.title(), "A", r4060.priceVnd(), null, r4060.url(), null, true, 36, java.time.Instant.now()));
+        when(search.offer(r3050.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                r3050.title(), "B", r3050.priceVnd(), null, r3050.url(), null, true, 36, java.time.Instant.now()));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"card\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":7000000,"items":[{"code":"gpu_280","spec":"RTX 4060 8GB","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user", userText)), null, null, "advice"));
     }
 
     @Test

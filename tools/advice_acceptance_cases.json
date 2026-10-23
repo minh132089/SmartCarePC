@@ -1,0 +1,1742 @@
+[
+  {
+    "id": "o07",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC cho quầy bán hàng, hóa đơn và trình duyệt, 12 triệu, chỉ làm văn phòng Word."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 12000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8
+    }
+  },
+  {
+    "id": "f06",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game mini ITX 35 triệu."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Không cần mini nữa, dùng vỏ mATX bình thường và giữ 35 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "notMiniItx": true
+    }
+  },
+  {
+    "id": "n05",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 24 triệu, phải dùng card nividia, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 24000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "o04",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần máy học online cho hai con thay phiên nhau, 14 triệu, ưu tiên rẻ nhất đủ dùng."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 14000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "g15",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy game nhẹ LMHT, 20 triệu, thích vỏ kính."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "g10",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi FO4, ngân sách 23 triệu, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 23000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "e01",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 30 triệu, bắt buộc đúng card RTX 4060 8GB, RAM 16GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuModel": "rtx4060",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "a04",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 26 triệu, chỉ dùng card AMD Radeon, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 26000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "n09",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 28 triệu, phải dùng card NVIDIA, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "f05",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần PC game 30 triệu, card RTX 4060 8GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Không cần card rời nữa, chỉ học online và Word. Giữ 30 triệu là mức tối đa, muốn rẻ nhất."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "i04",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC Stable Diffusion cục bộ, 38 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 38000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "i08",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC chạy mô hình AI để học, 48 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 48000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o02",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mua PC cho cô giáo dạy Teams, soạn giáo án, tối đa 12 triệu, không chơi game."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 12000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8
+    }
+  },
+  {
+    "id": "i09",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC học AI và xử lý ảnh, 50 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 50000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "e07",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 26 triệu, bắt buộc đúng card RX 6600 8GB, RAM 16GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 26000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuModel": "rx6600",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "a07",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 32 triệu, chỉ dùng card AMD Radeon, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "g02",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi Cyberpunk ở Full HD, 24 triệu chỉ thùng máy, không cần max setting."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 24000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "e06",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 24 triệu, bắt buộc đúng card RTX 3050 6GB, RAM 16GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 24000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuModel": "rtx3050",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "g08",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi Liên Minh và học online, 19 triệu, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 19000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "c02",
+    "group": "clarification",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình muốn mua máy tính 15 triệu."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "làm gì|nhu cầu|mục đích"
+    }
+  },
+  {
+    "id": "c03",
+    "group": "clarification",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "ngân sách.*(gì|việc)|làm.*ngân sách"
+    }
+  },
+  {
+    "id": "g05",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy chơi Black Myth Wukong, tối đa 30 triệu, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o15",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy học online đặt trên bàn nhỏ, 17 triệu, chọn vỏ nhỏ gọn mATX, không cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 17000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8
+    }
+  },
+  {
+    "id": "a05",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 28 triệu, chỉ dùng card AMD Radeon, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "m03",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi Valorant, 32 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "m05",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi Valorant, 36 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 36000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "n07",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 26 triệu, phải dùng card invidia, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 26000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "i02",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC deep learning mô hình nhỏ, 32 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "n06",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 25 triệu, phải dùng card nivida, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "o16",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mua máy làm văn phòng cho nhân viên, 18 triệu, RAM 32GB, không chơi game."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 18000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 32
+    }
+  },
+  {
+    "id": "m04",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi game AAA, 34 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 34000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "c01",
+    "group": "clarification",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC học online."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "ngân sách|bao nhiêu"
+    }
+  },
+  {
+    "id": "g13",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình chơi game AAA và dựng video cơ bản, ngân sách 29 triệu, card VRAM 8GB trở lên."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 29000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o01",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Sinh viên cần máy học Zoom, Word và xem bài giảng, 11 triệu chỉ thùng máy, rẻ nhất có thể."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 11000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "i07",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC học sâu bằng Python và PyTorch, 45 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 45000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "c04",
+    "group": "unsupported",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình học AI 35 triệu, bắt buộc card AMD."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "chưa kiểm chứng|chưa xác minh"
+    }
+  },
+  {
+    "id": "e03",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 28 triệu, bắt buộc đúng card RX 7600 8GB, RAM 16GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuModel": "rx7600",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "n02",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 21 triệu, phải dùng card NVIDA, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 21000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "e05",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 48 triệu, bắt buộc đúng card RTX 4070 12GB, RAM 32GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 48000000,
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuModel": "rtx4070",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "o17",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy xem video bài giảng và làm bảng tính nhẹ, 12 triệu, rẻ nhất có thể."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 12000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "n01",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 20 triệu, phải dùng card NVIDIA, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "g09",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi game esports Full HD, 21 triệu, không livestream."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 21000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "f10",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 30 triệu đúng RTX 4060 8GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Đổi sang RTX 3060 12GB, vẫn 30 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "gpuVendor": "nvidia",
+      "gpuModel": "rtx3060",
+      "minGpuVramGb": 12,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "f01",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy game 25 triệu dùng NVIDIA."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Đổi card sang AMD, giữ ngân sách 25 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "gpuVendor": "amd",
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "i05",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC thử mô hình LLM nhỏ, 40 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 40000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "a06",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 30 triệu, chỉ dùng card AMD Radeon, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "n08",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 27 triệu, phải dùng card GeForce, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 27000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "g14",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy chơi game Full HD, 31 triệu, RAM 32GB, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 31000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "f03",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 30 triệu, RAM 16GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Đổi RAM lên 32GB, giữ ngân sách đó."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minRamGb": 32,
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "a08",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 35 triệu, chỉ dùng card AMD Radeon, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "m01",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi Valorant, 28 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "n10",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 30 triệu, phải dùng card NVIDIA, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "i11",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC CUDA cho học máy, 36 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 36000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "e09",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 34 triệu, bắt buộc đúng card RTX 4060 8GB, RAM 32GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 34000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuModel": "rtx4060",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "g04",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi GTA V và game AAA, 28 triệu, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "i01",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC học AI với PyTorch, 30 triệu, RAM 16GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 16,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o06",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Làm báo cáo và trình chiếu PowerPoint, ngân sách 16 triệu, không cần GPU rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 16000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8
+    }
+  },
+  {
+    "id": "f04",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 35 triệu, RAM 32GB, SSD 512GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "SSD lên 1TB, vẫn 35 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "n11",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 32 triệu, phải dùng card NVIDIA, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "g03",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy chơi Elden Ring và học bài, 26 triệu, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 26000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "m08",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi game AAA, 42 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 42000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "o14",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Dùng Word, đọc PDF và học trực tuyến, 16 triệu, không cần GPU rời, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 16000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "o09",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy tính học lập trình Python cơ bản và Word, tối đa 17 triệu, RAM 16GB, không cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 17000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 16
+    }
+  },
+  {
+    "id": "e02",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 32 triệu, bắt buộc đúng card RTX 3060 12GB, RAM 32GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuModel": "rtx3060",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "e04",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 45 triệu, bắt buộc đúng card RTX 4060 Ti 16GB, RAM 32GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 45000000,
+      "minGpuVramGb": 16,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuModel": "rtx4060ti",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "g06",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi game AAA màn 2K, 32 triệu, ưu tiên card đồ họa."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o10",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình chỉ gõ luận văn và tra cứu web, 18 triệu là mức tối đa, muốn rẻ nhất đủ dùng."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 18000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "i03",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC học máy bằng CUDA, 35 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o18",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy học Word và Excel cho người mới, 15 triệu, không cần card rời, muốn tiết kiệm nhất."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 15000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "a03",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 25 triệu, chỉ dùng card AMD Radeon, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "o08",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy cho bố mẹ xem phim và gọi video, 11 triệu, rẻ nhất đủ dùng."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 11000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "m06",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi game AAA, 38 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 38000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "a01",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 22 triệu, chỉ dùng card AMD Radeon, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 22000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "o03",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy kế toán dùng Excel và phần mềm hóa đơn, 13 triệu, RAM 16GB, không cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 13000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 16
+    }
+  },
+  {
+    "id": "g11",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi CS2 Full HD, 25 triệu, không đòi FPS cụ thể."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "o05",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy văn phòng Word, Excel, họp Google Meet, 15 triệu, RAM 16GB và SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 15000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 16,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "m02",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi game AAA, 30 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "g16",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi game đồ họa cao ở Full HD, 33 triệu, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 33000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "f09",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy văn phòng 15 triệu, không cần card rời."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Đổi nhu cầu sang chơi game AAA, tăng ngân sách lên 30 triệu, phải có card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "n12",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 35 triệu, phải dùng card NVIDIA, RAM 32GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "g01",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA Full HD, 22 triệu, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 22000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "e08",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 36 triệu, bắt buộc đúng card RTX 3060 12GB, RAM 64GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 36000000,
+      "minGpuVramGb": 12,
+      "minRamGb": 64,
+      "noEntryCpu": true,
+      "gpuModel": "rtx3060",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "f07",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 20 triệu dùng NVIDIA."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Tăng ngân sách lên 30 triệu, giữ hãng card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "f02",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy game 28 triệu dùng AMD."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Đổi sang card NVIDIA, vẫn 28 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "i06",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC TensorFlow với GPU NVIDIA, 42 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 42000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "e10",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game, 32 triệu, bắt buộc đúng card RX 7600 8GB, RAM 32GB, SSD 1TB. Không đổi model card."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "noEntryCpu": true,
+      "gpuModel": "rx7600",
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "o11",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC cho lễ tân đặt lịch bằng web và Excel, 13 triệu, không chơi game."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 13000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 8
+    }
+  },
+  {
+    "id": "g12",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy chơi game nặng xen lẫn Valorant, 27 triệu."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 27000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "i12",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC Stable Diffusion và học online, 44 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 44000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "n04",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 23 triệu, phải dùng card nvidea, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 23000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "i10",
+    "group": "ai",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần bộ PC deep learning và soạn bài, 55 triệu, RAM 32GB, GPU NVIDIA ít nhất 12GB VRAM, SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 55000000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "c05",
+    "group": "unsupported",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình học AI 40 triệu, bắt buộc dùng card Intel Arc."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "chưa kiểm chứng|chưa xác minh"
+    }
+  },
+  {
+    "id": "n03",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game Full HD 22 triệu, phải dùng card nvdia, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 22000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "nvidia"
+    }
+  },
+  {
+    "id": "a02",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game AAA, 24 triệu, chỉ dùng card AMD Radeon, RAM 16GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 24000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "gpuVendor": "amd"
+    }
+  },
+  {
+    "id": "o13",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Làm báo cáo Excel hằng ngày, 15 triệu, chỉ cần RAM 16GB và máy chạy văn phòng."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 15000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 16
+    }
+  },
+  {
+    "id": "o12",
+    "group": "office",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần PC học tiếng Anh, Zoom và lướt web, 14 triệu, RAM 16GB, không dùng card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 14000000,
+      "noDiscreteGpu": true,
+      "minRamGb": 16
+    }
+  },
+  {
+    "id": "m07",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần máy Mini-ITX đặt cạnh TV, chơi Valorant, 40 triệu, RAM 16GB, phải giữ kiểu vỏ mini."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 40000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "miniItx": true
+    }
+  },
+  {
+    "id": "c06",
+    "group": "infeasible",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy game 1 triệu, phải có RTX 4090 24GB mới."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "không|thiếu|chưa"
+    }
+  },
+  {
+    "id": "g07",
+    "group": "game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Game nhẹ Valorant và Word, 18 triệu, rẻ nhất có thể."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 18000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "noEntryCpu": true,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "f08",
+    "group": "followup",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 35 triệu, RAM 32GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận nhu cầu này; cấu hình sẽ được kiểm tra lại theo thay đổi tiếp theo."
+      },
+      {
+        "role": "user",
+        "content": "Giảm còn 25 triệu, RAM 16GB đủ rồi."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "noEntryCpu": true
+    }
+  }
+]

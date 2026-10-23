@@ -9,6 +9,44 @@ import org.junit.jupiter.api.Test;
 class ProductRulesTests {
 
     @Test
+    void tenNguonTrungMaChipsetKhongDuocGuiThongSoBoChoAi() {
+        assertThat(ProductRules.describeAny("Nguồn máy tính Jetek Revolve B650 (650W)")).isEmpty();
+        assertThat(ProductRules.describeAny("Nguồn máy tính Jetek Revolve B550 (550W)")).isEmpty();
+        assertThat(ProductRules.describeAny("Mainboard ASUS B650M DDR5")).contains("AM5").contains("B650");
+        assertThat(ProductRules.describeAny("CPU Intel Core i5 12400F")).contains("LGA1700");
+        assertThat(ProductRules.describeAny("RAM Corsair 16GB DDR4")).isEqualTo("DDR4");
+    }
+
+    @Test
+    void a620aKhongBiBoSotKhiModelCoHauToAM() {
+        // https://www.msi.com/Motherboard/PRO-A620AM-B-EVO/Specification
+        var title = "Bo mạch chủ MSI PRO A620AM-B EVO";
+        assertThat(ProductRules.read("motherboard", title).describe()).isEqualTo("socket AM5, chipset A620A, DDR5");
+        assertThat(ChatService.boardSize(title)).isEqualTo(2);
+        assertThat(ProductRules.issues(Map.of("cpu", "CPU Intel Core i5 14400F", "motherboard", title)))
+                .anySatisfy(i -> assertThat(i).contains("LGA1700").contains("AM5"));
+    }
+
+    @Test
+    void soQuatCardKhongDuDeKetLuanVuaVoVaQuatLapThemCanKiemViTri() {
+        assertThat(ProductRules.findings(Map.of("gpu","ASUS Dual RTX 4060 8GB","case","Silverstone SG13","fans","Bộ3quạt Xigmatek")))
+                .filteredOn(f -> f.severity()==ProductRules.Severity.UNKNOWN).extracting(ProductRules.Finding::ruleId)
+                .contains("GPU_CLEARANCE","FAN_MOUNTS");
+        assertThat(ProductRules.issues(Map.of("gpu","SPARKLE Intel Arc B580 TITAN OC SB580T-12GOC",
+                "case","Vỏ Silverstone Sugo SG13B-Q"))).anySatisfy(issue -> assertThat(issue).contains("315mm", "267mm"));
+    }
+
+    @Test
+    void soKheRamTheoDungMaBoKhongSuyTuChipset() {
+        assertThat(ProductRules.memorySlots("Mainboard MSI PRO B760M-E DDR4")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("Mainboard MSI PRO H610M-E DDR4 | LGA 1700, mATX, 2 khe RAM")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("Main GIGABYTE H610M-H V3 DDR4")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("GIGABYTE B760M GAMING PLUS WIFI DDR4")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("GIGABYTE B760 GAMING X DDR4")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("Mainboard B760M DDR4")).isNull();
+    }
+
+    @Test
     void docThongSoTuTenSanPham() {
         assertThat(ProductRules.read("motherboard", "Bo mạch chính/ Mainboard MSI B760 GAMING PLUS WIFI DDR5").describe())
                 .isEqualTo("socket LGA1700, chipset B760, DDR5");

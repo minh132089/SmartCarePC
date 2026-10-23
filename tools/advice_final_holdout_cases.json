@@ -1,0 +1,359 @@
+[
+  {
+    "id": "k01",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy cho bố mẹ xem phim, gọi video và Word; tối đa 11 triệu, không card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 11000000,
+      "minRamGb": 8,
+      "minSsdGb": 256,
+      "noDiscreteGpu": true
+    }
+  },
+  {
+    "id": "k02",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC nhập liệu Excel 16 triệu, RAM 16GB SSD 512GB, không GPU rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 16000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "noDiscreteGpu": true
+    }
+  },
+  {
+    "id": "k03",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Bộ văn phòng nhiều bảng tính 21 triệu, RAM 32GB SSD 1TB, không dùng card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 21000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "noDiscreteGpu": true
+    }
+  },
+  {
+    "id": "k04",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Học trực tuyến và Word, trần 15 triệu, chọn rẻ nhất đủ dùng, không cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 15000000,
+      "minRamGb": 8,
+      "minSsdGb": 256,
+      "noDiscreteGpu": true,
+      "preferCheapest": true
+    }
+  },
+  {
+    "id": "k05",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy game Full HD 25 triệu, card nividia tối thiểu 8GB VRAM, RAM 16GB SSD 512GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k06",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game 28 triệu, bắt buộc AMD Radeon, RAM 16GB SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 28000000,
+      "minRamGb": 16,
+      "minSsdGb": 1000,
+      "gpuVendor": "amd",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k07",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chỉ chơi Valorant và học, 19 triệu, card nvida, RAM 16GB; chấp nhận card 6GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 19000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 6,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k08",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Chơi Liên Minh Huyền Thoại, 21 triệu, RAM 16GB SSD 512GB, cần card rời."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 21000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "minGpuVramGb": 6,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k09",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy học PyTorch CUDA nhỏ, 41 triệu, NVIDIA ít nhất 12GB VRAM, RAM 32GB SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 41000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 12,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k10",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Stable Diffusion local, 52 triệu; NVIDIA tối thiểu 16GB VRAM, RAM 32GB SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 52000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 16,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k11",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC mini ITX chơi game 37 triệu, RAM 16GB SSD 1TB, card ít nhất 8GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 37000000,
+      "minRamGb": 16,
+      "minSsdGb": 1000,
+      "miniItx": true,
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k12",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy mini ITX game 43 triệu, NVIDIA 8GB trở lên, RAM 32GB SSD 1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 43000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "miniItx": true,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k13",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game 29 triệu dùng đúng RTX 4060 8GB, RAM 16GB SSD 1TB, không đổi model GPU."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 29000000,
+      "minRamGb": 16,
+      "minSsdGb": 1000,
+      "gpuVendor": "nvidia",
+      "gpuModel": "rtx4060",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k14",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy game 32 triệu đúng RX 7600 8GB, RAM 32GB SSD 1TB, không đổi GPU."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "gpuVendor": "amd",
+      "gpuModel": "rx7600",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k15",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game27 triệu, cardNVIDIA RAM16GB SSD512GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận, sẽ kiểm tra lại theo yêu cầu mới."
+      },
+      {
+        "role": "user",
+        "content": "Đổi sang card AMD Radeon, vẫn 27 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 27000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "gpuVendor": "amd",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k16",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game35 triệu NVIDIA RAM16GB SSD512GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận, sẽ kiểm tra lại theo yêu cầu mới."
+      },
+      {
+        "role": "user",
+        "content": "RAM lên 32GB, SSD lên 1TB, giữ 35 triệu và NVIDIA."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 35000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k17",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy văn phòng32 triệu không cần card rời."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận, sẽ kiểm tra lại theo yêu cầu mới."
+      },
+      {
+        "role": "user",
+        "content": "Giờ cần thêm card NVIDIA rời để chơi game, 32 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 32000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "gpuVendor": "nvidia",
+      "minGpuVramGb": 8,
+      "noEntryCpu": true
+    }
+  },
+  {
+    "id": "k18",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC game30 triệu cardRTX4060 8GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Mình ghi nhận, sẽ kiểm tra lại theo yêu cầu mới."
+      },
+      {
+        "role": "user",
+        "content": "Bỏ GPU rời đi, chỉ làm Word và học; giảm còn17 triệu, RAM16GB SSD1TB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 17000000,
+      "minRamGb": 16,
+      "minSsdGb": 1000,
+      "noDiscreteGpu": true
+    }
+  },
+  {
+    "id": "k19",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tôi có14 triệu mua máy tính."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "dùng máy chủ yếu làm gì|mục đích|nhu cầu"
+    }
+  },
+  {
+    "id": "k20",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tôi muốn mua máy để học deep learning CUDA."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "ngân sách|bao nhiêu"
+    }
+  }
+]

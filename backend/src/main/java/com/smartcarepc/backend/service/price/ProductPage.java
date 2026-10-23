@@ -34,6 +34,7 @@ final class ProductPage {
                 JsonNode offers = product.path("offers");
                 JsonNode offer = offers.isArray() ? offers.path(0) : offers;
                 String name = text(product, "name");
+                if (name != null) name = primaryName(doc, name);
                 if (name == null) continue;
                 // Trang có nhiều phiên bản / mức giá (vd nguồn 550W và 650W chung một trang, AggregateOffer giá thấp - cao):
                 // không biết giá nào đúng bản đã chọn, nên coi như chưa đọc được giá
@@ -46,11 +47,12 @@ final class ProductPage {
                 }
                 if (prices.isEmpty()) continue;
                 Long price = prices.size() == 1 ? prices.iterator().next() : null;
+                if (prices.size() == 1) price = onlinePrice(doc, price);
                 String availability = text(offer, "availability");
                 Boolean inStock = availability == null ? null
                         : availability.contains("InStock") || availability.contains("LimitedAvailability")
                                 ? Boolean.TRUE
-                                : availability.matches(".*(OutOfStock|SoldOut|Discontinued).*") ? Boolean.FALSE : null;
+                                : availability.matches(".*(OutOfStock|SoldOut|Discontinued|PreOrder|BackOrder).*") ? Boolean.FALSE : null;
                 String image = product.path("image").isArray() ? text(product.path("image"), 0) : text(product, "image");
                 if (image == null) image = doc.select("meta[property=og:image]").attr("content");
                 if (inStock == null) inStock = stock(doc);
@@ -73,9 +75,11 @@ final class ProductPage {
         String name = doc.select("meta[property=og:title]").attr("content");
         if (name.isBlank() && doc.selectFirst("h1") != null) name = doc.selectFirst("h1").text();
         if (name.isBlank()) return null;
+        name = primaryName(doc, name);
         String raw = doc.select("meta[property=product:price:amount], meta[property=og:price:amount], meta[itemprop=price]").attr("content");
         if (raw.isBlank() && doc.selectFirst("[itemprop=price][content]") != null) raw = doc.selectFirst("[itemprop=price][content]").attr("content");
         Long price = Prices.parse(raw);
+        price = onlinePrice(doc, price);
         boolean product = price != null || doc.select("meta[property=og:type]").attr("content").toLowerCase().contains("product");
         if (!product) return null;
         String image = doc.select("meta[property=og:image]").attr("content");
@@ -83,10 +87,29 @@ final class ProductPage {
                 image.isBlank() ? null : image, stock(doc), warranty(doc.body() == null ? "" : doc.body().text()), at);
     }
 
+    /** H1 có thể giữ mã kit mà metadata SEO lược bỏ; chỉ lấy tên dài hơn của cùng sản phẩm. */
+    private static String primaryName(Document doc, String fallback) {
+        var h1 = doc.selectFirst("h1");
+        String shown = h1 == null ? "" : h1.text().strip();
+        return shown.length() > fallback.length() && PriceEngine.samePage(fallback, shown) ? shown : fallback;
+    }
+
     private static final Pattern BUY = Pattern.compile("mua ngay|thêm vào giỏ|đặt mua|mua hàng|add to cart|buy now",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern SOLD_OUT = Pattern.compile("hết hàng|tạm hết|ngừng kinh doanh|ngừng sản xuất|hàng sắp về|out of stock",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    /** Giá kênh mua trực tuyến hiển thị trên trang có thể khác JSON-LD cũ hoặc giá mua cả bộ. */
+    private static Long onlinePrice(Document doc, Long fallback) {
+        var shown = doc.select(".price-online strong");
+        if (shown.isEmpty()) return fallback;
+        java.util.Set<Long> values = new java.util.HashSet<>();
+        shown.forEach(e -> {
+            Long value = Prices.parse(e.text());
+            if (value != null && value >= 10_000) values.add(value);
+        });
+        return values.size() == 1 ? values.iterator().next() : null;
+    }
 
     /**
      * Còn hàng khi trang không có JSON-LD availability: thẻ meta / microdata availability trước; không có thì có nút
@@ -96,6 +119,7 @@ final class ProductPage {
         String meta = (doc.select("meta[property=product:availability], meta[property=og:availability]").attr("content") + " "
                 + doc.select("[itemprop=availability]").attr("href") + doc.select("[itemprop=availability]").attr("content")).toLowerCase();
         if (meta.contains("outofstock") || meta.contains("out of stock") || meta.contains("oos") || meta.contains("soldout")) return false;
+        if (meta.matches(".*(preorder|pre order|pre-order|backorder|back order).*")) return false;
         if (meta.contains("instock") || meta.contains("in stock")) return true;
         boolean buy = doc.select("button, a, input[type=submit]").stream()
                 .anyMatch(e -> !e.hasAttr("disabled") && BUY.matcher(e.text() + " " + e.attr("value")).find());

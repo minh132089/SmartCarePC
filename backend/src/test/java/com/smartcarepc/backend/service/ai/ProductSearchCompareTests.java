@@ -41,6 +41,23 @@ class ProductSearchCompareTests {
         assertThat(shown).extracting(Offer::url).containsExactly(good.url());
     }
 
+    @Test
+    void timKiemUuTienGiaDaDocTrenTrangBan() {
+        String query = "VGA RTX 4060 8GB";
+        var listing = new Offer("VGA MSI RTX 4060 8GB", "A", 7_500_000L, null, "https://a.vn/4060", null, true, 36, at);
+        var checked = new Offer("VGA ASUS RTX 4060 8GB", "B", 8_200_000L, null, "https://b.vn/4060", null, true, 36, at);
+        var page = new Offer(checked.title(), "B", 7_990_000L, null, checked.url(), null, true, 36, at);
+        when(engine.enabled()).thenReturn(true);
+        when(engine.search(query)).thenReturn(List.of(listing, checked));
+        when(engine.offer(listing.url())).thenReturn(listing);
+        when(engine.offer(checked.url())).thenReturn(page);
+        when(engine.pageChecked(checked.url())).thenReturn(true);
+
+        var found = search.search(query);
+        assertThat(found).extracting(ProductSearch.Product::url).containsExactly(checked.url(), listing.url());
+        assertThat(found.getFirst().priceVnd()).isEqualTo(7_990_000L);
+    }
+
     private Offer offer(ProductSearch.Product p, Boolean inStock) {
         return new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, inStock, null, at);
     }

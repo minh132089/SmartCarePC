@@ -14,9 +14,8 @@ import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
  * Link luôn là trang của cửa hàng (không qua Google), lấy từ kết quả tìm kiếm thật; không có thì null.
  * Giá đọc từ web cửa hàng lúc checkedAt; compare liệt kê cùng model ở cửa hàng khác.
  * modelNote: ghi chú khi số thanh RAM hoặc số quạt khác máy mẫu 3D của vỏ đã chọn (null nếu giống).
- * options: ba phương án Rẻ / Phù hợp cho bạn / Chất lượng (tier cheap / balanced / quality) khi trợ lý đưa đủ;
- * build khi đó là phương án balanced. Mỗi tier có tới 3 build (variant 1 = trợ lý chọn; 2 và 3 = cùng linh kiện,
- * đổi sang sản phẩm khác giá gần để tham khảo).
+ * options: những phương án Rẻ / Phù hợp cho bạn / Chất lượng đã qua kiểm tra (tier cheap / balanced / quality).
+ * build là gợi ý chính: thường là balanced; có thể là cheap khi giữ cùng CPU, GPU và RAM với mức tiết kiệm rõ rệt.
  */
 public record ChatResponse(String reply, BuildCard build, List<BuildCard> options) {
 

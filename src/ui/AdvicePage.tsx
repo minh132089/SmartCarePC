@@ -35,7 +35,7 @@ const EXAMPLES = [
 ]
 
 /** Mặc định xem build trợ lý chọn của phương án "Phù hợp cho bạn" */
-const DEFAULT_PICK: Pick = { tier: 'balanced', variant: 1 }
+const defaultPick = (build?: BuildCard | null): Pick => ({ tier: build?.tier ?? 'balanced', variant: build?.variant ?? 1 })
 
 /** Trợ lý phải tìm giá ở nhiều cửa hàng nên trả lời mất khoảng 1 đến 2 phút: báo cho người dùng đang làm gì */
 const BUSY_HINTS = [
@@ -72,9 +72,9 @@ export function AdvicePage() {
   // Chọn xem cấu hình cũ; trợ lý đưa cấu hình mới (latest đổi) thì tự quay về cấu hình mới
   const [picked, setPicked] = useState<{ index: number; latest: number } | null>(null)
   const shown = picked && picked.latest === latest && messages[picked.index]?.build ? picked.index : latest
-  // Tin có ba phương án: phương án đang xem theo từng tin (mặc định "Phù hợp cho bạn")
+  // Phương án đang xem theo từng tin; mặc định theo gợi ý chính backend trả về.
   const [picks, setPicks] = useState<Record<number, Pick>>({})
-  const pick = picks[shown] ?? DEFAULT_PICK
+  const pick = picks[shown] ?? defaultPick(messages[shown]?.build)
   const card =
     shown >= 0
       ? (messages[shown].options?.find((o) => o.tier === pick.tier && (o.variant ?? 1) === pick.variant) ?? messages[shown].build!)
@@ -168,7 +168,8 @@ export function AdvicePage() {
               m.options ? (
                 <OptionsCanvas
                   options={m.options}
-                  selected={picks[i] ?? DEFAULT_PICK}
+                  selected={picks[i] ?? defaultPick(m.build)}
+                  recommendedTier={m.build?.tier ?? undefined}
                   onSelect={(p) => {
                     setPicks((all) => ({ ...all, [i]: p }))
                     setPicked({ index: i, latest })

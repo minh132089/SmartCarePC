@@ -27,6 +27,17 @@ public final class ProductRules {
     private ProductRules() {
     }
 
+    /** Số khe theo đúng SKU, nguồn hãng ghi tại docs/ai-advice-standard.md; không suy từ chipset. */
+    public static Integer memorySlots(String title) {
+        if (title == null) return null;
+        String t = title.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
+        if (t.contains("msi") && (t.contains("pro b760m e") || t.contains("pro h610m e")) && t.contains("ddr4")) return 2;
+        if (t.contains("gigabyte") && t.contains("h610m h v3") && t.contains("ddr4")) return 2;
+        if (t.contains("gigabyte") && t.contains("b760m gaming plus wifi") && t.contains("ddr4")) return 4;
+        if (t.contains("gigabyte") && t.contains("b760 gaming x") && t.contains("ddr4")) return 4;
+        return null;
+    }
+
     public enum Severity { ERROR, WARNING, RECOMMENDATION, UNKNOWN }
 
     /** Một kết quả kiểm tra, theo cấu trúc mục 10 của bộ luật (không có source_url: app chưa có nguồn hãng) */
@@ -68,7 +79,7 @@ public final class ProductRules {
         for (String c : List.of("h810", "b860", "z890")) CHIPSETS.put(c, "LGA1851");
         for (String c : List.of("h410", "b460", "h470", "z490", "h510", "b560", "h570", "z590")) CHIPSETS.put(c, "LGA1200");
         for (String c : List.of("a320", "b350", "x370", "b450", "x470", "a520", "b550", "x570")) CHIPSETS.put(c, "AM4");
-        for (String c : List.of("a620", "b650", "x670", "b840", "b850", "x870")) CHIPSETS.put(c, "AM5");
+        for (String c : List.of("a620", "a620a", "b650", "x670", "b840", "b850", "x870")) CHIPSETS.put(c, "AM5");
     }
     /** Bo ra đời trước CPU: thường cần BIOS mới (mục 2, WARNING) */
     private static final Set<String> INTEL_600 = Set.of("h610", "b660", "h670", "z690");
@@ -78,7 +89,7 @@ public final class ProductRules {
     private static final Pattern DDR = Pattern.compile("\\bddr\\s?([345])\\b");
     /** Kiểu viết tắt trong tên bo: "B760M-A D4", "PRO B760M-E D4" */
     private static final Pattern BOARD_D = Pattern.compile("\\bd([45])\\b");
-    private static final Pattern CHIPSET = Pattern.compile("\\b([abhxz]\\d{3})[a-z]?\\b");
+    private static final Pattern CHIPSET = Pattern.compile("\\b(a620a|[abhxz]\\d{3})[a-z]?\\b");
     /** Intel Core i3 / i5 / i7 / i9 đời 10-14: "i5-12400F", "i5 14600kf", "core i7 13700" */
     private static final Pattern INTEL_CORE = Pattern.compile("\\bi[3579]\\s?(1[0-4])\\d{3}([a-z]*)\\b");
     /** Intel Core Ultra 5 / 7 / 9 đời 2 (200S, máy bàn): "Ultra 7 265K", "Core Ultra 5 225F" */
@@ -141,6 +152,8 @@ public final class ProductRules {
 
     /** Thông số đọc được từ tên khi chưa biết loại linh kiện (kết quả tìm kiếm), rỗng nếu không đọc được gì */
     public static String describeAny(String title) {
+        String kind = com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(title));
+        if (kind != null) return read("mainboard".equals(kind) ? "motherboard" : kind, title).describe();
         Spec board = read("motherboard", title);
         if (board.chipset() != null) return board.describe();
         Spec cpu = read("cpu", title);
@@ -163,6 +176,16 @@ public final class ProductRules {
         Spec ram = read("ram", titles.get("ram"));
         List<Finding> out = new ArrayList<>();
         String cpuName = titles.get("cpu"), boardName = titles.get("motherboard");
+
+        String gpuName = titles.getOrDefault("gpu", "").toLowerCase(java.util.Locale.ROOT);
+        String caseName = titles.getOrDefault("case", "").toLowerCase(java.util.Locale.ROOT);
+        boolean titan = gpuName.matches(".*\\bsb580t-12goc\\b.*")
+                || gpuName.matches(".*\\bsparkle\\b.*\\bb580\\b.*\\btitan\\b.*");
+        if (titan && caseName.contains("silverstone") && caseName.matches(".*\\bsg13(?:b(?:-q)?|wb)?\\b.*")) {
+            out.add(new Finding("GPU_CASE_LENGTH", Severity.ERROR, List.of("gpu", "case"),
+                    "SPARKLE B580 TITAN OC dài 315mm; hướng dẫn SilverStone SG13 giới hạn card khoảng 267mm: không lắp vừa.",
+                    "Chọn card ngắn hơn đúng giới hạn của vỏ, hoặc đổi vỏ và kiểm lại kích thước."));
+        }
 
         // ERROR (mục 2, 3)
         if (cpu.socket() != null && board.socket() != null && !cpu.socket().equals(board.socket())) {
@@ -217,6 +240,16 @@ public final class ProductRules {
             out.add(new Finding("COOLER_MOUNT", Severity.UNKNOWN, List.of("cooler", "cpu"),
                     "Chưa xác minh tản nhiệt có bộ gá cho socket " + cpu.socket() + " (gá Intel và AMD khác nhau).",
                     "Xem trang thông số của tản có ghi " + cpu.socket() + "."));
+        }
+        if (titles.get("gpu") != null && titles.get("case") != null) {
+            out.add(new Finding("GPU_CLEARANCE", Severity.UNKNOWN, List.of("gpu", "case"),
+                    "Chưa đối chiếu chiều dài, bề rộng và độ dày của đúng mã card với khoảng trống GPU trong vỏ.",
+                    "Xác nhận kích thước và chỗ cho đầu cáp nguồn với cửa hàng; số quạt trên card chưa đủ chứng minh lắp vừa."));
+        }
+        if (titles.get("fans") != null && titles.get("case") != null) {
+            out.add(new Finding("FAN_MOUNTS", Severity.UNKNOWN, List.of("fans", "case"),
+                    "Chưa đối chiếu số vị trí gắn quạt còn trống của đúng mã vỏ.",
+                    "Đếm cả quạt đã đi kèm vỏ và quạt lắp thêm trước khi mua; không lắp nhiều hơn số vị trí vỏ hỗ trợ."));
         }
         return out;
     }

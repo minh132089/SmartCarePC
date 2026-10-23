@@ -61,6 +61,36 @@ enum ShopSearch {
             }
             return out;
         }
+    },
+
+    /** Haravan: giá bán ở span.price của từng thẻ, không đọc giá gạch ngang hay JSON đơn vị xu. */
+    HTCGEARS("https://htcgears.com/collections/vga", Duration.ofSeconds(3)) {
+        @Override
+        boolean supports(String query) {
+            return query.toLowerCase(java.util.Locale.ROOT).matches(".*\\b(vga|gpu|rtx|gtx|rx|radeon|geforce)\\b.*");
+        }
+
+        @Override
+        String url(String query) {
+            return searchUrl; // /search bị robots.txt cấm; chỉ đọc danh mục được phép rồi lọc model tại engine.
+        }
+
+        @Override
+        List<Offer> parse(String html, Instant at) {
+            Document doc = Jsoup.parse(html, "https://htcgears.com/");
+            List<Offer> out = new ArrayList<>();
+            for (Element item : doc.select(".listProduct-filter .product-loop")) {
+                Element name = item.selectFirst("h3 a[href*=/products/]");
+                Element price = item.selectFirst(".proloop--price .price");
+                if (name == null || price == null) continue;
+                Long value = Prices.parse(price.text());
+                if (value == null || value < 10_000) continue;
+                Element img = item.selectFirst("img[data-src], img[src]");
+                String image = img == null ? null : img.absUrl(img.hasAttr("data-src") ? "data-src" : "src");
+                out.add(new Offer(name.text().strip(), "HTC Gears", value, null, name.absUrl("href"), image, null, null, at));
+            }
+            return out;
+        }
     };
 
     private static final Pattern MONEY = Pattern.compile("(\\d{1,3}(?:[.,]\\d{3}){1,3})\\s*(?:đ|₫|vnđ|vnd)", Pattern.CASE_INSENSITIVE);
@@ -79,6 +109,10 @@ enum ShopSearch {
 
     String url(String query) {
         return searchUrl + URLEncoder.encode(query, StandardCharsets.UTF_8);
+    }
+
+    boolean supports(String query) {
+        return true;
     }
 
     abstract List<Offer> parse(String html, Instant at);

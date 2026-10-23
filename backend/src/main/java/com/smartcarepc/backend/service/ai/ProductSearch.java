@@ -21,6 +21,7 @@ import org.springframework.web.client.RestClientException;
 
 import com.smartcarepc.backend.service.Io;
 import com.smartcarepc.backend.service.price.Offer;
+import com.smartcarepc.backend.service.price.OfferEvidence;
 import com.smartcarepc.backend.service.price.PriceEngine;
 
 import lombok.extern.slf4j.Slf4j;
@@ -109,6 +110,16 @@ public class ProductSearch {
     /** Giá / còn hàng của link được đọc trên chính trang sản phẩm gần đây (không chỉ thấy trên trang tìm kiếm) */
     public boolean pageChecked(String url) {
         return engine.pageChecked(url);
+    }
+
+    /** Chỉ dùng giá bán đã đọc trên trang sản phẩm đúng biến thể, trong hạn kiểm tra của engine. */
+    public Offer checkedOffer(String url, String expectedTitle) {
+        Offer offer = engine.offer(url);
+        return OfferEvidence.verified(expectedTitle, offer, engine.pageChecked(url)) ? offer : null;
+    }
+
+    public Offer refreshQuote(String url, String title) {
+        return engine.quote(url, title);
     }
 
     /** Kết quả tìm đúng tên model của từng món đã chọn (warmCompare), theo link món đó */
@@ -213,7 +224,7 @@ public class ProductSearch {
         if (!enabled()) throw new IllegalStateException("Chưa bật tìm kiếm sản phẩm");
         String key = query.strip().toLowerCase();
         var hit = cache.get(key);
-        if (hit != null && System.currentTimeMillis() - hit.at() < CACHE_MS) return hit.products();
+        if (hit != null && System.currentTimeMillis() - hit.at() < CACHE_MS) return rankProducts(hit.products());
         var found = fresh(query);
         if (!found.isEmpty()) {
             if (cache.size() > 500) cache.clear();
@@ -227,8 +238,9 @@ public class ProductSearch {
         if (engine.enabled()) {
             engine.search(query).forEach(o -> out.add(new Product(o.title(), o.shop(), o.priceVnd(), o.url(), o.imageUrl())));
         }
-        // Engine tìm được ít (món hiếm, cửa hàng đổi giao diện): bổ sung Google Shopping nếu Serper còn lượt
-        if (out.size() < 3 && serperReady()) {
+        // Nhiều kết quả danh sách nhưng chưa đọc được trang bán vẫn là ít nguồn giá tin cậy.
+        long checked = out.stream().filter(p -> checkedOffer(p.url(), p.title()) != null).count();
+        if ((out.size() < 3 || checked == 0) && serperReady()) {
             List<Product> google = new ArrayList<>(shopping(query));
             if (out.size() + google.size() < 3) google.addAll(organic(query + " giá"));
             // Cùng bộ lọc với engine: đúng loại linh kiện, đúng mã model, không phải laptop / hàng cũ ("tản khí tháp"
@@ -237,9 +249,20 @@ public class ProductSearch {
         }
         Map<String, Product> unique = new LinkedHashMap<>();
         out.stream().filter(p -> p.url() != null).forEach(p -> unique.putIfAbsent(p.url(), p));
-        // Giữ thứ tự nguồn trả về (engine đã xếp khớp model / còn hàng / rẻ, rồi Shopping); chỉ đẩy món thiếu giá xuống cuối
-        return unique.values().stream()
-                .sorted((a, b) -> Integer.compare(score(b) >= 2 ? 1 : 0, score(a) >= 2 ? 1 : 0))
+        // Ưu tiên nơi đã đọc đúng trang sản phẩm, rồi giữ thứ tự khớp model của engine và Shopping.
+        return rankProducts(new ArrayList<>(unique.values()));
+    }
+
+    private List<Product> rankProducts(List<Product> products) {
+        return products.stream()
+                .map(p -> {
+                    Offer page = checkedOffer(p.url(), p.title());
+                    return page == null ? p : new Product(p.title(), p.shop(), page.priceVnd(), p.url(), p.imageUrl());
+                })
+                .sorted((a, b) -> {
+                    int evidence = Boolean.compare(checkedOffer(b.url(), b.title()) != null, checkedOffer(a.url(), a.title()) != null);
+                    return evidence != 0 ? evidence : Integer.compare(score(b) >= 2 ? 1 : 0, score(a) >= 2 ? 1 : 0);
+                })
                 .limit(MAX)
                 .toList();
     }

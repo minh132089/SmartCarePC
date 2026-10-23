@@ -1,0 +1,71 @@
+{
+  "completedAt": "2026-10-23T16:48:15.015273+00:00",
+  "decision": {
+    "passed": 120,
+    "total": 120
+  },
+  "advice": {
+    "passed": 120,
+    "total": 120
+  },
+  "prices": {
+    "passed": 281,
+    "total": 281,
+    "uniqueUrls": 165,
+    "maxGapSeconds": 438.854832,
+    "toleranceSeconds": 600,
+    "differenceVnd": 0
+  },
+  "groups": {
+    "followup": {
+      "cases": 10,
+      "decision": 10,
+      "advice": 10
+    },
+    "game": {
+      "cases": 54,
+      "decision": 54,
+      "advice": 54
+    },
+    "extra": {
+      "cases": 20,
+      "decision": 20,
+      "advice": 20
+    },
+    "infeasible": {
+      "cases": 1,
+      "decision": 1,
+      "advice": 1
+    },
+    "ai": {
+      "cases": 12,
+      "decision": 12,
+      "advice": 12
+    },
+    "office": {
+      "cases": 18,
+      "decision": 18,
+      "advice": 18
+    },
+    "clarification": {
+      "cases": 3,
+      "decision": 3,
+      "advice": 3
+    },
+    "unsupported": {
+      "cases": 2,
+      "decision": 2,
+      "advice": 2
+    }
+  },
+  "rawEvidenceFiles": 360,
+  "priceOriginReferences": {
+    "/private/tmp/pcsmartcare-eval100-acceptance15-prices": 1764
+  },
+  "backendTests": 265,
+  "pythonTests": 21,
+  "remainingIssues": [],
+  "scope": "Kiểm thử hồi quy nội bộ; chấm lời bởi Codex /root. Không chứng nhận mọi đầu vào, mọi thời điểm hay mọi thuộc tính phần cứng.",
+  "run": "eval100-acceptance15",
+  "jarSha256": "3ced72bbf4c987bfd32ab07832f9352853cc28022315166592be3387bb07d316"
+}

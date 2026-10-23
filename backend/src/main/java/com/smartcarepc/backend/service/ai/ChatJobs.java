@@ -62,7 +62,7 @@ public class ChatJobs {
         jobs.values().removeIf(j -> j.created.isBefore(old));
         var job = new Job();
         jobs.put(job.id, job);
-        pool.submit(() -> run(job, request));
+        pool.execute(() -> run(job, request));
         return job.view();
     }
 
@@ -79,10 +79,11 @@ public class ChatJobs {
         } catch (AiUnavailableException | ResponseStatusException e) {
             job.error = e instanceof ResponseStatusException r && r.getReason() != null ? r.getReason() : e.getMessage();
             job.status = Status.error;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
             log.error("Câu hỏi {} lỗi", job.id, e);
             job.error = "Trợ lý gặp lỗi khi trả lời, bạn thử lại nhé.";
             job.status = Status.error;
+            if (e instanceof Error fatal) throw fatal;
         }
     }
 

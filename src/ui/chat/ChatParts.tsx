@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode, type Ref } from 'react'
 import { ArrowUp, Check, X } from '@phosphor-icons/react'
 import { PARTS, type PartId } from '../../data/parts'
-import { compatText, totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
+import { compatText, quantityLabel, totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
 
 /** Bong bóng tin nhắn: người dùng bên phải màu xanh, trợ lý bên trái màu trắng */
 export function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
@@ -124,7 +124,7 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
             <span className="shrink-0 text-ink-2">{PARTS[it.category as PartId]?.name ?? it.category}</span>
             <span className="text-right font-medium text-ink">
               {it.productName || it.spec || it.name}
-              {it.quantity > 1 && <span className="text-ink-2"> × {it.quantity}</span>}
+              {it.quantity > 1 && <span className="text-ink-2">{quantityLabel(it)}</span>}
             </span>
           </li>
         ))}

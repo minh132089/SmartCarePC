@@ -69,7 +69,7 @@ export type Verdict = {
 /** Build đang xem trong bảng so sánh */
 export type Pick = { tier: Tier; variant: number }
 export type Tier = 'cheap' | 'balanced' | 'quality'
-/** options: ba phương án để so sánh (khi trợ lý đưa đủ); build là phương án "Phù hợp cho bạn" */
+/** options: các phương án đã kiểm tra; build là gợi ý chính do backend chọn. */
 export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null; options?: BuildCard[] | null }
 /** advice: trang tư vấn chọn máy. assembly: khung hỏi đáp khi lắp. */
 export type ChatMode = 'advice' | 'assembly'
@@ -203,6 +203,11 @@ function toWire(m: Msg) {
 }
 
 /** Tổng giá tham khảo của cấu hình (null nếu trợ lý chưa đưa giá) */
+export function quantityLabel(line: BuildLine): string {
+  if (line.quantity <= 1) return ''
+  return line.category === 'ram' ? ` (${line.quantity} thanh)` : line.category === 'fans' ? ` (${line.quantity} quạt sử dụng)` : ` × ${line.quantity}`
+}
+
 export function totalOf(card: BuildCard): { min: number; max: number } | null {
   const priced = card.items.filter((i) => i.priceMinVnd != null || i.priceMaxVnd != null)
   if (priced.length === 0) return null

@@ -1,7 +1,7 @@
 import { ArrowSquareOut, ImageSquare } from '@phosphor-icons/react'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
-import { compatText, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue, type Verdict } from './chatStore'
+import { compatText, quantityLabel, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue, type Verdict } from './chatStore'
 import { VERDICT_INFO } from './verdict'
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -107,7 +107,7 @@ function Total({ min, max, budget }: { min: number; max: number; budget: number 
 function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: number } | null }) {
   const [open, setOpen] = useState(false)
   const part = PARTS[line.category as PartId]
-  const label = `${part?.name ?? line.category}${line.quantity > 1 ? ` × ${line.quantity}` : ''}`
+  const label = `${part?.name ?? line.category}${quantityLabel(line)}`
   const lo = line.priceMinVnd ?? line.priceMaxVnd
   const hi = line.priceMaxVnd ?? line.priceMinVnd
   const share = total && lo != null && hi != null ? Math.round(((lo + hi) / (total.min + total.max)) * 100) : null

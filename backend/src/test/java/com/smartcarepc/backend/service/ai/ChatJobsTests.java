@@ -53,4 +53,12 @@ class ChatJobsTests {
     void maViecLaThiBao404() {
         assertThatThrownBy(() -> jobs.get("khong-co")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
+
+    @Test
+    void loiNgoaiRuntimeKhongDeJobChayMai() throws Exception {
+        when(chat.reply(any(), any())).thenThrow(new LinkageError("lỗi liên kết lớp"));
+        var done = jobs.await(jobs.start(req).id(), Duration.ofSeconds(5));
+        assertThat(done.status()).isEqualTo(ChatJobs.Status.error);
+        assertThat(done.error()).contains("Trợ lý gặp lỗi");
+    }
 }

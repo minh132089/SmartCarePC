@@ -15,6 +15,7 @@ public final class Shops {
      */
     static final Map<String, String> NAMES = Map.ofEntries(
             Map.entry("phucanh.vn", "Phúc Anh Computer"),
+            Map.entry("htcgears.com", "HTC Gears"),
             Map.entry("nguyencongpc.vn", "Nguyễn Công PC"),
             Map.entry("anduycom.vn", "AnDuy Computer"),
             Map.entry("sp-one.vn", "SP-One"),

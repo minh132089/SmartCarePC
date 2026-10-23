@@ -27,10 +27,12 @@ const KEY_PARTS: [string, string][] = [
 export function OptionsCanvas({
   options,
   selected,
+  recommendedTier,
   onSelect,
 }: {
   options: BuildCard[]
   selected: Pick
+  recommendedTier?: Tier
   onSelect: (pick: Pick) => void
 }) {
   const tiers = ORDER.filter((t) => options.some((o) => o.tier === t))
@@ -42,6 +44,7 @@ export function OptionsCanvas({
           tier={t}
           build={options.find((o) => o.tier === t)!}
           selected={selected.tier === t}
+          recommended={recommendedTier === t}
           onSelect={() => onSelect({ tier: t, variant: 1 })}
         />
       ))}
@@ -49,7 +52,7 @@ export function OptionsCanvas({
   )
 }
 
-function TierColumn({ tier, build, selected, onSelect }: { tier: Tier; build: BuildCard; selected: boolean; onSelect: () => void }) {
+function TierColumn({ tier, build, selected, recommended, onSelect }: { tier: Tier; build: BuildCard; selected: boolean; recommended: boolean; onSelect: () => void }) {
   const info = TIER_INFO[tier]
   const total = totalOf(build)
   const diff = total && build.budgetVnd ? build.budgetVnd - total.max : null
@@ -80,7 +83,7 @@ function TierColumn({ tier, build, selected, onSelect }: { tier: Tier; build: Bu
             {selected && <Check size={13} weight="bold" className="text-accent" aria-hidden />}
             {info.label}
           </span>
-          {tier === 'balanced' && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">Gợi ý</span>}
+          {recommended && (diff == null || diff >= 0) && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">Gợi ý</span>}
         </span>
         <span className="mt-0.5 text-[12px] leading-snug text-ink-2">{info.note}</span>
         {build.verdict && (
