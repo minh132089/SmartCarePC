@@ -73,6 +73,10 @@ public class ChatService {
             bốn món đi kèm vỏ đó. Muốn món khác thì đổi sang vỏ có sẵn món ấy. Số thanh RAM và số quạt chọn tự do. \
             Riêng card đồ họa: máy không cần card rời (học, văn phòng) và CPU có đồ họa tích hợp thì BỎ HẲN dòng card, \
             app tự ghi chú để người dùng bỏ qua bước lắp card. \
+            Máy thiết kế đồ họa / Photoshop / Illustrator mặc định đề xuất card rời từ 6GB VRAM; 3D, Blender, render \
+            hoặc dựng video 4K từ 8GB. Đây là mức chọn cấu hình của app, không phải yêu cầu tối thiểu chung của phần mềm. \
+            Chỉ dùng GPU tích hợp cho nhu cầu thiết kế khi người dùng nói rõ không mua card rời; nêu giới hạn và cần kiểm \
+            phần mềm/driver, không giải thích thành máy văn phòng. Nếu ngân sách chưa đủ thì báo thiếu, không tự bỏ card. \
             Bo mạch chọn đúng cỡ mẫu của vỏ: vỏ Tower nhỏ gọn dùng bo Micro-ATX (tên có chữ M sau chipset, vd B760M, B550M); \
             các vỏ tower khác dùng bo ATX (không có chữ M, vd B760, B550). Card 3 quạt chỉ dùng cho vỏ có mẫu card 280 mm. \
             Người dùng nói rõ "mini", "ITX", "SFF" thì MỌI tier (cả Rẻ) dùng vỏ Mini / SFF với bo Mini-ITX, tản thấp, nguồn SFX; \
@@ -451,7 +455,7 @@ public class ChatService {
                 && initial.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(\\bpc\\b|\\bbuild\\b|máy tính|mua máy|cần máy|bộ máy|dựng máy|lắp máy|chọn máy).*" );
         if (newPurchase) {
             String uses = initial.toLowerCase(java.util.Locale.ROOT).replaceAll("không\\s+(?:chơi\\s+)?game", " ");
-            boolean purpose = uses.matches("(?s).*(học|bài tập|văn phòng|word|excel|game|chơi|valorant|lmht|cs2|online|lướt web|xem phim|"
+            boolean purpose = creatorUse(initial) || uses.matches("(?s).*(học|bài tập|văn phòng|word|excel|game|chơi|valorant|lmht|cs2|online|lướt web|xem phim|"
                     + "kế toán|deep learning|machine learning|render|video|đồ họa|đồ hoạ|thiết kế|photoshop|premiere|blender|cad|"
                     + "stable diffusion|\\bllm\\b|\\bcuda\\b|pytorch|tensorflow|teams|zoom|google meet|powerpoint|giáo án|bài giảng|bảng tính|luận văn|tra cứu web|"
                     + "lập trình|code|server|máy chủ|nas|thu âm|âm nhạc|bán hàng|camera).*") || initial.matches("(?s).*\\bAI\\b.*");
@@ -879,7 +883,7 @@ public class ChatService {
             }
         }
         // Máy game (card rời, không phải máy AI / đồ họa) vẫn vượt trần: hạ CPU xuống dòng game phổ thông cùng socket
-        boolean gameNeeds = needs != null && !needs.office() && !needs.cuda() && needs.vramMin() != null && needs.vramMin() <= 8;
+        boolean gameNeeds = needs != null && !needs.office() && !needs.cuda() && !needs.creator() && needs.vramMin() != null && needs.vramMin() <= 8;
         if (cap != null && gameNeeds && total(c.request(), c.details(), c.picks()) > cap && go.getAsBoolean()) {
             c = normalized(withPagePrices(lowerCpuForNeeds(c, notes, true)), aiTitles);
         }
@@ -1011,7 +1015,7 @@ public class ChatService {
         if (cap != null && total(trial.request(), trial.details(), trial.picks()) > cap) {
             trial = normalized(withPagePrices(lowerGpu(trial, cap, needs, trialNotes)), aiTitles);
             if (total(trial.request(), trial.details(), trial.picks()) > cap
-                    && needs != null && !needs.cuda() && needs.vramMin() != null && needs.vramMin() <= 8) {
+                    && needs != null && !needs.cuda() && !needs.creator() && needs.vramMin() != null && needs.vramMin() <= 8) {
                 trial = normalized(withPagePrices(lowerCpuForNeeds(trial, trialNotes, true)), aiTitles);
                 if (total(trial.request(), trial.details(), trial.picks()) > cap) trial = normalized(withPagePrices(lowerGpu(trial, cap, needs, trialNotes, true)), aiTitles);
             }
@@ -1210,7 +1214,11 @@ public class ChatService {
     /** cuda: máy học AI / deep learning, card phải là NVIDIA (thư viện học máy cần CUDA) */
     /** gpuVendor: hãng card người dùng đòi ("amd" / "nvidia" / "intel"), null nếu không nói (app được đổi khác hãng) */
     record Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass, boolean miniItx, boolean cuda,
-            String gpuVendor, boolean explicitGpuVram) {
+            String gpuVendor, boolean explicitGpuVram, boolean creator, boolean game) {
+        Needs(Integer ramMin, Integer ssdMin, Integer vramMin, boolean office, boolean glass, boolean miniItx, boolean cuda,
+                String gpuVendor, boolean explicitGpuVram) {
+            this(ramMin, ssdMin, vramMin, office, glass, miniItx, cuda, gpuVendor, explicitGpuVram, false, !office && !cuda && vramMin != null);
+        }
         Needs(Integer ramMin, Integer ssdMin) {
             this(ramMin, ssdMin, null, false, false, false, false, null, false);
         }
@@ -1284,8 +1292,18 @@ public class ChatService {
             if (NO_DISCRETE_GPU.matcher(raw).find()) return true;
             if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(phải có|cần|dùng|mua|gắn|thêm)\\s+(?:card\\s+(?:đồ họa\\s+)?rời|gpu|vga).*")) return false;
             if (gpuVendor(List.of(raw)) != null || GPU_CHIP.matcher(raw.toLowerCase(java.util.Locale.ROOT)).find()) return false;
+            if (creatorUse(raw)) return false;
         }
         return false;
+    }
+
+    /** Nhu cầu sáng tạo, tránh nhận tên linh kiện hoặc "game đồ họa cao" thành làm thiết kế. */
+    private static boolean creatorUse(String raw) {
+        String t = raw.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("(card|vga|gpu|chip|nhân)\\s+đồ\\s+h[oọ][aạ]|đồ\\s+h[oọ][aạ]\\s+(tích hợp|rời|onboard)", " ")
+                .replaceAll("(?:game|chơi)[^.!?]{0,20}đồ\\s+h[oọ][aạ]\\s+(cao|đẹp|nặng)", " ");
+        return t.matches("(?s).*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|illustrator|lightroom|premiere|"
+                + "after effects|davinci|blender|sketchup|3ds max|cinema 4d).*");
     }
 
     /** Người dùng nói rõ máy mini / ITX / SFF (không phải "nhỏ gọn": đó là vỏ Micro-ATX) */
@@ -1334,8 +1352,13 @@ public class ChatService {
         }
         // "card đồ họa" / "đồ họa tích hợp" là tên linh kiện, không phải nhu cầu làm đồ họa (ca thật n10: "Đổi card đồ họa sang AMD"
         // làm máy game mất mức VRAM 8GB, không hạ CPU / đổi vỏ nhỏ gọn được)
-        String uses = all.replaceAll("(card|vga|chip|nhân)\\s+đồ\\s+h[oọ]a|đồ\\s+h[oọ]a\\s+(tích hợp|rời|onboard)", " ");
-        boolean creator = uses.matches(".*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|premiere).*");
+        boolean creator = false;
+        String creatorText = "";
+        for (String raw : userTexts) {
+            if (raw == null) continue;
+            if (creatorUse(raw)) { creator = true; creatorText = raw.toLowerCase(java.util.Locale.ROOT); break; }
+            if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(chỉ|đổi sang|chuyển sang).*(học online|văn phòng|word|excel).*")) break;
+        }
         String gameUses = all.replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
         boolean game = gameUses.matches(".*(game|chơi|stream).*");
         for (String raw : userTexts) {
@@ -1377,8 +1400,8 @@ public class ChatService {
         if (noGpu) requestedVram = null;
         boolean explicitGpuVram = requestedVram != null;
         if (!heavy && !light && ram == null && ssd == null && !mini && vendor == null) return null;
-        // Card: máy game Full HD đổi được sang chip ngang / mạnh hơn rẻ hơn nếu VRAM >= 8GB; máy đồ họa / dựng video không
-        // giảm VRAM (null: chỉ đổi cùng chip, cùng VRAM)
+        // Sàn chọn cấu hình sáng tạo của app, không phải yêu cầu tối thiểu chung của Adobe/Blender.
+        int creatorVram = creatorText.matches("(?s).*(\\b3d\\b|blender|render|4k|after effects|davinci|3ds max|cinema 4d).*") ? 8 : 6;
         // office: chỉ học / văn phòng rõ ràng (được hạ CPU xuống dòng phổ thông); glass: người dùng nói thích kính
         // Máy AI: card ít nhất 12GB VRAM, chỉ NVIDIA (CUDA)
         // Game nhẹ / esports (Valorant, LMHT, CS2...): card 6GB đủ (ca thật itx 25tr: mức 8GB giữ RX 7600 7,8 triệu, máy Mini
@@ -1389,8 +1412,9 @@ public class ChatService {
                 + "wukong|2k|4k|144hz|240hz|max setting|ultra).*");
         return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256,
                 noGpu ? null : requestedVram != null ? Integer.valueOf(Math.max(requestedVram, ai ? 12 : 0))
-                        : ai ? Integer.valueOf(12) : game ? Integer.valueOf(lightGame ? 6 : 8) : null,
-                light && !heavy, all.matches(".*(kính|glass).*"), mini, ai && !noGpu, vendor, explicitGpuVram);
+                        : ai ? Integer.valueOf(12) : game ? Integer.valueOf(Math.max(lightGame ? 6 : 8, creator ? creatorVram : 0))
+                        : creator ? Integer.valueOf(creatorVram) : null,
+                light && !heavy, all.matches(".*(kính|glass).*"), mini, ai && !noGpu, vendor, explicitGpuVram, creator, game);
     }
 
     /**
@@ -2620,7 +2644,8 @@ public class ChatService {
     }
 
     static String adviceIntro(Needs needs, Long budget) {
-        String purpose = needs.cuda() ? "máy để chạy tác vụ AI" : needs.office() ? "máy học tập / văn phòng"
+        String purpose = needs.cuda() ? "máy để chạy tác vụ AI" : needs.creator()
+                ? needs.game() ? "máy chơi game và thiết kế đồ họa / dựng nội dung" : "máy thiết kế đồ họa / dựng nội dung" : needs.office() ? "máy học tập / văn phòng"
                 : needs.vramMin() != null ? "máy chơi game" : "máy để bàn";
         String money = budget == null ? "" : ", ngân sách " + java.math.BigDecimal.valueOf(budget, 6).stripTrailingZeros()
                 .toPlainString().replace('.', ',') + " triệu";
@@ -2641,11 +2666,17 @@ public class ChatService {
         if (needs.cuda() && gpu != null) {
             text.append("Mình giữ GPU NVIDIA với ").append(vram(gpu.productName()))
                     .append("GB VRAM để đáp ứng yêu cầu bộ nhớ và luồng CUDA. Model AI chạy được còn phụ thuộc kích thước mô hình, cách nạp và phần mềm; chưa có benchmark để cam kết tốc độ. ");
+        } else if (needs.creator() && gpu != null) {
+            text.append("Mình chọn card rời ").append(ProductSearch.shortTitle(gpu.productName()))
+                    .append(" để hỗ trợ tác vụ đồ họa có tăng tốc GPU. Mức VRAM là lựa chọn cấu hình của app, không phải mọi phần mềm thiết kế đều bắt buộc card rời. ")
+                    .append("Khả năng tăng tốc và render còn phụ thuộc phần mềm, phiên bản, driver và kích thước dự án; chưa có benchmark để cam kết tốc độ. ");
         } else if (gpu != null) {
             text.append("Mình dùng card rời ").append(ProductSearch.shortTitle(gpu.productName()))
                     .append(" cho phần xử lý đồ họa. FPS thực tế phụ thuộc game, độ phân giải và thiết lập; cấu hình này chưa có benchmark để hứa một mức FPS. ");
         } else if (cpu != null && Boolean.TRUE.equals(ProductRules.hasIgpu(cpu.productName()))) {
-            text.append("CPU có đồ họa tích hợp nên phương án chính không cần mua card rời, giảm chi phí cho nhu cầu học và văn phòng. ");
+            text.append(needs.creator()
+                    ? "Theo yêu cầu không mua card rời, phương án dùng GPU tích hợp của CPU. Cần kiểm tra phần mềm, phiên bản và driver hỗ trợ GPU này; chưa xác nhận khả năng tăng tốc hoặc render dự án thực tế. "
+                    : "CPU có đồ họa tích hợp nên phương án chính không cần mua card rời, giảm chi phí cho nhu cầu học và văn phòng. ");
         }
         if (ramGb != null) {
             int total = ramGb * ram.quantity() / Objects.requireNonNullElse(kitSticks(ram.productName()), 1);
@@ -4197,7 +4228,7 @@ public class ChatService {
         }
         // Với máy game chốt NVIDIA nhưng không yêu cầu rõ 8GB, chỉ hạ sàn xuống 6GB nếu card 8GB vẫn không đưa bộ máy
         // vào trần. Không áp dụng cho máy AI (CUDA cần 12GB) hoặc khi người dùng tự ghi dung lượng VRAM.
-        if (allowSixGb && needs != null && "nvidia".equals(needs.gpuVendor()) && !needs.cuda() && !needs.explicitGpuVram()
+        if (allowSixGb && needs != null && "nvidia".equals(needs.gpuVendor()) && !needs.cuda() && !needs.creator() && !needs.explicitGpuVram()
                 && needs.vramMin() != null && needs.vramMin() == 8
                 && (best == null || total - was + best.priceVnd() * gpu.qty() > cap)) {
             for (String other : gpuDowngrades(chip, maxDrop)) {

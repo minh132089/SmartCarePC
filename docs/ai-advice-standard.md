@@ -15,6 +15,14 @@ Quy tắc này áp dụng cho `ChatService`, `ProductSearch`, `PriceEngine` và 
 9. Ghi chú phương án bị ẩn do code tạo được ghép riêng vào câu trả lời. Không giữ ghi chú kiểu đó chỉ vì AI viết chữ “app”. Hỏi lại lý do thì lấy số ở ghi chú cũ, không để AI tự ước lượng lại ngân sách.
 10. Giữ cả ngân sách dương dưới 3 triệu để kiểm trần; không bỏ qua vì khó dựng máy. Khi chưa dựng được cấu hình hoặc lấy được báo giá, không chuyển giá ước lượng của AI thành giá thị trường hay mức ngân sách thay thế. Nêu rõ chưa xác minh được phương án và giá bán.
 
+### Hồ sơ thiết kế đồ họa và dựng nội dung
+
+Thiết kế đồ họa, Photoshop, Illustrator, Lightroom và dựng nội dung được nhận diện riêng với văn phòng và game. Khi người dùng chưa yêu cầu bỏ card, app chọn card rời từ 6GB VRAM cho hồ sơ 2D; Blender/3D/render, After Effects, DaVinci hoặc video 4K từ 8GB. Đây là sàn chọn cấu hình trong danh mục đang hỗ trợ của app, không phải mức tối thiểu chung của mọi phần mềm. Thiếu ngân sách hoặc hàng thì giải thích và giữ chặn thẻ thiếu GPU, không tự biến máy thiết kế thành máy văn phòng. Game kết hợp làm nội dung phải giữ cả hai nhu cầu; không áp dụng bước hạ8→6GB dành riêng cho game chốt NVIDIA lên hồ sơ sáng tạo 8GB.
+
+Người dùng nói rõ không mua card rời vẫn được chọn CPU có GPU tích hợp; lời tư vấn phải nêu điều kiện kiểm phần mềm, phiên bản, driver và tác vụ, chưa hứa tăng tốc hoặc render dự án thực tế. GPU tích hợp không tự động đồng nghĩa đủ mọi tác vụ đồ họa. Đổi từ văn phòng không card sang thiết kế ở lượt mới phải xét lại GPU; giữ đúng yêu cầu bỏ card nếu nó nằm trong lượt mới nhất.
+
+Đối chiếu nguồn chính thức ngày 24/10/2026: [Photoshop 27.x](https://helpx.adobe.com/photoshop/desktop/get-started/technical-requirements-installation/adobe-photoshop-on-desktop-technical-requirements.html) yêu cầu khả năng DirectX 12/bộ nhớGPU, [Illustrator](https://helpx.adobe.com/illustrator/desktop/get-started/learn-the-basics/technical-requirements.html) nêu điều kiện tăng tốcGPU; không được suy thành mọi máy 2D bắt buộc card rời. [Blender](https://www.blender.org/download/requirements/) khuyến nghị 8GB VRAM; CyclesGPU còn có điều kiện riêng theo backend và GPU.
+
 ## 2. Tìm sản phẩm và chứng cứ
 
 Kit RAM không ghi “2×16GB” trong tên vẫn phải đọc theo đúng mã sản phẩm. [G.SKILL xác nhận F5-6000U4040E16GX2-TZ5K / F5-6000U4040E16GA2-TZ5K là bộ 32GB gồm 2 thanh 16GB](https://www.gskill.com/specification/165/371/1636011207/F5-6000U4040E16GX2-TZ5K-EOL-F5-6000U4040E16GA2-TZ5K-EOL-Specification). Mua một bộ phải hiện hai thanh; không nhân đôi giá một kit. [Kingston KF432C16BB1AK2/32 cũng là kit hai thanh 16GB](https://www.kingston.com/dataSheets/KF432C16BB1AK2_32.pdf). Phải giữ mã trên h1 khi metadata SEO lược bớt và cập nhật tên hàng dù giá không đổi.

@@ -1,0 +1,90 @@
+{
+  "verifiedAt": "2026-10-24T02:35:29.954052+07:00",
+  "backendTests": 269,
+  "backendFailures": 0,
+  "backendErrors": 0,
+  "publicApiCases": 8,
+  "publicApiPassed": 8,
+  "adviceReviewed": 8,
+  "apiBase": "https://smartcarepc.pages.dev",
+  "cases": [
+    {
+      "id": "creator-preset",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Nhận đúng Photoshop/Illustrator, GPUrời/RAM/SSD và trần giá; không giải thích thành văn phòng.",
+      "primaryGpu": "Card màn hình VGA ASUS Dual Radeon RX 6600 V3 8GB GDDR6",
+      "primaryTotalVnd": 19324000
+    },
+    {
+      "id": "creator-illustrator",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Nhận Illustrator là mục đích đủ thông tin; cả3thẻ cóGPU, quality tăngGPU và báo vượt rõ.",
+      "primaryGpu": "Card màn hình VGA ASUS Dual Radeon RX 6600 V3 8GB GDDR6",
+      "primaryTotalVnd": 20240000
+    },
+    {
+      "id": "creator-3d",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Blender: cả3GPU>=8GB, RAM32 SSD>=1TB; không hứa tốc độ render.",
+      "primaryGpu": "Card màn hình VGA ASUS Dual GeForce RTX 4060 EVO 8GB GDDR6",
+      "primaryTotalVnd": 23588000
+    },
+    {
+      "id": "creator-video",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Video4K: GPU>=8GB RAM32SSD1TB, không cam kết tốc độ; qualityArc cần kiểm phần mềm/driver như điều kiện đã nêu.",
+      "primaryGpu": "Card màn hình VGA ASUS Dual GeForce RTX 4060 EVO 8GB GDDR6",
+      "primaryTotalVnd": 28666000
+    },
+    {
+      "id": "creator-igpu",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Giữ yêu cầu không muaGPUrời; giải thích iGPU và điều kiện phần mềm/driver; quality tăngRAM.",
+      "primaryGpu": null,
+      "primaryTotalVnd": 14737000
+    },
+    {
+      "id": "creator-followup",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Lượt mới thiết kế ghi đè khôngGPU của văn phòng cũ; cả3thẻ cóGPU và SSD1TB.",
+      "primaryGpu": "VGA GIGABYTE RTX 3050 WINDFORCE OC V2 6G (GDDR6, 96-bit, HDMI +DP)",
+      "primaryTotalVnd": 21155000
+    },
+    {
+      "id": "office-control",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Giữ văn phòng iGPU, không tự thêmGPUrời; quality tăngRAM.",
+      "primaryGpu": null,
+      "primaryTotalVnd": 10467000
+    },
+    {
+      "id": "game-control",
+      "decision": "PASS",
+      "adviceReviewed": true,
+      "reviewer": "Codex /root, nội bộ",
+      "notes": "Giữ nhu cầu game, không nhận game đồ họa cao thành thiết kế; cả3GPU>=8GB, báo vượt ởquality.",
+      "primaryGpu": "Card màn hình VGA ASUS Dual GeForce RTX 4060 EVO 8GB GDDR6",
+      "primaryTotalVnd": 24058000
+    }
+  ],
+  "scope": "Kiểm tra sửa lỗi đồ họa; không thay thế lượt nghiệm thu120ca trước, không đo lại độc lập giá thị trường hoặc FPS/render thực tế.",
+  "configurationCorrection": {
+    "reason": "Cấu hình ban đầu đặt tiers=[balanced] như thể đây là tập con bắt buộc. Bộ chấm hiểu tiers là tập chính xác, nên cả8 ca bị tính sai chỉ vì có thêmcheap/quality. Giữ vòng đầu và nhãn gốc; vòng sau yêu cầu đủ cả3tier, không bỏ kiểm traGPU/RAM/SSD/giá/khả năng lắp, chạy8phản hồiAPI mới.",
+    "productionSourceChanged": false,
+    "original120CasesChanged": false
+  }
+}

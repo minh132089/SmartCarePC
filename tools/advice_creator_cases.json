@@ -1,0 +1,178 @@
+[
+  {
+    "id": "creator-preset",
+    "group": "creator",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình học thiết kế đồ họa, dùng Photoshop và Illustrator, có khoảng 20 triệu, muốn máy êm và không quá to."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 20000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "minGpuVramGb": 6
+    }
+  },
+  {
+    "id": "creator-illustrator",
+    "group": "creator",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần PC dùng Illustrator thiết kế đồ họa2D, ngân sách22 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 22000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "minGpuVramGb": 6
+    }
+  },
+  {
+    "id": "creator-3d",
+    "group": "creator",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần PC dựng mô hình3D và render Blender Cycles, 30 triệu, RAM32GB SSD1TB."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 30000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "minGpuVramGb": 8
+    }
+  },
+  {
+    "id": "creator-video",
+    "group": "creator",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC dựng video4K Premiere, 35 triệu, RAM32GB SSD1TB."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 35000000,
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "minGpuVramGb": 8
+    }
+  },
+  {
+    "id": "creator-igpu",
+    "group": "creator",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC Photoshop2D nhẹ, 18 triệu, RAM16GB SSD512GB, không cần card rời."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 18000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "noDiscreteGpu": true
+    }
+  },
+  {
+    "id": "creator-followup",
+    "group": "creator",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Máy văn phòng15 triệu, không cần card rời."
+      },
+      {
+        "role": "assistant",
+        "content": "Đã ghi nhận nhu cầu văn phòng dùng GPU tích hợp."
+      },
+      {
+        "role": "user",
+        "content": "Giờ chuyển sang thiết kế đồ họa Photoshop Illustrator, tăng lên25 triệu, RAM16GB SSD1TB."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 25000000,
+      "minRamGb": 16,
+      "minSsdGb": 1000,
+      "minGpuVramGb": 6
+    }
+  },
+  {
+    "id": "office-control",
+    "group": "control",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC học Word và Zoom, 13 triệu, RAM16GB SSD512GB, không cần card rời."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 13000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "noDiscreteGpu": true
+    }
+  },
+  {
+    "id": "game-control",
+    "group": "control",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game đồ họa cao Full HD, 25 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "tiers": [
+        "cheap",
+        "balanced",
+        "quality"
+      ],
+      "budgetVnd": 25000000,
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "minGpuVramGb": 8
+    }
+  }
+]

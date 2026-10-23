@@ -1,5 +1,7 @@
 # Kết quả đối chiếu đầu ra AI tư vấn PC
 
+**Cập nhật 24/10/2026:** số liệu 120 ca dưới đây thuộc bản nghiệm thu trước khi phát hiện nhánh thiết kế đồ họa thiếu ràng buộc card rời. Đã bổ sung sửa và kiểm thử riêng: [báo cáo đồ họa](advice-creator-fix.md). Không lấy tỷ lệ 100% cũ làm bảo đảm cho mọi nhu cầu hoặc cho bản sửa mới.
+
 **Đạt 100% trên bộ nghiệm thu nội bộ 120 ca; không còn lỗi được ghi nhận trong bộ này.** Hoàn tất 23/10/2026, 23:48 (UTC+7), nhánh `guide-reveal`. Lượt `eval100-acceptance15` chạy 120 phản hồi API mới trên cùng một JAR cố định sau khi provider hoạt động lại. Không ghép phản hồi từ các lượt trước.
 
 ## Kết quả cuối

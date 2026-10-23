@@ -2587,7 +2587,7 @@ class ChatServiceTests {
         assertThat(ChatService.needs(List.of("Đổi card đồ họa sang AMD giúp mình nhé, vẫn trong ngân sách đó.",
                 "Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.")).vramMin())
                 .as("card đồ họa là linh kiện, không phải làm đồ họa").isEqualTo(8);
-        assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isNull();
+        assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isEqualTo(6);
         assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 25 triệu.")).vramMin())
                 .as("game nhẹ: card 6GB đủ").isEqualTo(6);
     }
@@ -2598,7 +2598,65 @@ class ChatServiceTests {
         assertThat(needs.vramMin()).isEqualTo(8);
         assertThat(ChatService.adviceIntro(needs, 33_000_000L)).contains("máy chơi game");
         assertThat(ChatService.needs(List.of("Game Valorant và dựng video, 30 triệu")).vramMin()).isEqualTo(6);
-        assertThat(ChatService.needs(List.of("làm đồ họa Photoshop 30 triệu")).vramMin()).isNull();
+        assertThat(ChatService.needs(List.of("làm đồ họa Photoshop 30 triệu")).vramMin()).isEqualTo(6);
+    }
+
+    @Test
+    void thietKePhanBietTacVuVaKhongNhanNhamTenCard() {
+        for (String text : List.of("Học thiết kế đồ họa Photoshop Illustrator20 triệu", "Chỉnh ảnh Lightroom20 triệu", "Dùng Illustrator20 triệu")) {
+            var n = ChatService.needs(List.of(text));
+            assertThat(n.creator()).as(text).isTrue();
+            assertThat(n.office()).isFalse();
+            assertThat(n.vramMin()).isEqualTo(6);
+            assertThat(ChatService.adviceIntro(n,20_000_000L)).contains("thiết kế đồ họa").doesNotContain("máy chơi game");
+        }
+        for (String text : List.of("Dựng3D Blender Cycles30 triệu", "Render3D30 triệu", "Dựng video4K Premiere30 triệu", "After Effects30 triệu"))
+            assertThat(ChatService.needs(List.of(text)).vramMin()).as(text).isEqualTo(8);
+        assertThat(ChatService.needs(List.of("Chơi game đồ hoạ cao30 triệu")).creator()).isFalse();
+        assertThat(ChatService.needs(List.of("Đổi card đồ hoạ sang AMD", "Chơi game30 triệu")).creator()).isFalse();
+        assertThat(ChatService.adviceIntro(ChatService.needs(List.of("Chơi Valorant và dựng video30 triệu")),30_000_000L))
+                .contains("chơi game và thiết kế");
+    }
+
+    @Test
+    void doiNhuCauThietKeGiuDungYeuCauMoiVeGpu() {
+        var creator=ChatService.needs(List.of("Giờ chuyển sang Blender render3D30 triệu", "Máy văn phòng không cần card rời20 triệu"));
+        assertThat(creator.creator()).isTrue();
+        assertThat(creator.vramMin()).isEqualTo(8);
+        var integrated=ChatService.needs(List.of("Photoshop2D nhẹ20 triệu, không cần card rời"));
+        assertThat(integrated.creator()).isTrue();
+        assertThat(integrated.vramMin()).isNull();
+        assertThat(ChatService.needs(List.of("Chỉ học online Word, không cần card rời", "Blender render3D30 triệu")).creator()).isFalse();
+        assertThat(ChatService.needs(List.of("RAM lên32GB, giữ ngân sách", "Dùng Illustrator20 triệu")).creator()).isTrue();
+    }
+
+    @Test
+    void giaiThichThietKeKhongThanhVanPhongHoacHuaFps() {
+        var gpu=new Line("gpu_240","gpu","Card",1,null,null,5_000_000L,5_000_000L,null,"https://a/gpu","RTX 3050 6GB","A");
+        var card=new ChatResponse.BuildCard(List.of(gpu),true,List.of(),List.of(),null,20_000_000L,null,"balanced",1);
+        assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 triệu")),card))
+                .contains("tăng tốc GPU","không phải mọi phần mềm").doesNotContain("FPS","nhu cầu học và văn phòng");
+        var cpu=new Line("cpu_std","cpu","CPU",1,null,null,4_000_000L,4_000_000L,null,"https://a/cpu","Intel Core i5 12400","A");
+        var noGpu=new ChatResponse.BuildCard(List.of(cpu),true,List.of(),List.of(),null,20_000_000L,null,"balanced",1);
+        assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 triệu không cần card rời")),noGpu))
+                .contains("Theo yêu cầu không mua card rời","phần mềm, phiên bản và driver").doesNotContain("nhu cầu học và văn phòng");
+    }
+
+    @Test
+    void aiBoCardThietKeThiKhongDuocHienCauHinhIgpuDuLapDuoc() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std","cpu","CPU"));
+        when(search.enabled()).thenReturn(true);
+        var cpu=new ProductSearch.Product("CPU Intel Core i5 12400","A",4_000_000L,"https://a.vn/cpu",null);
+        when(search.search("parts")).thenReturn(List.of(cpu));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Thiết kế","budget_vnd":20000000,"items":[
+                {"code":"cpu_std","spec":"Core i5 12400","product_id":"s1-1"}]}
+                """),answer("Dùng iGPU đủ mọi thiết kế."));
+        var res=service.reply(new ChatRequest(List.of(new Message("user","PC Illustrator20 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("thiếu card đồ họa rời theo nhu cầu").doesNotContain("đủ mọi thiết kế");
     }
 
     @Test
