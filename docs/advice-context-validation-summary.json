@@ -1,11 +1,10 @@
 {
-  "featureStatus": "LIVE_VERIFIED",
+  "featureStatus": "REJECTED_AFTER_USER_AUDIT",
   "liveCases": 9,
   "decisionPassed": 9,
   "adviceManuallyReviewed": 9,
   "advicePassed": 9,
   "priceObservations": 48,
-  "pricePassed": 48,
   "uniqueProductUrls": 48,
   "maxCaptureGapSeconds": 321.208535,
   "priceToleranceVnd": 0,
@@ -90,5 +89,8 @@
   "evidenceDirectory": "/Users/yuuki2/Documents/PCsmartcare-testloop/context-fix-20261024-round2",
   "previousAuthFailureDirectory": "/Users/yuuki2/Documents/PCsmartcare-testloop/context-fix-20261024",
   "verifiedAt": "2026-10-24",
-  "reviewer": "Codex /root (internal)"
+  "reviewer": "Codex /root (internal)",
+  "historicalPriceOnlyMatched": 48,
+  "pricePassed": null,
+  "acceptanceRevokedReason": "User found RTX-only follow-up selects AMD and Lexar THOR URL is discontinued. Earlier independent review incorrectly accepted stale metadata/hidden checkout price without confirming visible availability. Price checker now requires independently reviewed inStock=true."
 }

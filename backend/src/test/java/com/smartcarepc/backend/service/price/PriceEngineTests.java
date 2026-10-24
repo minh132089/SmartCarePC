@@ -47,6 +47,83 @@ class PriceEngineTests {
     }
 
     @Test
+    void trangNgungKinhDoanhKhongTinMetadataCuVaNutMuaHangLienQuan() {
+        String html = """
+                <h1>Ram desktop Lexar THOR 32GB (2x16GB) DDR4</h1>
+                <script type="application/ld+json">{"@type":"Product","name":"Ram desktop Lexar THOR 32GB (2x16GB) DDR4",
+                "offers":{"price":"1999000","availability":"https://schema.org/InStock"}}</script>
+                <div class="button-buy-detail"><p class="stop-buy">📋 Sản phẩm đã ngừng kinh doanh - vui lòng chọn mua sản phẩm khác</p></div>
+                <div style="display:none"><p class="bk-product-price">1.999.000</p></div>
+                <div class="related"><button>Thêm vào giỏ</button></div>
+                """;
+        assertThat(ProductPage.parseLoose(html,"https://www.phucanh.vn/ram-desktop-lexar-thor.html",AT).inStock()).isFalse();
+        assertThat(ProductPage.stock(org.jsoup.Jsoup.parse(html))).isFalse();
+    }
+
+    @Test
+    void anhTrangSanPhamThayThumbnailTimKiemVaDungHttps() {
+        String url = "https://htcgears.com/products/vga-card-man-hinh-9";
+        var page = ProductPage.parseLoose("""
+                <meta property="og:title" content="VGA ASUS DUAL RTX 3060 12GB 2 Fan V2">
+                <meta property="og:price:amount" content="7890000">
+                <meta property="og:image" content="http://product.hstatic.net/asus-3060.png">
+                <meta property="og:image:secure_url" content="https://product.hstatic.net/asus-3060.png">
+                <button>Thêm vào giỏ</button>
+                """, url, AT);
+        var search = new Offer(page.title(), page.shop(), page.priceVnd(), null, url,
+                "https://example.com/gift.png", null, null, AT);
+        assertThat(search.merge(page).imageUrl()).isEqualTo("https://product.hstatic.net/asus-3060.png");
+    }
+
+    @Test
+    void nguonSsdDocDanhMucKhongLayQuaTangVaVanPhaiKiemTrangMua() {
+        var rows=ShopSearch.TPASSION.parse("""
+                <div class="product-list"><form class="variants product-action" data-id="p1">
+                <h3 class="product-name"><a href="/products/ssd-sstc-512gb">SSD SSTC E130 512GB M.2 NVMe</a></h3>
+                <div class="price-box"><span class="price">1,890,000₫</span><span class="compare-price">2,190,000₫</span></div>
+                <div class="product-promotion"><span class="price">100,000₫</span></div></form></div>
+                <div class="product-list"><form class="variants" data-id="sata">
+                <h3 class="product-name"><a href="/products/biwin-m100">SSD Biwin M100-512GB (550 MB/s - 480 MB/s)</a></h3>
+                <div class="price-box"><span class="price">1,850,000₫</span></div></form></div>
+                <form class="variants" data-id="related"><h3 class="product-name"><a href="/products/related">SSD khác</a></h3>
+                <div class="price-box"><span class="price">1,000,000₫</span></div></form>
+                """,AT);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst().priceVnd()).isEqualTo(1_890_000L);
+        assertThat(rows.getFirst().inStock()).isNull();
+        assertThat(ShopSearch.TPASSION.urls("SSD512GB")).containsExactly(
+                "https://tpassion.vn/collections/o-cung-ssd","https://tpassion.vn/collections/o-cung-ssd?page=2");
+        assertThat(ShopSearch.TPASSION.supports("SSD SSTC512GB")).isTrue();
+        assertThat(ShopSearch.TPASSION.supports("CPU Intel12400F")).isFalse();
+    }
+
+    @Test
+    void ssdNhieuDungLuongKhongDungGiaThapNhatChoBanLonNhat() {
+        var offer=ProductPage.parseLoose("""
+                <h1>SSD Samsung 970 EVO Plus 500GB / 1TB / 2TB M.2 NVMe</h1>
+                <script type="application/ld+json">{"@type":"Product","name":"SSD Samsung 970 EVO Plus 500GB / 1TB / 2TB M.2 NVMe",
+                "offers":{"price":"1799000","availability":"https://schema.org/InStock"}}</script>
+                <button>Mua ngay</button>
+                ""","https://tpassion.vn/products/samsung-970-500gb-1tb-2tb",AT);
+        assertThat(offer.priceVnd()).isNull();
+    }
+
+    @Test
+    void chiDangKyNhanThongTinKhongThanhConHangTuMetadataHoacGalleryAn() {
+        var page=ProductPage.parse("""
+                <script type="application/ld+json">{"@type":"Product","name":"Mainboard Gigabyte B760 GAMING X DDR4",
+                "offers":{"price":"4699000","availability":"https://schema.org/InStock"}}</script>
+                <div id="js-pd-btn-list"><a class="btn-wait-order">ĐĂNG KÝ NHẬN THÔNG TIN</a></div>
+                <div style="display:none"><a class="js-buy-now">Mua ngay</a></div>
+                <div class="related"><button>Mua ngay</button><span>Còn hàng</span></div>
+                ""","https://www.anphatpc.com.vn/mainboard-gigabyte-b760-gaming-x-ddr4.html",AT);
+        assertThat(page.inStock()).isNull();
+        assertThat(OfferEvidence.verified(page.title(),page,true)).isFalse();
+        var old=new Offer(page.title(),page.shop(),page.priceVnd(),null,page.url(),null,true,36,AT);
+        assertThat(old.merge(page).inStock()).isNull();
+    }
+
+    @Test
     void docTrangTimKiemGearvn() throws IOException {
         var offers = ShopSearch.GEARVN.parse(fixture("gearvn-search.html"), AT);
         assertThat(offers).hasSize(2);

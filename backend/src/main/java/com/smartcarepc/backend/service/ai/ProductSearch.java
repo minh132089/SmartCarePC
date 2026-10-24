@@ -257,7 +257,7 @@ public class ProductSearch {
         return products.stream()
                 .map(p -> {
                     Offer page = checkedOffer(p.url(), p.title());
-                    return page == null ? p : new Product(p.title(), p.shop(), page.priceVnd(), p.url(), p.imageUrl());
+                    return page == null ? p : new Product(page.title(), p.shop(), page.priceVnd(), p.url(), page.imageUrl());
                 })
                 .sorted((a, b) -> {
                     int evidence = Boolean.compare(checkedOffer(b.url(), b.title()) != null, checkedOffer(a.url(), a.title()) != null);

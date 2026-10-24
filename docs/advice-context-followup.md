@@ -1,5 +1,7 @@
 # Hỏi thêm nhu cầu trước khi tư vấn PC
 
+**Thu hồi kết luận nghiệm thu sau khi khách kiểm tra:** phát hiện follow-up RTX bị đổi sang AMD và RAM Lexar Phúc Anh đã ngừng kinh doanh dù metadata còn giá/tồn kho. Các tỷ lệ bên dưới là lịch sử của bộ kiểm cũ; chưa đủ để xác nhận mua được. Bộ chấm đã bổ sung yêu cầu kiểm tồn kho độc lập. Xem [bản sửa lỗi khách phát hiện](advice-user-followup-fix.md).
+
 ## Luồng mới
 
 - “Thiết kế đồ họa, 20 triệu” → hỏi chủ yếu 2D hay 3D/render, phần mềm nếu biết.

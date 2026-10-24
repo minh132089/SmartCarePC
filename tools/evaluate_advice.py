@@ -221,7 +221,9 @@ def evaluate_prices(gold, cards, seen=None):
             if line.get('category') == 'fans':
                 per_pack=fan_pack_size(line.get('productName') or '')
                 buy_qty=(line.get('quantity',1)+per_pack-1)//per_pack
-            if (label.get("reviewed") is True and line.get("priceChecked") is True and fresh and line.get("inStock") is True
+            if (label.get("reviewed") is True and label.get("inStock") is True
+                    and isinstance(label.get("unitPriceVnd"), int) and label["unitPriceVnd"] > 0
+                    and line.get("priceChecked") is True and fresh and line.get("inStock") is True
                     and line.get("productName") and label.get("title")
                     and line.get("priceMaxVnd") == label["unitPriceVnd"] * label.get("buyQty", buy_qty)):
                 pass

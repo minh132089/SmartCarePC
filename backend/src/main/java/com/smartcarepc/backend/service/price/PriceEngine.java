@@ -112,7 +112,8 @@ public class PriceEngine {
         return t;
     });
 
-    private record Snapshot(Map<String, Cached> searches, Map<String, Offer> offers, Map<String, Long> pageRead) {
+    private static final int PAGE_PARSER_VERSION = 9;
+    private record Snapshot(Map<String, Cached> searches, Map<String, Offer> offers, Map<String, Long> pageRead, int parserVersion) {
     }
 
     private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
@@ -125,9 +126,11 @@ public class PriceEngine {
             try {
                 var snap = JSON.readValue(file.toFile(), Snapshot.class);
                 Instant oldest = Instant.now().minus(CACHE);
-                if (snap.searches() != null) snap.searches().forEach((k, v) -> { if (v.at().isAfter(oldest) && !v.offers().isEmpty()) cache.put(k, v); });
+                if (snap.parserVersion() == PAGE_PARSER_VERSION && snap.searches() != null)
+                    snap.searches().forEach((k, v) -> { if (v.at().isAfter(oldest) && !v.offers().isEmpty()) cache.put(k, v); });
                 long verifiedSince = System.currentTimeMillis() - VERIFIED_TTL.toMillis();
-                if (snap.pageRead() != null) snap.pageRead().forEach((u, at) -> { if (at > verifiedSince) pageRead.put(u, at); });
+                if (snap.parserVersion() == PAGE_PARSER_VERSION && snap.pageRead() != null)
+                    snap.pageRead().forEach((u, at) -> { if (at > verifiedSince) pageRead.put(u, at); });
                 if (snap.offers() != null) byUrl.putAll(snap.offers());
                 log.info("Nạp bộ nhớ đệm giá: {} từ khoá, {} link, {} trang đã đọc", cache.size(), byUrl.size(), pageRead.size());
             } catch (RuntimeException e) {
@@ -159,7 +162,7 @@ public class PriceEngine {
             var file = java.nio.file.Path.of(cacheFile);
             if (file.getParent() != null) java.nio.file.Files.createDirectories(file.getParent());
             var tmp = file.resolveSibling(file.getFileName() + ".tmp");
-            JSON.writeValue(tmp.toFile(), new Snapshot(keep, new LinkedHashMap<>(byUrl), new LinkedHashMap<>(pageRead)));
+            JSON.writeValue(tmp.toFile(), new Snapshot(keep, new LinkedHashMap<>(byUrl), new LinkedHashMap<>(pageRead), PAGE_PARSER_VERSION));
             java.nio.file.Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception e) {
             log.warn("Không lưu được bộ nhớ đệm giá: {}", e.getMessage());
@@ -474,13 +477,13 @@ public class PriceEngine {
         String shopQuery = shopQuery(query);
         var shops = Arrays.stream(ShopSearch.values())
                 .filter(s -> s.supports(shopQuery))
-                .map(s -> CompletableFuture.supplyAsync(() -> {
+                .flatMap(s -> s.urls(shopQuery).stream().map(url -> CompletableFuture.supplyAsync(() -> {
                     // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có
-                    String html = fetcher.get(s.url(shopQuery), s.maxWait);
+                    String html = fetcher.get(url, s.maxWait);
                     // Tải trang tìm kiếm thất bại (hết giờ, bị chặn): không phải "không có hàng", không nhớ kết quả rỗng
                     if (html == null) incomplete.set(true);
                     return html == null ? List.<Offer>of() : s.parse(html, at);
-                }, pool))
+                }, pool)))
                 .toList();
         var links = CompletableFuture.supplyAsync(() -> searxng.productUrls(query, 6), pool);
 
@@ -500,6 +503,8 @@ public class PriceEngine {
             Offer page = joinOne(f);
             if (page == null) continue;
             all.merge(clean(page.url()), page, (shop, p) -> shop.merge(p));
+            // Kết quả mới có thể không còn giá/biến thể rõ ràng: phải thay cả offer cũ, không chỉ làm mới timestamp.
+            byUrl.put(page.url(), page);
             pageRead.put(clean(page.url()), System.currentTimeMillis());
             readNow.add(clean(page.url()));
         }

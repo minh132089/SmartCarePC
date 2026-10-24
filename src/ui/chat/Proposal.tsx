@@ -169,32 +169,32 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
 }
 
 /**
- * Ảnh sản phẩm trợ lý tìm được trên web. Chưa có ảnh, hoặc ảnh không tải được, thì hiện khung "Ảnh mẫu" giữ chỗ.
+ * Ảnh từ trang sản phẩm. Chưa có ảnh, hoặc ảnh không tải được, thì ghi rõ chưa có ảnh.
  * Link mua nằm dưới phần chữ (PartRow).
  */
 function PartImage({ line, label }: { line: BuildLine; label: string }) {
-  const [failed, setFailed] = useState(false)
-  const src = line.imageUrl && !failed ? line.imageUrl : null
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const src = line.imageUrl && line.imageUrl !== failedSrc ? line.imageUrl : null
   return (
     <div className="w-[72px] shrink-0">
       {src ? (
         <img
           src={src}
-          alt={line.spec || line.name}
+          alt={line.productName || line.name}
           loading="lazy"
           referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
           className="aspect-square w-full rounded-xl bg-canvas object-contain"
         />
       ) : (
         <div
           role="img"
-          aria-label={`Ảnh mẫu: ${label}`}
+          aria-label={`Chưa có ảnh: ${label}`}
           className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-line-strong bg-canvas text-ink-3"
         >
           <div className="flex flex-col items-center gap-0.5">
             <ImageSquare size={22} aria-hidden />
-            <span className="text-[11px] font-medium">Ảnh mẫu</span>
+            <span className="text-[11px] font-medium">Chưa có ảnh</span>
           </div>
         </div>
       )}

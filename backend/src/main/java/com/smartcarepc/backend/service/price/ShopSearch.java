@@ -91,6 +91,37 @@ enum ShopSearch {
             }
             return out;
         }
+    },
+
+    /** TPassion cấm /search; đọc hai trang đầu danh mục SSD, rồi engine lọc model và kiểm trang mua. */
+    TPASSION("https://tpassion.vn/collections/o-cung-ssd", Duration.ofSeconds(3)) {
+        @Override
+        boolean supports(String query) {
+            return "ssd".equals(PriceEngine.kind(PriceEngine.norm(query)));
+        }
+
+        @Override
+        List<String> urls(String query) {
+            return List.of(searchUrl, searchUrl + "?page=2");
+        }
+
+        @Override
+        List<Offer> parse(String html, Instant at) {
+            Document doc = Jsoup.parse(html, "https://tpassion.vn/");
+            List<Offer> out = new ArrayList<>();
+            for (Element card : doc.select(".product-list form.variants[data-id]")) {
+                Element name = card.selectFirst("h3.product-name a[href*=/products/]");
+                Element price = card.selectFirst(".price-box .price");
+                Long value = price == null ? null : Prices.parse(price.text());
+                if (name == null || value == null || value < 10_000) continue;
+                // Nguồn bổ sung cho ổ M.2 trong app: không suy ổ SATA 2.5 inch từ tên chỉ có dung lượng/tốc độ.
+                if (!name.text().matches("(?iu).*\\b(?:m\\.?2|nvme)\\b.*")) continue;
+                Element img = card.selectFirst("img.product-thumbnail__img--primary");
+                out.add(new Offer(name.text().strip(), "TPassion", value, null, name.absUrl("href"),
+                        img == null ? null : img.absUrl("src"), null, null, at));
+            }
+            return out;
+        }
     };
 
     private static final Pattern MONEY = Pattern.compile("(\\d{1,3}(?:[.,]\\d{3}){1,3})\\s*(?:đ|₫|vnđ|vnd)", Pattern.CASE_INSENSITIVE);
@@ -109,6 +140,10 @@ enum ShopSearch {
 
     String url(String query) {
         return searchUrl + URLEncoder.encode(query, StandardCharsets.UTF_8);
+    }
+
+    List<String> urls(String query) {
+        return List.of(url(query));
     }
 
     boolean supports(String query) {

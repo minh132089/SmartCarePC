@@ -17,9 +17,9 @@ public record Offer(String title, String shop, Long priceVnd, Long oldPriceVnd, 
     /** Bổ sung thông tin còn thiếu (còn hàng, bảo hành, ảnh) từ lần đọc trang sản phẩm */
     Offer merge(Offer page) {
         if (page == null) return this;
-        return new Offer(title, shop, page.priceVnd() != null ? page.priceVnd() : priceVnd,
+        return new Offer(page.title(), shop, page.priceVnd(),
                 oldPriceVnd != null ? oldPriceVnd : page.oldPriceVnd(), url,
-                imageUrl != null ? imageUrl : page.imageUrl(), page.inStock() != null ? page.inStock() : inStock,
+                page.imageUrl(), page.inStock(),
                 page.warrantyMonths() != null ? page.warrantyMonths() : warrantyMonths, page.checkedAt());
     }
 }

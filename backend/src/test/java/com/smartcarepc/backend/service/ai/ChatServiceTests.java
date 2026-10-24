@@ -441,7 +441,7 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        var product = new ProductSearch.Product("SSD Kingston NV3 1TB", "A", 1_500_000L, "https://a.vn/ssd", null);
+        var product = new ProductSearch.Product("SSD Kingston NV3 1TB M.2 NVMe", "A", 1_500_000L, "https://a.vn/ssd", null);
         var offer = new java.util.concurrent.atomic.AtomicReference<>(new com.smartcarepc.backend.service.price.Offer(
                 product.title(), "A", 1_500_000L, null, product.url(), null, true, 36, java.time.Instant.now()));
         when(search.search(any())).thenReturn(List.of(product));
@@ -500,12 +500,16 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM DDR4 16GB")).thenReturn(List.of(new ProductSearch.Product(
                 "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://www.google.com/search?ibp=oshop&q=ram", "https://img/ram.jpg")));
+        verifiedOffers(List.of(new ProductSearch.Product(
+                "RAM 16GB (2x8GB) DDR4 3200", "Shop A", 1_050_000L, "https://www.google.com/search?ibp=oshop&q=ram", "https://img/ram.jpg")));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> {
             String link = inv.getArgument(2);
             return link.contains("google") ? "https://shop-a.vn/ram-16gb" : link;
         });
         // Id vỏ không có trong kết quả tìm kiếm: app tự tìm vỏ theo spec trợ lý ghi (mọi dòng phải có hàng kèm link)
         when(search.search("Vỏ mATX nhỏ")).thenReturn(List.of(new ProductSearch.Product(
+                "Vỏ máy tính Xigmatek XA-22 Micro-ATX", "Shop B", 800_000L, "https://shop-b.vn/vo", null)));
+        verifiedOffers(List.of(new ProductSearch.Product(
                 "Vỏ máy tính Xigmatek XA-22 Micro-ATX", "Shop B", 800_000L, "https://shop-b.vn/vo", null)));
         reply(toolCall("s1", "search_products", "{\"query\":\"RAM DDR4 16GB\"}"),
                 toolCall("p1", "propose_build", """
@@ -536,7 +540,7 @@ class ChatServiceTests {
     }
 
     @Test
-    void giaChiTuTrangDanhSachLaGiaThamKhao() {
+    void giaChiTuTrangDanhSachKhongDuDeHienCauHinhMuaHang() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
         when(search.enabled()).thenReturn(true);
@@ -553,8 +557,8 @@ class ChatServiceTests {
         var response = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu")), null, null, "advice"));
 
         assertThat((String) messages(1).get(3).get("content")).contains("\"verified\":false");
-        assertThat(response.build().items().getFirst().priceMaxVnd()).isEqualTo(7_990_000L);
-        assertThat(response.build().items().getFirst().priceChecked()).isFalse();
+        assertThat(response.build()).isNull();
+        assertThat(response.options()).isNullOrEmpty();
     }
 
     @Test
@@ -594,8 +598,8 @@ class ChatServiceTests {
 
         var response = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu")), null, null, "advice"));
 
-        assertThat(response.build().items().getFirst().priceMaxVnd()).isEqualTo(7_990_000L);
-        assertThat(response.build().items().getFirst().priceChecked()).isFalse();
+        assertThat(response.build()).isNull();
+        assertThat(response.options()).isNullOrEmpty();
     }
 
     @Test
@@ -609,8 +613,13 @@ class ChatServiceTests {
                 new ProductSearch.Product("Keo tản nhiệt", "Shop X", 40_000L, "https://x/keo", null),
                 new ProductSearch.Product("Tản ID-Cooling IS-40X", "Shop B", 450_000L, "https://b/is40", "https://img/is40.jpg"),
                 new ProductSearch.Product("Tản Noctua L9a", "Shop C", 1_300_000L, "https://c/l9a", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Keo tản nhiệt", "Shop X", 40_000L, "https://x/keo", null),
+                new ProductSearch.Product("Tản ID-Cooling IS-40X", "Shop B", 450_000L, "https://b/is40", "https://img/is40.jpg"),
+                new ProductSearch.Product("Tản Noctua L9a", "Shop C", 1_300_000L, "https://c/l9a", null)));
         // Thông số không ra gì thì tìm theo tên loại linh kiện
         when(search.search("Bộ đồ nghề")).thenReturn(List.of(new ProductSearch.Product("Bộ tua vít 24 in 1", "Shop D", 150_000L, "https://d/tuavit", null)));
+        verifiedOffers(List.of(new ProductSearch.Product("Bộ tua vít 24 in 1", "Shop D", 150_000L, "https://d/tuavit", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("p1", "propose_build", """
                 {"summary":"Văn phòng nhỏ","items":[
@@ -691,9 +700,13 @@ class ChatServiceTests {
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD 1TB")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 1TB", "Shop A", 1_500_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 2TB", "Shop B", 1_850_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD C 1TB", "Shop C", 1_100_000L, "https://c.vn/1", null)));
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "Shop A", 1_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 2TB M.2 NVMe", "Shop B", 1_850_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 1TB M.2 NVMe", "Shop C", 1_100_000L, "https://c.vn/1", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "Shop A", 1_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 2TB M.2 NVMe", "Shop B", 1_850_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 1TB M.2 NVMe", "Shop C", 1_100_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         // Ba tier ba sản phẩm (Chất lượng phải đắt hơn và khác Phù hợp, Rẻ rẻ hơn rõ rệt)
         var calls = new ArrayList<Map<String, Object>>();
@@ -714,7 +727,7 @@ class ChatServiceTests {
         assertThat(res.options()).extracting(ChatResponse.BuildCard::tier).containsExactly("cheap", "balanced", "quality");
         assertThat(res.options()).extracting(ChatResponse.BuildCard::variant).containsOnly(1);
         // Phương án Rẻ do code chọn hàng: cùng 1TB nhưng rẻ hơn
-        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB", "SSD A 1TB", "SSD B 2TB");
+        assertThat(res.options()).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 1TB M.2 NVMe", "SSD A 1TB M.2 NVMe", "SSD B 2TB M.2 NVMe");
         assertThat(res.build().variant()).isEqualTo(1);
         assertThat(res.build().tier()).isEqualTo("balanced");
     }
@@ -727,7 +740,11 @@ class ChatServiceTests {
         when(search.search("RTX 3060")).thenReturn(List.of(
                 new ProductSearch.Product("RTX 3060 12GB Shop Nho", "Tân Thành", 7_000_000L, "https://www.google.com/x", null),
                 new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("RTX 3060 12GB Shop Nho", "Tân Thành", 7_000_000L, "https://www.google.com/x", null),
+                new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> "Phong Vũ".equals(inv.getArgument(1)) ? "https://phongvu.vn/rtx3060" : null);
+        verifiedOffers(List.of(new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://phongvu.vn/rtx3060", null)));
         reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060\"}"),
                 toolCall("p1", "propose_build", """
                 {"summary":"Game","items":[{"code":"gpu_280","spec":"RTX 3060","reason":"Chơi game","product_id":"s1-1"}]}
@@ -748,9 +765,13 @@ class ChatServiceTests {
         when(search.search("RTX 3060")).thenReturn(List.of(
                 new ProductSearch.Product("RTX 3060 12GB Shop Nho", "hotgear.vn", 7_000_000L, "https://www.google.com/x", null),
                 new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("RTX 3060 12GB Shop Nho", "hotgear.vn", 7_000_000L, "https://www.google.com/x", null),
+                new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://www.google.com/y", null)));
         // Shop nhỏ tìm không ra trang sản phẩm nên chỉ có trang chủ
         when(search.directLink(any(), any(), any())).thenAnswer(inv ->
                 "Phong Vũ".equals(inv.getArgument(1)) ? "https://phongvu.vn/rtx3060" : "https://hotgear.vn/");
+        verifiedOffers(List.of(new ProductSearch.Product("RTX 3060 12GB Phong Vu", "Phong Vũ", 7_200_000L, "https://phongvu.vn/rtx3060", null)));
         reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060\"}"),
                 toolCall("p1", "propose_build", """
                 {"summary":"Game","items":[{"code":"gpu_280","spec":"RTX 3060","reason":"Chơi game","product_id":"s1-1"}]}
@@ -769,9 +790,13 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         // Ngân sách 1,5 triệu nhưng trợ lý chọn món 1,6 triệu cho phương án Rẻ: code đổi sang món rẻ nhất cùng dung lượng
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 512GB", "A", 1_600_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 512GB", "B", 1_400_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD C 512GB", "C", 900_000L, "https://c.vn/1", null)));
+                new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 1_600_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 512GB M.2 NVMe", "B", 1_400_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 512GB M.2 NVMe", "C", 900_000L, "https://c.vn/1", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 1_600_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 512GB M.2 NVMe", "B", 1_400_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 512GB M.2 NVMe", "C", 900_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
@@ -784,7 +809,7 @@ class ChatServiceTests {
 
         // Rẻ tối đa 90% ngân sách (1,35 triệu): code đổi sang SSD C
         var cheap = res.options().stream().filter(o -> "cheap".equals(o.tier())).toList();
-        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 512GB");
+        assertThat(cheap).extracting(o -> o.items().getFirst().productName()).containsExactly("SSD C 512GB M.2 NVMe");
         assertThat(cheap).extracting(ChatResponse.BuildCard::variant).containsExactly(1);
         assertThat(cheap).allSatisfy(o -> assertThat(o.items().getFirst().priceMaxVnd()).isLessThanOrEqualTo(1_350_000L));
         // Phù hợp không vượt ngân sách
@@ -799,10 +824,14 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         // Món trợ lý chọn không có link; món giá gần nhất (B) làm vượt ngân sách nên phải lấy món rẻ hơn (C)
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 512GB", "A", 950_000L, "https://www.google.com/a", null),
-                new ProductSearch.Product("SSD B 512GB", "B", 1_020_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD C 512GB", "C", 870_000L, "https://c.vn/1", null)));
-        when(search.directLink(any(), any(), any())).thenAnswer(inv -> "SSD A 512GB".equals(inv.getArgument(0)) ? null : inv.getArgument(2));
+                new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 950_000L, "https://www.google.com/a", null),
+                new ProductSearch.Product("SSD B 512GB M.2 NVMe", "B", 1_020_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 512GB M.2 NVMe", "C", 870_000L, "https://c.vn/1", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 950_000L, "https://www.google.com/a", null),
+                new ProductSearch.Product("SSD B 512GB M.2 NVMe", "B", 1_020_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD C 512GB M.2 NVMe", "C", 870_000L, "https://c.vn/1", null)));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> "SSD A 512GB M.2 NVMe".equals(inv.getArgument(0)) ? null : inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":1000000,"items":[{"code":"ssd_m2_2280","spec":"SSD","reason":"Đủ","product_id":"s1-1"}]}
@@ -810,7 +839,7 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
-        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD C 512GB");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD C 512GB M.2 NVMe");
         assertThat(res.build().items().getFirst().sourceUrl()).isEqualTo("https://c.vn/1");
     }
 
@@ -819,7 +848,8 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 512GB", "A", 1_000_000L, "https://a.vn/1", null)));
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 1_000_000L, "https://a.vn/1", null)));
+        verifiedOffers(List.of(new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 1_000_000L, "https://a.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         when(client.complete(any())).thenReturn(toolCall("s", "search_products", "{\"query\":\"SSD\"}"),
                 toolCall("p1", "propose_build", """
@@ -829,7 +859,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice"));
 
         assertThat(res.reply()).startsWith(ChatService.BUILDS_READY);
-        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A 512GB");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A 512GB M.2 NVMe");
     }
 
     @Test
@@ -854,7 +884,11 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("B760")).thenReturn(List.of(
                 new ProductSearch.Product("Mainboard MSI B760 GAMING PLUS WIFI DDR5", "Hacom", 4_300_000L, "https://hacom.vn/b760", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Mainboard MSI B760 GAMING PLUS WIFI DDR5", "Hacom", 4_300_000L, "https://hacom.vn/b760", null)));
         when(search.search("RAM DDR4")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Corsair Vengeance LPX 16GB DDR4 3200", "FPT", 1_600_000L, "https://fptshop.com.vn/ram", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("RAM Corsair Vengeance LPX 16GB DDR4 3200", "FPT", 1_600_000L, "https://fptshop.com.vn/ram", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s1", "search_products", "{\"query\":\"B760\"}"),
@@ -880,14 +914,14 @@ class ChatServiceTests {
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
         when(search.enabled()).thenReturn(true);
-        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD Kingston NV2 1TB", "A", 1_400_000L, "https://a.vn/ssd", null)));
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD Kingston NV2 1TB M.2 NVMe", "A", 1_400_000L, "https://a.vn/ssd", null)));
         when(search.search("Card")).thenReturn(List.of(new ProductSearch.Product("Card RTX 4060 8GB", "B", 8_000_000L, "https://b.vn/gpu", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         var at = java.time.Instant.parse("2026-10-20T10:00:00Z");
         // Trang SSD bán giá khác Google Shopping: thẻ dùng giá trang
         when(search.offer("https://a.vn/ssd")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
-                "SSD Kingston NV2 1TB", "A", 1_550_000L, null, "https://a.vn/ssd", null, true, 36, at));
-        // Trang card ghi giá sai đơn vị (x100): bỏ, giữ giá cũ và ghi là chưa kiểm tra
+                "SSD Kingston NV2 1TB M.2 NVMe", "A", 1_550_000L, null, "https://a.vn/ssd", null, true, 36, at));
+        // Trang card ghi giá sai đơn vị (x100): không dùng giá danh sách để chốt cấu hình mua hàng.
         when(search.offer("https://b.vn/gpu")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
                 "Card RTX 4060 8GB", "B", 800_000_000L, null, "https://b.vn/gpu", null, true, null, at));
         reply(toolCall("s1", "search_products", "{\"query\":\"SSD\"}"), toolCall("s2", "search_products", "{\"query\":\"Card\"}"),
@@ -896,13 +930,10 @@ class ChatServiceTests {
                 {"code":"gpu_280","spec":"RTX 4060","reason":"Chơi game","product_id":"s2-1"}]}
                 """), answer("Xong."));
 
-        var items = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items();
-
-        var ssd = items.stream().filter(i -> i.category().equals("ssd")).findFirst().orElseThrow();
-        assertThat(ssd.priceMinVnd()).isEqualTo(1_550_000L);
-        assertThat(ssd.priceChecked()).isTrue();
-        var gpu = items.stream().filter(i -> i.category().equals("gpu")).findFirst().orElseThrow();
-        assertThat(gpu.priceMinVnd()).isEqualTo(8_000_000L);
+        var response = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
+        assertThat(response.build()).isNull();
+        assertThat(response.options()).isNullOrEmpty();
+        assertThat(sent.toString()).contains("1550000");
     }
 
     @Test
@@ -914,12 +945,12 @@ class ChatServiceTests {
         var at = java.time.Instant.parse("2026-10-20T10:00:00Z");
         // SSD: món trợ lý chọn đã hết hàng, món cùng nhóm còn hàng -> đổi
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 1TB", "A", 1_500_000L, "https://a.vn/ssd-a", null),
-                new ProductSearch.Product("SSD B 1TB", "B", 1_520_000L, "https://b.vn/ssd-b", null)));
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 1_500_000L, "https://a.vn/ssd-a", null),
+                new ProductSearch.Product("SSD B 1TB M.2 NVMe", "B", 1_520_000L, "https://b.vn/ssd-b", null)));
         when(search.offer("https://a.vn/ssd-a")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
-                "SSD A 1TB", "A", 1_500_000L, null, "https://a.vn/ssd-a", null, false, null, at));
+                "SSD A 1TB M.2 NVMe", "A", 1_500_000L, null, "https://a.vn/ssd-a", null, false, null, at));
         when(search.offer("https://b.vn/ssd-b")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
-                "SSD B 1TB", "B", 1_520_000L, null, "https://b.vn/ssd-b", null, true, null, at));
+                "SSD B 1TB M.2 NVMe", "B", 1_520_000L, null, "https://b.vn/ssd-b", null, true, null, at));
         // Vỏ: cả nhóm không có trang bán -> tìm thêm theo thông số và lấy món có link
         when(search.search("Vỏ kính")).thenReturn(List.of(new ProductSearch.Product("Vỏ Jonsbo D32", "X", 1_300_000L, "https://www.google.com/x", null)));
         when(search.search("Vỏ mid tower mặt kính")).thenReturn(List.of(
@@ -939,7 +970,7 @@ class ChatServiceTests {
         var items = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items();
 
         var ssd = items.stream().filter(i -> i.category().equals("ssd")).findFirst().orElseThrow();
-        assertThat(ssd.productName()).isEqualTo("SSD B 1TB");
+        assertThat(ssd.productName()).isEqualTo("SSD B 1TB M.2 NVMe");
         assertThat(ssd.inStock()).isTrue();
         var pcCase = items.stream().filter(i -> i.category().equals("case")).findFirst().orElseThrow();
         assertThat(pcCase.productName()).isEqualTo("Vỏ Montech Air 100");
@@ -1027,9 +1058,13 @@ class ChatServiceTests {
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD Samsung 990 EVO 1TB", "A", 2_500_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD Kingston NV3 1TB", "B", 1_600_000L, "https://b.vn/1", null),
-                new ProductSearch.Product("SSD Kingston NV3 512GB", "C", 900_000L, "https://c.vn/1", null)));
+                new ProductSearch.Product("SSD Samsung 990 EVO 1TB M.2 NVMe", "A", 2_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD Kingston NV3 1TB M.2 NVMe", "B", 1_600_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD Kingston NV3 512GB M.2 NVMe", "C", 900_000L, "https://c.vn/1", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD Samsung 990 EVO 1TB M.2 NVMe", "A", 2_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD Kingston NV3 1TB M.2 NVMe", "B", 1_600_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD Kingston NV3 512GB M.2 NVMe", "C", 900_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":2000000,"items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ","product_id":"s1-1"}]}
@@ -1038,7 +1073,7 @@ class ChatServiceTests {
         var line = service.reply(new ChatRequest(List.of(new Message("user", "học")), null, null, "advice")).build().items().getFirst();
 
         // Vượt ngân sách 2 triệu: đổi sang SSD cùng 1TB rẻ hơn, không hạ xuống 512GB
-        assertThat(line.productName()).isEqualTo("SSD Kingston NV3 1TB");
+        assertThat(line.productName()).isEqualTo("SSD Kingston NV3 1TB M.2 NVMe");
     }
 
     @Test
@@ -1050,12 +1085,17 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("i5")).thenReturn(List.of(
                 new ProductSearch.Product("Bộ vi xử lý Intel Core i5-12400F", "GEARVN", 3_380_000L, "https://gearvn.com/products/i5", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Bộ vi xử lý Intel Core i5-12400F", "GEARVN", 3_380_000L, "https://gearvn.com/products/i5", null)));
         when(search.search("vỏ")).thenReturn(List.of(
+                new ProductSearch.Product("Vỏ Máy Tính Xigmatek XA-22 (ATX)", "GEARVN", 350_000L, "https://gearvn.com/products/xa22", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("Vỏ Máy Tính Xigmatek XA-22 (ATX)", "GEARVN", 350_000L, "https://gearvn.com/products/xa22", null)));
         when(search.search(org.mockito.ArgumentMatchers.argThat(q -> q != null && (q.contains("ATX, DDR4") || q.contains("mainboard")))))
                 .thenReturn(List.of(
                         new ProductSearch.Product("Bo Mạch Chủ Gigabyte A520M-K V2", "GEARVN", 1_590_000L, "https://gearvn.com/products/a520", null),
                         new ProductSearch.Product("Bo mạch chủ MSI PRO B760-P DDR4 ATX", "GEARVN", 2_790_000L, "https://gearvn.com/products/b760", null)));
+        verifiedOffers(List.of(new ProductSearch.Product("Bo mạch chủ MSI PRO B760-P DDR4 ATX", "GEARVN", 2_790_000L, "https://gearvn.com/products/b760", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s1", "search_products", "{\"query\":\"i5\"}"), toolCall("s2", "search_products", "{\"query\":\"vỏ\"}"),
                 toolCall("p1", "propose_build", """
@@ -1076,6 +1116,9 @@ class ChatServiceTests {
         when(components.findByCode("cpu_std")).thenReturn(part("cpu_std", "cpu", "CPU"));
         when(search.enabled()).thenReturn(true);
         when(search.search("i3")).thenReturn(List.of(
+                new ProductSearch.Product("Bộ vi xử lý Intel Core i3-12100", "A", 2_500_000L, "https://a.vn/i3", null),
+                new ProductSearch.Product("Bộ vi xử lý Intel Core i3-12100F", "B", 2_000_000L, "https://b.vn/i3f", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("Bộ vi xử lý Intel Core i3-12100", "A", 2_500_000L, "https://a.vn/i3", null),
                 new ProductSearch.Product("Bộ vi xử lý Intel Core i3-12100F", "B", 2_000_000L, "https://b.vn/i3f", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1137,7 +1180,11 @@ class ChatServiceTests {
         // Trợ lý gắn nhầm bộ quạt case vào dòng tản nhiệt
         when(search.search("quạt")).thenReturn(List.of(
                 new ProductSearch.Product("Bộ 3 quạt Cooler Master SickleFlow 120 ARGB", "GEARVN", 690_000L, "https://gearvn.com/products/fan", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Bộ 3 quạt Cooler Master SickleFlow 120 ARGB", "GEARVN", 690_000L, "https://gearvn.com/products/fan", null)));
         when(search.search("Tản khí tháp")).thenReturn(List.of(
+                new ProductSearch.Product("Tản nhiệt khí Cooler Master Hyper 212", "GEARVN", 590_000L, "https://gearvn.com/products/hyper", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("Tản nhiệt khí Cooler Master Hyper 212", "GEARVN", 590_000L, "https://gearvn.com/products/hyper", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"quạt\"}"),
@@ -1180,7 +1227,11 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         // Ngân sách 1 triệu, trợ lý chọn món 1 triệu: món 1,2 triệu (gần giá nhất) làm vượt ngân sách nên phải dùng món rẻ hơn
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 512GB", "A", 1_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 1_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD Dat 512GB", "B", 1_200_000L, "https://b.vn/1", null),
+                new ProductSearch.Product("SSD Re 512GB", "C", 850_000L, "https://c.vn/1", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 512GB M.2 NVMe", "A", 1_000_000L, "https://a.vn/1", null),
                 new ProductSearch.Product("SSD Dat 512GB", "B", 1_200_000L, "https://b.vn/1", null),
                 new ProductSearch.Product("SSD Re 512GB", "C", 850_000L, "https://c.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1193,7 +1244,7 @@ class ChatServiceTests {
 
         // Build trợ lý chọn nằm trong ngân sách: giữ nguyên, không thêm build tham khảo
         assertThat(res.options()).isNull();
-        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A 512GB");
+        assertThat(res.build().items().getFirst().productName()).isEqualTo("SSD A 512GB M.2 NVMe");
     }
 
     @Test
@@ -1314,6 +1365,8 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM")).thenReturn(List.of(
                 new ProductSearch.Product("Ram Kingmax Blade X 1x8GB DDR4 Bus 3200Mhz", "A", 990_000L, "https://a.vn/ram", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Ram Kingmax Blade X 1x8GB DDR4 Bus 3200Mhz", "A", 990_000L, "https://a.vn/ram", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Game","items":[{"code":"ram_ddr4","quantity":1,"spec":"2x8GB DDR4 3200","reason":"Đủ","product_id":"s1-1"}]}
@@ -1334,6 +1387,8 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM")).thenReturn(List.of(
                 new ProductSearch.Product("Gigabyte AORUS RGB RAM 16 GB 2 x 8 GB DDR4 3200 MHz", "A", 1_400_000L, "https://a.vn/kit", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Gigabyte AORUS RGB RAM 16 GB 2 x 8 GB DDR4 3200 MHz", "A", 1_400_000L, "https://a.vn/kit", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Học","items":[{"code":"ram_ddr4","quantity":1,"spec":"1x16GB DDR4","reason":"Đủ","product_id":"s1-1"}]}
@@ -1353,6 +1408,9 @@ class ChatServiceTests {
         when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
         when(search.enabled()).thenReturn(true);
         when(search.search("card")).thenReturn(List.of(
+                new ProductSearch.Product("Card MSI RTX 4060 Ventus 2X 8G", "A", 30_000_000L, "https://a.vn/4060", null),
+                new ProductSearch.Product("Card ASUS RTX 4090 ROG Strix 24G", "B", 50_000_000L, "https://b.vn/4090", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("Card MSI RTX 4060 Ventus 2X 8G", "A", 30_000_000L, "https://a.vn/4060", null),
                 new ProductSearch.Product("Card ASUS RTX 4090 ROG Strix 24G", "B", 50_000_000L, "https://b.vn/4090", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1393,6 +1451,8 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("card")).thenReturn(List.of(
                 new ProductSearch.Product("Card MSI RTX 4060 Ventus 2X 8G", "A", 15_000_000L, "https://a.vn/4060", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Card MSI RTX 4060 Ventus 2X 8G", "A", 15_000_000L, "https://a.vn/4060", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"card\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Game","budget_vnd":20000000,"items":[{"code":"gpu_280","spec":"RTX 4060","reason":"Đủ","product_id":"s1-1"}]}
@@ -1413,10 +1473,10 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD Kingston NV3 1TB", "B", 1_600_000L, "https://b.vn/1", null)));
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD Kingston NV3 1TB M.2 NVMe", "B", 1_600_000L, "https://b.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         when(search.offer("https://b.vn/1")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
-                "SSD Kingston NV3 1TB", "B", 1_700_000L, null, "https://b.vn/1", null, true, null, null));
+                "SSD Kingston NV3 1TB M.2 NVMe", "B", 1_700_000L, null, "https://b.vn/1", null, true, null, null));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":12000000,"items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ","product_id":"s1-1"}]}
                 """), answer("Xong."));
@@ -1424,7 +1484,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 12 triệu")), null, null, "advice"));
 
         String toolResult = (String) messages(2).get(5).get("content");
-        assertThat(toolResult).contains("final_items").contains("SSD Kingston NV3 1TB").contains("\"total_max_vnd\":1700000");
+        assertThat(toolResult).contains("final_items").contains("SSD Kingston NV3 1TB M.2 NVMe").contains("\"total_max_vnd\":1700000");
         assertThat(res.build().items().getFirst().priceMaxVnd()).as("thẻ dùng đúng giá trợ lý đã thấy").isEqualTo(1_700_000L);
     }
 
@@ -1468,6 +1528,8 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("bo")).thenReturn(List.of(
                 new ProductSearch.Product("Bo mạch chủ ASUS PRIME B550M-A", "A", 2_300_000L, "https://a.vn/b550m", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("Bo mạch chủ ASUS PRIME B550M-A", "A", 2_300_000L, "https://a.vn/b550m", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"bo\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Game","items":[{"code":"mb_atx","spec":"B550","reason":"Đủ","product_id":"s1-1"}]}
@@ -1489,6 +1551,8 @@ class ChatServiceTests {
         when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"RAM\"}"), toolCall("p1", "propose_build", """
@@ -1528,6 +1592,9 @@ class ChatServiceTests {
         when(components.findByCode("ram_ddr4")).thenReturn(part("ram_ddr4", "ram", "RAM DDR4"));
         when(search.enabled()).thenReturn(true);
         when(search.search("RAM")).thenReturn(List.of(
+                new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null),
+                new ProductSearch.Product("RAM Kingston Fury Beast 8GB DDR4 3200", "A", 800_000L, "https://a.vn/ram8", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("RAM Kingston Fury Beast 16GB DDR4 3200", "A", 1_500_000L, "https://a.vn/ram16", null),
                 new ProductSearch.Product("RAM Kingston Fury Beast 8GB DDR4 3200", "A", 800_000L, "https://a.vn/ram8", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1572,10 +1639,16 @@ class ChatServiceTests {
         when(search.search("hàng")).thenReturn(List.of(
                 new ProductSearch.Product("CPU Intel Core i3-12100 Tray", "A", 3_000_000L, "https://a.vn/cpu", null),
                 new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("CPU Intel Core i3-12100 Tray", "A", 3_000_000L, "https://a.vn/cpu", null),
+                new ProductSearch.Product("Ram SSTC 16GB DDR4 3200MHz", "A", 3_390_000L, "https://a.vn/ram16", null)));
         // Món hạ phải xác nhận còn hàng trên trang (MVP)
         when(search.offer("https://b.vn/ram8")).thenReturn(new com.smartcarepc.backend.service.price.Offer(
                 "Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, null, "https://b.vn/ram8", null, true, 36, java.time.Instant.now()));
         when(search.search("RAM DDR4 8GB")).thenReturn(List.of(
+                new ProductSearch.Product("Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, "https://b.vn/ram8", null),
+                new ProductSearch.Product("Bộ Nhớ Máy Chủ Kingston KSM 8GB DDR4 ECC", "B", 900_000L, "https://b.vn/ecc8", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("Ram Kingston Fury Beast 8GB DDR4 3200", "B", 1_200_000L, "https://b.vn/ram8", null),
                 new ProductSearch.Product("Bộ Nhớ Máy Chủ Kingston KSM 8GB DDR4 ECC", "B", 900_000L, "https://b.vn/ecc8", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1617,6 +1690,9 @@ class ChatServiceTests {
         when(components.findByCode("tower_air_155")).thenReturn(part("tower_air_155", "cooler", "Tản khí"));
         when(search.enabled()).thenReturn(true);
         when(search.search("hàng")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i3 12100 Box", "A", 3_590_000L, "https://a.vn/cpu", null),
+                new ProductSearch.Product("Tản nhiệt khí Jonsbo CR-1200E", "A", 250_000L, "https://a.vn/tan", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("CPU Intel Core i3 12100 Box", "A", 3_590_000L, "https://a.vn/cpu", null),
                 new ProductSearch.Product("Tản nhiệt khí Jonsbo CR-1200E", "A", 250_000L, "https://a.vn/tan", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1757,7 +1833,12 @@ class ChatServiceTests {
         when(search.enabled()).thenReturn(true);
         when(search.search("CPU")).thenReturn(List.of(
                 new ProductSearch.Product("CPU Intel Core i5-13400 Box", "A", 5_690_000L, "https://a.vn/i5", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("CPU Intel Core i5-13400 Box", "A", 5_690_000L, "https://a.vn/i5", null)));
         when(search.search("CPU Intel Core i3 12100")).thenReturn(List.of(
+                new ProductSearch.Product("CPU Intel Core i3-12100F Box", "B", 2_000_000L, "https://b.vn/i3f", null),
+                new ProductSearch.Product("CPU Intel Core i3-12100 Box", "B", 2_900_000L, "https://b.vn/i3", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("CPU Intel Core i3-12100F Box", "B", 2_000_000L, "https://b.vn/i3f", null),
                 new ProductSearch.Product("CPU Intel Core i3-12100 Box", "B", 2_900_000L, "https://b.vn/i3", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -1786,7 +1867,8 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 1TB", "A", 1_500_000L, "https://a.vn/1", null)));
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 1_500_000L, "https://a.vn/1", null)));
+        verifiedOffers(List.of(new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 1_500_000L, "https://a.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         String item = "{\"code\":\"ssd_m2_2280\",\"spec\":\"1 TB\",\"reason\":\"Đủ\",\"product_id\":\"s1-1\"}";
         var calls = new ArrayList<Map<String, Object>>();
@@ -1819,7 +1901,9 @@ class ChatServiceTests {
         when(components.findByCode("case_mini_sff")).thenReturn(part("case_mini_sff", "case", "Vỏ Mini / SFF"));
         when(search.enabled()).thenReturn(true);
         when(search.search("vỏ")).thenReturn(List.of(new ProductSearch.Product("Vỏ máy tính EDRA ECS1105 Micro-ATX", "A", 290_000L, "https://a.vn/v", null)));
+        verifiedOffers(List.of(new ProductSearch.Product("Vỏ máy tính EDRA ECS1105 Micro-ATX", "A", 290_000L, "https://a.vn/v", null)));
         when(search.search("vỏ máy tính mini ITX")).thenReturn(List.of(new ProductSearch.Product("Vỏ máy tính Jonsbo A4 Mini-ITX", "B", 2_500_000L, "https://b.vn/itx", null)));
+        verifiedOffers(List.of(new ProductSearch.Product("Vỏ máy tính Jonsbo A4 Mini-ITX", "B", 2_500_000L, "https://b.vn/itx", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"vỏ\"}"), toolCall("p1", "propose_build", """
                 {"tier":"balanced","summary":"Mini","budget_vnd":20000000,"items":[{"code":"case_compact_tower","spec":"vỏ nhỏ","reason":"Gọn","product_id":"s1-1"}]}
@@ -1838,8 +1922,11 @@ class ChatServiceTests {
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 1TB", "A", 1_500_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 1TB", "B", 1_400_000L, "https://b.vn/1", null)));
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 1_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 1TB M.2 NVMe", "B", 1_400_000L, "https://b.vn/1", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 1_500_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 1TB M.2 NVMe", "B", 1_400_000L, "https://b.vn/1", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         var calls = new ArrayList<Map<String, Object>>();
         for (String[] t : List.of(new String[] { "balanced", "s1-1" }, new String[] { "quality", "s1-2" })) {
@@ -1860,9 +1947,9 @@ class ChatServiceTests {
     void dongGioiThieuPhuongAnLayTuTheVaBoLoiLechThe() {
         // v19 / n2: trợ lý tả phương án đã bị ẩn và ghi tổng cũ; giờ app dựng dòng từng phương án từ thẻ
         var line = new Line("ssd_m2_2280", "ssd", "SSD", 1, "1TB", null, 1_500_000L, 1_500_000L, null, "https://a.vn/1",
-                "SSD Kingston NV3 1TB", "A", true, null, null, List.of(), true);
+                "SSD Kingston NV3 1TB M.2 NVMe", "A", true, null, null, List.of(), true);
         var line2 = new Line("ssd_m2_2280", "ssd", "SSD", 1, "1TB", null, 2_390_000L, 2_390_000L, null, "https://b.vn/1",
-                "SSD Samsung 990 EVO 1TB", "B", true, null, null, List.of(), true);
+                "SSD Samsung 990 EVO 1TB M.2 NVMe", "B", true, null, null, List.of(), true);
         var b = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1, List.of(), List.of(), null);
         var q = new ChatResponse.BuildCard(List.of(line2), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1, List.of(), List.of(), null);
         String ai = "Mình hiểu bạn cần máy học, ngân sách 2 triệu.\n\n- **Phù hợp cho bạn - 25,0 triệu:** vỏ kính, Ryzen 5 5600\n- **Chất lượng - 40 triệu**\n\nNhớ xả tĩnh điện trước khi lắp."
@@ -1915,7 +2002,7 @@ class ChatServiceTests {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
-        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 1TB", "A", 25_000_000L, "https://a.vn/ssd", null)));
+        when(search.search("SSD")).thenReturn(List.of(new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 25_000_000L, "https://a.vn/ssd", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p", "propose_build", """
                 {"tier":"balanced","summary":"Học","budget_vnd":20000000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-1"}]}
@@ -1934,8 +2021,11 @@ class ChatServiceTests {
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 1TB", "A", 19_000_000L, "https://a.vn/a", null),
-                new ProductSearch.Product("SSD B 1TB", "B", 25_000_000L, "https://b.vn/b", null)));
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 19_000_000L, "https://a.vn/a", null),
+                new ProductSearch.Product("SSD B 1TB M.2 NVMe", "B", 25_000_000L, "https://b.vn/b", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 19_000_000L, "https://a.vn/a", null),
+                new ProductSearch.Product("SSD B 1TB M.2 NVMe", "B", 25_000_000L, "https://b.vn/b", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
         reply(toolCall("s", "search_products", "{\"query\":\"SSD\"}"), toolCall("p1", "propose_build", """
                 {"tier":"cheap","summary":"Học","budget_vnd":20000000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-1"}]}
@@ -2053,7 +2143,7 @@ class ChatServiceTests {
 
     @Test
     void chiConBanVuotNganSachThiNoiRoKhoanVuot() {
-        var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 2_500_000L, 2_500_000L, null, "https://a.vn/ssd", "SSD A 1TB", "A");
+        var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 2_500_000L, 2_500_000L, null, "https://a.vn/ssd", "SSD A 1TB M.2 NVMe", "A");
         var card = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1);
         assertThat(ChatService.withTierRows("Mình hiểu bạn cần máy học.", List.of(card)))
                 .contains("tham khảo, vượt ngân sách 0,5 triệu").doesNotContain("gợi ý chính");
@@ -2061,7 +2151,7 @@ class ChatServiceTests {
 
     @Test
     void khongGiuSoTienTietKiemChoThayDoiChuaKiemTra() {
-        var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 1_000_000L, 1_000_000L, null, "https://a.vn/ssd", "SSD A 1TB", "A");
+        var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 1_000_000L, 1_000_000L, null, "https://a.vn/ssd", "SSD A 1TB M.2 NVMe", "A");
         var card = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1);
         String out = ChatService.withTierRows("Mình hiểu bạn cần máy học, ngân sách 2 triệu.\n\n"
                 + "Bỏ bộ quạt thêm sẽ bớt khoảng 690.000đ vì vỏ có quạt sẵn dù chưa kiểm tra.", List.of(card));
@@ -2111,9 +2201,15 @@ class ChatServiceTests {
         when(components.findByCode("gpu_240")).thenReturn(part("gpu_240", "gpu", "GPU"));
         when(search.enabled()).thenReturn(true);
         when(search.search("SSD")).thenReturn(List.of(
-                new ProductSearch.Product("SSD A 1TB", "A", 3_000_000L, "https://a.vn/1", null),
-                new ProductSearch.Product("SSD B 2TB", "B", 6_000_000L, "https://b.vn/2", null)));
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 3_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 2TB M.2 NVMe", "B", 6_000_000L, "https://b.vn/2", null)));
+        verifiedOffers(List.of(
+                new ProductSearch.Product("SSD A 1TB M.2 NVMe", "A", 3_000_000L, "https://a.vn/1", null),
+                new ProductSearch.Product("SSD B 2TB M.2 NVMe", "B", 6_000_000L, "https://b.vn/2", null)));
         when(search.search("GPU")).thenReturn(List.of(
+                new ProductSearch.Product("MSI RTX 4060 8GB", "A", 9_000_000L, "https://a.vn/gpu", null),
+                new ProductSearch.Product("Ninja RTX 3060 12GB", "B", 10_000_000L, "https://b.vn/gpu", null)));
+        verifiedOffers(List.of(
                 new ProductSearch.Product("MSI RTX 4060 8GB", "A", 9_000_000L, "https://a.vn/gpu", null),
                 new ProductSearch.Product("Ninja RTX 3060 12GB", "B", 10_000_000L, "https://b.vn/gpu", null)));
         when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
@@ -2130,7 +2226,8 @@ class ChatServiceTests {
                 answer("Xong."), answer("Vẫn vậy."));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 30 triệu")), null, null, "advice"));
         assertThat(res.build().tier()).isEqualTo("balanced");
-        assertThat(res.options()).isNull();
+        assertThat(res.options()).noneMatch(option -> "quality".equals(option.tier()));
+        assertThat(res.build().items()).filteredOn(item -> "gpu".equals(item.category())).allSatisfy(item -> assertThat(item.productName()).contains("RTX 4060"));
         assertThat(res.reply()).contains("Phương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp");
     }
 
@@ -2141,7 +2238,7 @@ class ChatServiceTests {
         assertThat(ChatService.qualityUpgrade("psu", "Thermalright SFX 650W Gold", 1, "Thermalright SFX 850W Gold", 1)).isFalse();
         assertThat(ChatService.qualityUpgrade("ram", "RAM SSTC 16GB DDR4", 2, "RAM Corsair 16GB DDR4", 2)).isFalse();
         assertThat(ChatService.qualityUpgrade("ram", "RAM SSTC 16GB DDR4", 1, "RAM SSTC 16GB DDR4", 2)).isTrue();
-        assertThat(ChatService.qualityUpgrade("ssd", "SSD A 512GB", 1, "SSD B 1TB", 1)).isTrue();
+        assertThat(ChatService.qualityUpgrade("ssd", "SSD A 512GB M.2 NVMe", 1, "SSD B 1TB M.2 NVMe", 1)).isTrue();
     }
 
     @Test
@@ -2151,9 +2248,9 @@ class ChatServiceTests {
         var cpu = core.apply("cpu", "Intel Core i5 12400F");
         var gpu = core.apply("gpu", "RTX 4060 8GB");
         var ram = core.apply("ram", "RAM Corsair 16GB DDR4");
-        var small = core.apply("ssd", "SSD A 512GB");
+        var small = core.apply("ssd", "SSD A 512GB M.2 NVMe");
         var large = new Line("ssd", "ssd", "SSD", 1, null, null, 8_000_000L, 8_000_000L, null,
-                "https://a.vn/large", "SSD A 4TB", "A", true, 36, null, List.of(), true);
+                "https://a.vn/large", "SSD A 4TB M.2 NVMe", "A", true, 36, null, List.of(), true);
         var cheap = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, small), true, List.of(), List.of(), null, 30_000_000L, null, "cheap", 1);
         var balanced = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, large), true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
         assertThat(ChatService.recommendedCard(List.of(cheap, balanced))).isSameAs(cheap);
@@ -2446,6 +2543,9 @@ class ChatServiceTests {
 
     @Test
     void giaVoLyBiLoai() {
+        assertThat(ChatService.fitsCode("ssd_m2_2280", "SSD Biwin M100-512GB (550 MB/s - 480 MB/s)")).isFalse();
+        assertThat(ChatService.fitsCode("ssd_m2_2280", "SSD SATA 2.5 inch 512GB")).isFalse();
+        assertThat(ChatService.fitsCode("ssd_m2_2280", "SSD SSTC 512GB M.2 NVMe")).isTrue();
         // Ca thật: nguồn 725.000đ đọc thành 725.000.000đ; RAM DDR5 ở dòng RAM DDR4
         assertThat(ChatService.plausible("psu", 725_000_000L)).isFalse();
         // Mã ram_ddr4 là mô hình 3D chung cho mọi thanh RAM: DDR5 vẫn hợp lệ (loại DDR so với bo ở ProductRules)
@@ -2463,8 +2563,8 @@ class ChatServiceTests {
     @Test
     void ssdKhongGhiDungLuongKhongCoiLaCungThongSo() {
         // Ca thật: "Kingston KC3000 2 2280 NVMe PCIe Gen4" là bản 4TB 9,45 triệu
-        assertThat(ChatService.sameSpec("ssd", "SSD Kingston NV3 1TB", "Ổ cứng SSD Kingston KC3000 2 2280 NVMe PCIe Gen4")).isFalse();
-        assertThat(ChatService.sameSpec("ssd", "SSD Kingston NV3 1TB", "SSD Lexar NM620 1TB")).isTrue();
+        assertThat(ChatService.sameSpec("ssd", "SSD Kingston NV3 1TB M.2 NVMe", "Ổ cứng SSD Kingston KC3000 2 2280 NVMe PCIe Gen4")).isFalse();
+        assertThat(ChatService.sameSpec("ssd", "SSD Kingston NV3 1TB M.2 NVMe", "SSD Lexar NM620 1TB")).isTrue();
     }
 
     @Test
@@ -2569,6 +2669,10 @@ class ChatServiceTests {
 
     @Test
     void hangCardNguoiDungDoi() {
+        assertThat(ChatService.gpuVendor(List.of("mình muốn sử dụng 16gb vẫn dùng RTX cơ"))).isEqualTo("nvidia");
+        assertThat(ChatService.gpuVendor(List.of("mình muốn thích VGA từ bên hãng NVIDA mình chưa ưa chuộng VGA nhà AMD cho làm bạn giúp mình chọn lại theo NVIDA VGA được ko")))
+                .isEqualTo("nvidia");
+        assertThat(ChatService.gpuVendor(List.of("Không dùng NVIDIA, chọn card AMD"))).isEqualTo("amd");
         assertThat(ChatService.gpuVendor(List.of("Đổi sang card AMD giúp mình", "Mình chơi game 25 triệu, CPU Intel"))).isEqualTo("amd");
         assertThat(ChatService.gpuVendor(List.of("Thôi hãng nào cũng được", "Đổi sang card AMD"))).isNull();
         assertThat(ChatService.gpuVendor(List.of("Mình muốn dùng CPU AMD Ryzen, chơi game 25 triệu"))).as("CPU AMD không phải card AMD").isNull();
@@ -2590,6 +2694,120 @@ class ChatServiceTests {
         assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isEqualTo(6);
         assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 25 triệu.")).vramMin())
                 .as("game nhẹ: card 6GB đủ").isEqualTo(6);
+    }
+
+    @Test
+    void followUpHaiLinhKienGiuRtxVaDoiRamCu() {
+        var n = ChatService.needs(List.of("mình muốn sử dụng 16gb vẫn dùng RTX cơ", "RAM32GB SSD1TB",
+                "mình muốn thích VGA từ bên hãng NVIDA mình chưa ưa chuộng VGA nhà AMD cho làm bạn giúp mình chọn lại theo NVIDA VGA được ko",
+                "mình làm 3D/render nhé", "Mình học thiết kế đồ họa có khoảng 20 triệu"));
+        assertThat(n.allowedVendor()).isEqualTo("nvidia");
+        assertThat(n.ramMin()).isEqualTo(16);
+        assertThat(n.ssdMin()).isEqualTo(1000);
+        assertThat(n.vramMin()).isEqualTo(8);
+        assertThat(n.explicitGpuVram()).isFalse();
+        assertThat(ChatService.needs(List.of("mình muốn RTX16GB", "RAM32GB chơi game")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("mình muốn 16GB VRAM", "RAM32GB chơi game")).ramMin()).isEqualTo(32);
+    }
+
+    @Test
+    void daRoPhotoshop2DThiKhongNhanCauHoiLai2D3D() {
+        String question="Bạn làm 2D hay 3D/render, dùng phần mềm gì?";
+        reply(answer(question), answer("Đang dựng cấu hình với thông tin đã có."));
+        var out=service.reply(new ChatRequest(List.of(new Message("user","PC Photoshop thiết kế2D, 30 triệu, RAM32GB SSD1TB dùng RTX")),null,null,"advice"));
+        assertThat(out.reply()).isNotEqualTo(question);
+        assertThat(sent).hasSize(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC Photoshop thiết kế2D30 triệu"))).isEqualTo(1);
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game25 triệu"))).isZero();
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi Valorant25 triệu"))).isEqualTo(2);
+    }
+
+    @Test
+    void theCauHinhLayAnhTuTrangBanKhongGiuQuaTangTuTimKiem() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        when(components.findByCode("gpu_240")).thenReturn(part("gpu_240","gpu","Card"));
+        when(search.enabled()).thenReturn(true);
+        var p = new ProductSearch.Product("VGA ASUS RTX 3060 12GB", "A", 7_890_000L,
+                "https://a.vn/3060", "https://a.vn/gift.png");
+        when(search.search(any())).thenReturn(List.of(p));
+        when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(), "A", p.priceVnd(), null,
+                p.url(), "https://a.vn/actual-3060.png", true, 36, java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"card\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Game","budget_vnd":20000000,"items":[{"code":"gpu_240","product_id":"s1-1"}]}
+                """),answer("Xong."),answer("Xong."));
+        var out=service.reply(new ChatRequest(List.of(new Message("user","Chơi game20 triệu dùng RTX")),null,null,"advice"));
+        assertThat(out.build()).isNotNull();
+        assertThat(out.build().items().getFirst().imageUrl()).isEqualTo("https://a.vn/actual-3060.png");
+    }
+
+    @Test
+    void thietKeVuotTranChiBoIgpuGiuCungDongCpuKhiCoCardRoi() {
+        var out=creatorIgpuBudgetResponse("Máy Blender render3D12 triệu, dùng RTX");
+        assertThat(out.build()).isNotNull();
+        assertThat(out.build().items()).anySatisfy(x -> {
+            assertThat(x.category()).isEqualTo("cpu");assertThat(x.productName()).contains("12400F");
+        });
+    }
+
+    @Test
+    void thietKeChotCpuThiKhongTuBoIgpuDeEpNganSach() {
+        assertThat(creatorIgpuBudgetResponse("Máy Blender render3D12 triệu, phải dùng CPU Intel Core i5-12400, dùng RTX").build()).isNull();
+    }
+
+    @Test
+    void thietKeThuI5DoiMoiGiaReHonTruocKhiBaoThieuNganSach() {
+        var out=creatorIgpuBudgetResponse("Máy Blender render3D12 triệu, dùng RTX", true);
+        assertThat(out.build()).isNotNull();
+        assertThat(out.build().items()).filteredOn(i -> "cpu".equals(i.category()))
+                .allSatisfy(i -> assertThat(i.productName()).contains("13400F"));
+    }
+
+    private ChatResponse creatorIgpuBudgetResponse(String user) {
+        return creatorIgpuBudgetResponse(user, false);
+    }
+
+    @Test
+    void epGiaKhongLayLaiGiaTimKiemKhiTrangDaTuChoiBienThe() {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280","ssd","SSD"));
+        when(search.enabled()).thenReturn(true);
+        var base=new ProductSearch.Product("SSD Samsung 1TB M.2 NVMe","A",2_000_000L,"https://a.vn/base",null);
+        var ambiguous=new ProductSearch.Product("SSD Samsung 500GB / 1TB / 2TB M.2 NVMe","A",1_500_000L,"https://a.vn/multi",null);
+        var valid=new ProductSearch.Product("SSD Samsung 1TB M.2 NVMe","B",1_800_000L,"https://b.vn/one",null);
+        when(search.search(any())).thenReturn(List.of(base,ambiguous,valid));
+        verifiedOffers(List.of(base,valid));
+        when(search.offer(ambiguous.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                ambiguous.title(),"A",null,null,ambiguous.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"SSD\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Học","budget_vnd":1900000,"items":[{"code":"ssd_m2_2280","spec":"1TB","product_id":"s1-1"}]}
+                """),answer("Xong."),answer("Xong."));
+        var out=service.reply(new ChatRequest(List.of(new Message("user","Máy học SSD1TB 1,9 triệu")),null,null,"advice"));
+        assertThat(out.build()).isNotNull();
+        assertThat(out.build().items().getFirst().sourceUrl()).isEqualTo(valid.url());
+        assertThat(out.build().items().getFirst().priceMaxVnd()).isEqualTo(1_800_000L);
+        assertThat(out.build().items().getFirst().priceChecked()).isTrue();
+    }
+
+    private ChatResponse creatorIgpuBudgetResponse(String user, boolean newerCheaper) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        when(components.findByCode("cpu_std")).thenReturn(part("cpu_std","cpu","CPU"));
+        when(components.findByCode("gpu_240")).thenReturn(part("gpu_240","gpu","GPU"));
+        when(search.enabled()).thenReturn(true);
+        var products=new ArrayList<>(List.of(new ProductSearch.Product("CPU Intel Core i5-12400","A",5_690_000L,"https://a.vn/12400",null),
+                new ProductSearch.Product("CPU Intel Core i5-12400F","A",3_790_000L,"https://a.vn/12400f",null),
+                new ProductSearch.Product("CPU Intel Core i3-12100F","A",2_250_000L,"https://a.vn/12100f",null),
+                new ProductSearch.Product("VGA ASUS RTX 3060 12GB","A",7_890_000L,"https://a.vn/3060",null)));
+        if (newerCheaper) products.add(new ProductSearch.Product("CPU Intel Core i5-13400F","A",3_690_000L,"https://a.vn/13400f",null));
+        when(search.search(any())).thenReturn(products);
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        for(var p:products) when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"3D","budget_vnd":12000000,"items":[{"code":"cpu_std","product_id":"s1-1"},{"code":"gpu_240","product_id":"s1-4"}]}
+                """),answer("Xong."),answer("Xong."));
+        return service.reply(new ChatRequest(List.of(new Message("user",user)),null,null,"advice"));
     }
 
     @Test
@@ -2938,6 +3156,15 @@ class ChatServiceTests {
                 new Message("assistant","Đã ghi nhận game nhẹ."),new Message("user","Đổi sang máy thiết kế30 triệu")),null,null,"advice"));
         assertThat(res.reply()).contains("2D","3D");
         verify(client,org.mockito.Mockito.times(1)).complete(any());
+    }
+
+    /** Các ca kiểm ngân sách/linh kiện dùng trang giả có giá và còn hàng; ca âm ghi đè offer riêng. */
+    private void verifiedOffers(List<ProductSearch.Product> products) {
+        for (var p : products) {
+            if (p.url() == null || p.priceVnd() == null || search.offer(p.url()) != null) continue;
+            when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(
+                    p.title(), p.shop(), p.priceVnd(), null, p.url(), p.imageUrl(), true, 36, java.time.Instant.now()));
+        }
     }
 
     private static ProductSearch.Product product(String title, long price) {

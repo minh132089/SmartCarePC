@@ -9,6 +9,6 @@ public final class OfferEvidence {
     public static boolean verified(String expectedTitle, Offer offer, boolean pageChecked) {
         return pageChecked && offer != null && offer.priceVnd() != null && offer.priceVnd() > 0
                 && offer.priceVnd() <= PriceEngine.MAX_PRICE
-                && !Boolean.FALSE.equals(offer.inStock()) && PriceEngine.samePage(expectedTitle, offer.title());
+                && Boolean.TRUE.equals(offer.inStock()) && PriceEngine.samePage(expectedTitle, offer.title());
     }
 }

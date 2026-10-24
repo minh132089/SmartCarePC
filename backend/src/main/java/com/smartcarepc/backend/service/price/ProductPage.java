@@ -48,14 +48,18 @@ final class ProductPage {
                 if (prices.isEmpty()) continue;
                 Long price = prices.size() == 1 ? prices.iterator().next() : null;
                 if (prices.size() == 1) price = onlinePrice(doc, price);
+                if (ambiguousSsdCapacity(name)) price = null;
                 String availability = text(offer, "availability");
                 Boolean inStock = availability == null ? null
                         : availability.contains("InStock") || availability.contains("LimitedAvailability")
                                 ? Boolean.TRUE
                                 : availability.matches(".*(OutOfStock|SoldOut|Discontinued|PreOrder|BackOrder).*") ? Boolean.FALSE : null;
                 String image = product.path("image").isArray() ? text(product.path("image"), 0) : text(product, "image");
-                if (image == null) image = doc.select("meta[property=og:image]").attr("content");
-                if (inStock == null) inStock = stock(doc);
+                image = productImage(doc, image);
+                // Trạng thái bán hiển thị thắng metadata SEO cũ, kể cả khi nơi khác trên trang có nút mua.
+                Boolean shownStock = stock(doc);
+                if (inStock == null || Boolean.FALSE.equals(shownStock)) inStock = shownStock;
+                if (waitOrder(doc)) inStock = null;
                 return new Offer(org.jsoup.parser.Parser.unescapeEntities(name.strip(), false), Shops.name(url), price, null, url,
                         image == null || image.isBlank() ? null : image, inStock, warranty(doc.body() == null ? "" : doc.body().text()), at);
             }
@@ -80,11 +84,30 @@ final class ProductPage {
         if (raw.isBlank() && doc.selectFirst("[itemprop=price][content]") != null) raw = doc.selectFirst("[itemprop=price][content]").attr("content");
         Long price = Prices.parse(raw);
         price = onlinePrice(doc, price);
+        if (ambiguousSsdCapacity(name)) price = null;
         boolean product = price != null || doc.select("meta[property=og:type]").attr("content").toLowerCase().contains("product");
         if (!product) return null;
-        String image = doc.select("meta[property=og:image]").attr("content");
+        String image = productImage(doc, null);
         return new Offer(name.strip(), Shops.name(url), price != null && price >= 10_000 ? price : null, null, url,
-                image.isBlank() ? null : image, stock(doc), warranty(doc.body() == null ? "" : doc.body().text()), at);
+                image, stock(doc), warranty(doc.body() == null ? "" : doc.body().text()), at);
+    }
+
+    private static String productImage(Document doc, String structured) {
+        String image = structured;
+        if (image == null || image.isBlank()) image = doc.select("meta[property=og:image:secure_url]").attr("content");
+        if (image.isBlank()) image = doc.select("meta[property=og:image]").attr("content");
+        if (image.isBlank()) return null;
+        String resolved = doc.location().isBlank() ? image : java.net.URI.create(doc.location()).resolve(image).toString();
+        return resolved.replaceFirst("^http://", "https://");
+    }
+
+    /** Tên SSD liệt kê 500GB / 1TB / 2TB không xác định được giá thuộc biến thể nào. */
+    private static boolean ambiguousSsdCapacity(String name) {
+        if (!"ssd".equals(PriceEngine.kind(PriceEngine.norm(name)))) return false;
+        var capacities = new java.util.HashSet<Long>();
+        var matcher = Pattern.compile("(?i)\\b(\\d+)\\s*(gb|tb)\\b").matcher(name);
+        while (matcher.find()) capacities.add(Long.parseLong(matcher.group(1)) * (matcher.group(2).equalsIgnoreCase("TB") ? 1000 : 1));
+        return capacities.size() > 1;
     }
 
     /** H1 có thể giữ mã kit mà metadata SEO lược bỏ; chỉ lấy tên dài hơn của cùng sản phẩm. */
@@ -101,6 +124,12 @@ final class ProductPage {
 
     /** Giá kênh mua trực tuyến hiển thị trên trang có thể khác JSON-LD cũ hoặc giá mua cả bộ. */
     private static Long onlinePrice(Document doc, Long fallback) {
+        if (doc.body() != null && Pattern.compile("sản phẩm chỉ bán khi build trọn bộ máy",
+                Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE).matcher(doc.body().text()).find()) return null;
+        // Có giá kèm main / cả bộ nhưng chưa đối chiếu điều kiện mua của cửa hàng.
+        if (doc.select(".list-info-offter").stream()
+                .anyMatch(e -> Pattern.compile("giá\\s*build\\s*pc", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+                        .matcher(e.text()).find())) return null;
         var shown = doc.select(".price-online strong");
         if (shown.isEmpty()) return fallback;
         java.util.Set<Long> values = new java.util.HashSet<>();
@@ -116,6 +145,10 @@ final class ProductPage {
      * mua (không bị khoá) là còn hàng; không có nút mua mà trang ghi "hết hàng / ngừng kinh doanh" là hết; còn lại null.
      */
     static Boolean stock(Document doc) {
+        if (waitOrder(doc)) return null;
+        // Phúc Anh vẫn giữ JSON-LD InStock và giá trong form ẩn sau khi đã ngừng bán.
+        if (doc.select(".stop-buy, .button-buy-detail, .product-status, .product-availability").stream()
+                .anyMatch(e -> SOLD_OUT.matcher(e.text()).find())) return false;
         String meta = (doc.select("meta[property=product:availability], meta[property=og:availability]").attr("content") + " "
                 + doc.select("[itemprop=availability]").attr("href") + doc.select("[itemprop=availability]").attr("content")).toLowerCase();
         if (meta.contains("outofstock") || meta.contains("out of stock") || meta.contains("oos") || meta.contains("soldout")) return false;
@@ -125,6 +158,13 @@ final class ProductPage {
                 .anyMatch(e -> !e.hasAttr("disabled") && BUY.matcher(e.text() + " " + e.attr("value")).find());
         if (buy) return true;
         return doc.body() != null && SOLD_OUT.matcher(doc.body().text()).find() ? Boolean.FALSE : null;
+    }
+
+    private static boolean waitOrder(Document doc) {
+        // Chỉ xét CTA của sản phẩm chính; gallery ẩn và sản phẩm liên quan có thể vẫn chứa nút mua.
+        return !doc.select("#js-pd-btn-list .btn-wait-order, form.cart .openContactPopup").isEmpty()
+                || doc.select("#register-in-advance-form").stream()
+                        .anyMatch(e -> e.text().contains("khi chúng tôi có hàng"));
     }
 
     /** Số tháng bảo hành ghi trên trang ("Bảo hành 3 năm" -> 36), null nếu không thấy */

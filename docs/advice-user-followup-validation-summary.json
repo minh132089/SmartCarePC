@@ -1,0 +1,79 @@
+{
+  "status": "TARGETED_REGRESSION_PASSED",
+  "liveCases": 3,
+  "decisionPassed": 3,
+  "advicePassed": 3,
+  "priceObservations": 26,
+  "pricePassed": 26,
+  "uniqueProductUrls": 26,
+  "maxCaptureGapSeconds": 191.462268,
+  "priceToleranceVnd": 0,
+  "sourceMatches": true,
+  "jarMatches": true,
+  "jarSha256": "995f58aefcf99619af642b7fc1441195a211f445250a2ef8855d7be4b2fe2854",
+  "sourceSha256": {
+    "backend/src/main/java/com/smartcarepc/backend/service/ai/ChatService.java": "806c5169c463c72497b2e766d986af7d0e9de2cd4444c7b552074d42b4bd70a2",
+    "backend/src/main/java/com/smartcarepc/backend/service/ai/ProductSearch.java": "1e026c18263596744cbc677dac61050ed4c13d3ad119bba7868ed5169065dcb7",
+    "backend/src/main/java/com/smartcarepc/backend/service/price/Offer.java": "5f2f5183c8d73bd4641300fa5571f5da740687775749bc73f7ce18499c45e818",
+    "backend/src/main/java/com/smartcarepc/backend/service/price/OfferEvidence.java": "551a763e9b62db086bfac7f38a6cd19930dbab9bd1598a8da463067e5e79a081",
+    "backend/src/main/java/com/smartcarepc/backend/service/price/ProductPage.java": "c3df115326ee30b57c116b028dccef5c80f7782c8724b379982825501c4a149e",
+    "backend/src/main/java/com/smartcarepc/backend/service/price/PriceEngine.java": "29829096d9691abfe2590da021310e431c9c00864cf7432901332a3a48252d0d",
+    "backend/src/main/java/com/smartcarepc/backend/service/price/ShopSearch.java": "8ca0fc746e68a833a860c140ecb07e74a23e32d7434df72c1a57fa988245726e",
+    "src/ui/chat/Proposal.tsx": "ca8cfa4568c5b49861ac2a30068ddd1804da8e4076e4c9544789bd3e0c90636a",
+    "tools/evaluate_advice.py": "54d28bd01be13e06e7e25f1e6d9f0cd3a11167e000f5c91da98f7d53dfbe3f5e",
+    "tools/capture_advice_prices.py": "7dad40b819b9c70e24747bb018bea24db851684c0442cdae1b755fd8241fcff2"
+  },
+  "backendTests": {
+    "tests": 290,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "suites": 18
+  },
+  "pythonTests": 23,
+  "cases": {
+    "ram-2x16": {
+      "jobId": "7971edfa-1843-4d0a-861f-edcedf583ae4",
+      "issues": [],
+      "priceIssues": [],
+      "advicePassed": true,
+      "adviceReview": {
+        "passed": true,
+        "notes": "Known Photoshop/2D not asked again. Every tier has two physical16GB DDR4 modules, RTX, SSD>=1TB and verified prices. Primary29628000<=30m; quality30949000 clearly over budget. Pack fan pricing counted once."
+      },
+      "cardCount": 3,
+      "primaryTotalVnd": 29628000
+    },
+    "ram16-rtx": {
+      "jobId": "b7739fe7-9ccc-48d7-9262-39d92d64b222",
+      "issues": [],
+      "priceIssues": [],
+      "advicePassed": true,
+      "adviceReview": {
+        "passed": true,
+        "notes": "Full fresh previous reply used. Latest RAM16 respected; RTX3060 in both tiers. Primary19518000 and quality19918000; cheap tier hidden with explanation. CPU/board upgrade names match cards, technical checks remain conditional."
+      },
+      "cardCount": 2,
+      "primaryTotalVnd": 19518000
+    },
+    "reject-amd-choose-nvida": {
+      "jobId": "81d15c86-8671-44e0-9e94-293500fdafa5",
+      "issues": [],
+      "priceIssues": [],
+      "advicePassed": true,
+      "adviceReview": {
+        "passed": true,
+        "notes": "NVIDA preference and rejection of AMD GPUs respected in every shown tier. Primary19918000<=20m with RAM16/SSD512. CPU cheaper i5 disclosed; GPU downgrade disclosed; cheap tier shortage explained, BIOS/mount/clearance conditional."
+      },
+      "cardCount": 2,
+      "primaryTotalVnd": 19918000
+    }
+  },
+  "scope": "Three fresh jobs on unchanged source in this final round. Internal, targeted regression, not a universal accuracy estimate. Stock means seller advertised availability at capture time; hardware remains conditional.",
+  "evidenceDirectory": "/Users/yuuki2/Documents/PCsmartcare-testloop/user-followup-20261024-round12",
+  "previousRoundsPreserved": 11,
+  "verifiedAt": "2026-10-24",
+  "reviewer": "Codex /root (internal)",
+  "frontendBuild": "TypeScript/Vite passed",
+  "frontendLint": "oxlint Proposal.tsx passed"
+}

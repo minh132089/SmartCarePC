@@ -58,6 +58,8 @@ def direct_evidence(url, path):
     path.write_text(html)
     page=PageText();page.feed(html)
     visible='\n'.join(page.text)
+    if re.search(r'sản phẩm (?:này )?(?:đã )?ngừng (?:kinh doanh|bán)', visible, re.I):
+        return next(iter(page.headings), ''), None, 'Sản phẩm đã ngừng kinh doanh trên trang bán; không dùng giá metadata hoặc form ẩn.'
     for script in page.scripts:
         try:nodes=list(product_nodes(json.loads(script)))
         except ValueError:continue
@@ -87,6 +89,8 @@ def price_excerpt(text, url, title=None):
     for i,line in enumerate(lines):
         if re.match(r'^(?:#+\s*)?(?:\*\*)?\[?Sản phẩm (?:đã xem|liên quan|tương tự|gợi ý)',line.strip(),re.I):
             lines=lines[:i];break
+    if re.search(r'giá\s*build\s*pc.*?(?:khi\s*kèm|khi\s*build|áp dụng)|sản phẩm chỉ bán khi build trọn bộ máy', ' '.join(lines), re.I):
+        return None, 'Có giá Build PC kèm điều kiện; cần đối chiếu điều kiện mua, không nhận giá này như giá bán lẻ.'
     candidates = []
     for i, line in enumerate(lines):
         # Giá trong danh sách liên quan / menu / ảnh không phải giá mua của trang này.
@@ -120,6 +124,9 @@ def capture(url, output):
             text = response.read().decode()
         path.write_text(text)
         title = next((line[7:] for line in text.splitlines() if line.startswith('Title: ')), '')
+        if re.search(r'sản phẩm (?:này )?(?:đã )?ngừng (?:kinh doanh|bán)', text, re.I):
+            return dict(url=url, title=title, capturedAt=at, snapshot=str(path), unitPriceVnd=None,
+                        inStock=False, excerpt='Sản phẩm đã ngừng kinh doanh trên trang bán.', reviewed=False)
         price, excerpt = price_excerpt(text, url)
         direct_path=None
         if price is None:

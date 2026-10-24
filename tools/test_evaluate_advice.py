@@ -6,12 +6,17 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 from urllib.error import URLError
-from capture_advice_prices import direct_evidence
+from capture_advice_prices import direct_evidence, price_excerpt
 from assemble_advice_gold import choose_price_label, stamp
 from evaluate_advice import acceptance_passed, evaluate_case, evaluate_prices, gpu_model, gpu_vendor, ram_shape
 
 
 class EvaluationTests(unittest.TestCase):
+
+    def test_conditional_build_price_is_not_a_retail_label(self):
+        text='# CPU Intel Core i5-13400F\n4.090.000đ\nGiá Build PC: 4.090.000đ Khi kèm B760M\nGiá bán lẻ rời CPU: 4.990.000đ'
+        self.assertIsNone(price_excerpt(text,'https://shop/cpu')[0])
+        self.assertIsNone(price_excerpt('# CPU Intel i5\n5.690.000đ\nSản phẩm chỉ bán khi build trọn bộ máy','https://shop/cpu')[0])
 
     def test_fury32_is_a_two_module_kit_even_if_seo_title_hides_sku(self):
         url='https://fptshop.com.vn/linh-kien/ram-kingston-fury-32-gb-ddr4-3200-mhz'
@@ -22,8 +27,9 @@ class EvaluationTests(unittest.TestCase):
         _,issues=evaluate_case({'expected':{'minRamGb':64}},{'options':[{'items':[line]}]})
         self.assertTrue(any('thiếu RAM' in issue for issue in issues))
         priced=dict(line,quantity=4,code='ram',priceMaxVnd=8780000,priceChecked=True,inStock=True,checkedAt='2026-10-23T08:00:00Z')
-        label={'url':url,'title':'RAM 32GB KF432C16BB1AK2/32','unitPriceVnd':4390000,'reviewed':True,'capturedAt':'2026-10-23T08:01:00Z'}
+        label={'url':url,'title':'RAM 32GB KF432C16BB1AK2/32','unitPriceVnd':4390000,'reviewed':True,'inStock':True,'capturedAt':'2026-10-23T08:01:00Z'}
         self.assertEqual(evaluate_prices({'id':'fury','prices':[label]},[{'items':[priced]}])[:2],(1,1))
+        self.assertEqual(evaluate_prices({'id':'fury','prices':[dict(label,unitPriceVnd=None)]},[{'items':[priced]}])[:2],(0,1))
 
     def test_sparkle_titan_cannot_use_small_gpu_model(self):
         line={'code':'gpu_240','category':'gpu','productName':'SPARKLE Intel Arc B580 TITAN OC SB580T-12GOC'}
@@ -33,7 +39,7 @@ class EvaluationTests(unittest.TestCase):
     def test_three_fan_pack_costs_one_pack_and_spares_are_allowed(self):
         line={'code':'fan120_argb','category':'fans','productName':'Bộ 3 quạt Xigmatek STARLINK ARGB BLACK',
               'quantity':3,'priceMaxVnd':490000,'priceChecked':True,'inStock':True,'sourceUrl':'https://shop/3fans','checkedAt':'2026-10-23T08:00:00Z'}
-        label={'url':line['sourceUrl'],'title':line['productName'],'unitPriceVnd':490000,'reviewed':True,'capturedAt':'2026-10-23T08:01:00Z'}
+        label={'url':line['sourceUrl'],'title':line['productName'],'unitPriceVnd':490000,'reviewed':True,'inStock':True,'capturedAt':'2026-10-23T08:01:00Z'}
         for qty,price in [(1,490000),(3,490000),(4,980000),(6,980000)]:
             self.assertEqual(evaluate_prices({'id':'fans','prices':[label]},[{'items':[dict(line,quantity=qty,priceMaxVnd=price)]}])[:2],(1,1))
         self.assertEqual(evaluate_prices({'id':'fans','prices':[label]},[{'items':[dict(line,priceMaxVnd=1470000)]}])[:2],(0,1))
@@ -56,7 +62,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(ram_shape(title),(2,16))
         line={'code':'ram','category':'ram','productName':title,'quantity':2,'sourceUrl':'https://shop/kit',
               'priceMaxVnd':4199000,'priceChecked':True,'inStock':True,'checkedAt':'2026-10-23T08:00:00Z'}
-        label={'url':'https://shop/kit','title':title,'unitPriceVnd':4199000,'reviewed':True,'capturedAt':'2026-10-23T08:01:00Z'}
+        label={'url':'https://shop/kit','title':title,'unitPriceVnd':4199000,'reviewed':True,'inStock':True,'capturedAt':'2026-10-23T08:01:00Z'}
         self.assertEqual(evaluate_prices({'id':'kit','prices':[label]},[{'items':[line]}])[:2],(1,1))
         bad=dict(line,quantity=1)
         self.assertEqual(evaluate_prices({'id':'kit','prices':[label]},[{'items':[bad]}])[:2],(0,1))
@@ -82,6 +88,18 @@ class EvaluationTests(unittest.TestCase):
                  patch('capture_advice_prices.subprocess.run',side_effect=subprocess.CalledProcessError(22,['curl'])):
                 with self.assertRaises(subprocess.CalledProcessError):direct_evidence('https://shop/ssd',path)
             self.assertFalse(path.exists())
+
+    def test_retired_offer_does_not_use_hidden_checkout_or_schema_price(self):
+        html='''<h1>RAM Lexar THOR 32GB (2x16GB)</h1>
+        <script type="application/ld+json">{"@type":"Product","name":"RAM Lexar THOR 32GB (2x16GB)","offers":{"price":"1999000","availability":"https://schema.org/InStock"}}</script>
+        <p class="stop-buy">Sản phẩm đã ngừng kinh doanh</p><p style="display:none">1.999.000 VND</p>'''.encode()
+        with tempfile.TemporaryDirectory() as folder:
+            with patch('capture_advice_prices.urllib.request.urlopen',side_effect=URLError('TLS reset')), \
+                 patch('capture_advice_prices.subprocess.run',return_value=subprocess.CompletedProcess([],0,stdout=html)):
+                title,price,excerpt=direct_evidence('https://shop/ram',Path(folder)/'page.html')
+            self.assertIn('Lexar',title)
+            self.assertIsNone(price)
+            self.assertIn('ngừng kinh doanh',excerpt)
 
     def test_trademark_symbols_do_not_change_gpu_model_or_hide_variants(self):
         for title in ['ASUS Dual GeForce RTX™ 4070 - 12GB GDDR6X', 'RTX® 4070 12GB']:
@@ -144,23 +162,23 @@ class EvaluationTests(unittest.TestCase):
     def test_price_needs_review_and_exact_same_time_value(self):
         line={'code':'gpu','category':'gpu','quantity':1,'sourceUrl':'https://shop/gpu','productName':'RTX 4060 8GB',
               'priceMaxVnd':9000000,'priceChecked':True,'inStock':True,'checkedAt':'2026-10-23T08:00:00Z'}
-        label={'url':'https://shop/gpu','title':'RTX 4060 8GB','unitPriceVnd':9000000,'capturedAt':'2026-10-23T08:01:00Z','reviewed':True}
+        label={'url':'https://shop/gpu','title':'RTX 4060 8GB','unitPriceVnd':9000000,'capturedAt':'2026-10-23T08:01:00Z','reviewed':True,'inStock':True}
         gold={'id':'a','prices':[label]};cards=[{'items':[line]}]
         self.assertEqual(evaluate_prices(gold,cards)[:2],(1,1))
-        for change in ({'reviewed':False},{'unitPriceVnd':8999999},{'capturedAt':'2026-10-23T08:11:00Z'}):
+        for change in ({'reviewed':False},{'inStock':False},{'inStock':None},{'unitPriceVnd':8999999},{'capturedAt':'2026-10-23T08:11:00Z'}):
             with self.subTest(change=change):
                 self.assertEqual(evaluate_prices({'id':'a','prices':[dict(label,**change)]},cards)[:2],(0,1))
 
     def test_ram_kit_price_is_per_pack(self):
         line={'code':'ram','category':'ram','quantity':2,'sourceUrl':'https://shop/ram','productName':'RAM 2x16GB DDR4',
               'priceMaxVnd':6000000,'priceChecked':True,'inStock':True,'checkedAt':'2026-10-23T08:00:00Z'}
-        label={'url':'https://shop/ram','title':'RAM 2x16GB DDR4','unitPriceVnd':6000000,'capturedAt':'2026-10-23T08:01:00Z','reviewed':True}
+        label={'url':'https://shop/ram','title':'RAM 2x16GB DDR4','unitPriceVnd':6000000,'capturedAt':'2026-10-23T08:01:00Z','reviewed':True,'inStock':True}
         self.assertEqual(evaluate_prices({'id':'kit','prices':[label]},[{'items':[line]}])[:2],(1,1))
 
     def test_reused_capture_does_not_hide_a_later_wrong_line(self):
         line={'code':'gpu','category':'gpu','quantity':1,'sourceUrl':'https://shop/gpu','productName':'RTX 4060 8GB',
               'priceMaxVnd':9000000,'priceChecked':True,'inStock':True,'checkedAt':'2026-10-23T08:00:00Z'}
-        label={'url':'https://shop/gpu','title':'RTX 4060 8GB','unitPriceVnd':9000000,'capturedAt':'2026-10-23T08:01:00Z','reviewed':True}
+        label={'url':'https://shop/gpu','title':'RTX 4060 8GB','unitPriceVnd':9000000,'capturedAt':'2026-10-23T08:01:00Z','reviewed':True,'inStock':True}
         gold={'id':'a','prices':[label]};seen={}
         self.assertEqual(evaluate_prices(gold,[{'items':[line]}],seen)[:2],(1,1))
         # Trừ lại quan sát đã tính đạt; không cộng mẫu thứ hai cho cùng trang/lần chụp.

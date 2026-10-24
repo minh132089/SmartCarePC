@@ -1,0 +1,90 @@
+[
+  {
+    "id": "ram-2x16",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC Photoshop thiết kế 2D, 30 triệu, RAM 32GB gồm 2x16GB DDR4, SSD1TB, dùng RTX."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "gpuVendor": "nvidia",
+      "minRamGb": 32,
+      "minSsdGb": 1000,
+      "minGpuVramGb": 6
+    }
+  },
+  {
+    "id": "ram16-rtx",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình học thiết kế đồ họa có khoảng 20 triệu"
+      },
+      {
+        "role": "assistant",
+        "content": "Mình hiểu là bạn cần máy để học thiết kế đồ họa, ngân sách khoảng 20 triệu. Cho mình hỏi thêm một ý để chọn đúng: bạn chủ yếu làm 2D (Photoshop, Illustrator) hay có làm 3D/render, dựng video? Nếu biết tên phần mềm bạn dùng thì càng tốt."
+      },
+      {
+        "role": "user",
+        "content": "mình làm 3D/render nhé"
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn cần máy thiết kế đồ họa / dựng nội dung, ngân sách 20 triệu. Mình chọn card rời ASUS Dual Radeon RX 7600 V2 OC Edition 8GB GDDR6 để hỗ trợ tác vụ đồ họa có tăng tốc GPU. RAM 32GB và SSD 512GB là dung lượng của phương án chính."
+      },
+      {
+        "role": "user",
+        "content": "mình muốn thích VGA từ bên hãng NVIDA mình chưa ưa chuộng VGA nhà AMD cho làm bạn giúp mình chọn lại theo NVIDA VGA được ko"
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn cần máy thiết kế đồ họa / dựng nội dung, ngân sách 20 triệu, card NVIDIA.\n\nMình chọn card rời ASUS DUAL RTX 3060 12GB 2 Fan V2 để hỗ trợ tác vụ đồ họa có tăng tốc GPU. Mức VRAM là lựa chọn cấu hình của app, không phải mọi phần mềm thiết kế đều bắt buộc card rời. Khả năng tăng tốc và render còn phụ thuộc phần mềm, phiên bản, driver và kích thước dự án; chưa có benchmark để cam kết tốc độ. RAM 16GB và SSD 512GB là dung lượng của phương án chính. Các điểm còn cần xác nhận về linh kiện và lắp đặt được ghi trong thẻ; kiểm tra các điểm đó với cửa hàng trước khi mua.\n\nLưu ý phương án chính: CPU i5-13400f cùng socket, đã có card rời nên không cần đồ họa tích hợp; chọn bản rẻ hơn để vừa ngân sách. Hiệu năng CPU có thể khác.\nLưu ý phương án chính: Đã đổi từ RTX 4060 sang RTX 3060; hiệu năng GPU thấp hơn, giữ 12GB VRAM và giảm chi phí để vừa ngân sách.\n\n- **Phù hợp: 19,92 triệu** - gợi ý chính: ASUS DUAL RTX 3060 12GB 2 Fan V2; Intel Core i5 13400F / 2.5GHz Turbo 4.6GHz 10 16\n- **Chất lượng: 22,82 triệu** - tham khảo, vượt ngân sách 2,818 triệu - khác Phù hợp: ASUS Dual GeForce RTX 4060 EVO 8GB GDDR6; CPU Intel Core i5 12400F Chính Hãng; SSD Biwin NV3500 512GB M.2 PCIe NVMe Gen3x4\n\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.\n\nPhương án Rẻ: với giá tìm được, cấu hình đã thử cho phương án Rẻ là 19,918 triệu, vượt mức tối đa 18 triệu (90% ngân sách). App chưa tìm được bản Rẻ đủ yêu cầu dưới mức này, nên không hiển thị phương án Rẻ."
+      },
+      {
+        "role": "user",
+        "content": "mình muốn sử dụng 16gb vẫn dùng RTX cơ"
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "gpuVendor": "nvidia",
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "minGpuVramGb": 8
+    }
+  },
+  {
+    "id": "reject-amd-choose-nvida",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình học thiết kế đồ họa có khoảng 20 triệu"
+      },
+      {
+        "role": "assistant",
+        "content": "Mình hiểu là bạn cần máy để học thiết kế đồ họa, ngân sách khoảng 20 triệu. Cho mình hỏi thêm một ý để chọn đúng: bạn chủ yếu làm 2D (Photoshop, Illustrator) hay có làm 3D/render, dựng video? Nếu biết tên phần mềm bạn dùng thì càng tốt."
+      },
+      {
+        "role": "user",
+        "content": "mình làm 3D/render nhé"
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn cần máy thiết kế đồ họa / dựng nội dung, ngân sách 20 triệu. Mình chọn card rời ASUS Dual Radeon RX 7600 V2 OC Edition 8GB GDDR6 để hỗ trợ tác vụ đồ họa có tăng tốc GPU. RAM 32GB và SSD 512GB là dung lượng của phương án chính."
+      },
+      {
+        "role": "user",
+        "content": "mình muốn thích VGA từ bên hãng NVIDA mình chưa ưa chuộng VGA nhà AMD cho làm bạn giúp mình chọn lại theo NVIDA VGA được ko"
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "gpuVendor": "nvidia",
+      "minRamGb": 16,
+      "minSsdGb": 512,
+      "minGpuVramGb": 8
+    }
+  }
+]
