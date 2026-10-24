@@ -1,0 +1,94 @@
+{
+  "featureStatus": "LIVE_VERIFIED",
+  "liveCases": 9,
+  "decisionPassed": 9,
+  "adviceManuallyReviewed": 9,
+  "advicePassed": 9,
+  "priceObservations": 48,
+  "pricePassed": 48,
+  "uniqueProductUrls": 48,
+  "maxCaptureGapSeconds": 321.208535,
+  "priceToleranceVnd": 0,
+  "cases": {
+    "answer-2d": {
+      "status": "done",
+      "jobId": "7fb25e20-807b-4900-bdd0-7747d7a47e04",
+      "issues": [],
+      "cardCount": 3,
+      "priceIssues": []
+    },
+    "answer-3d": {
+      "status": "done",
+      "jobId": "63ea4478-4fc4-4052-b74b-36a48ec26d60",
+      "issues": [],
+      "cardCount": 3,
+      "priceIssues": []
+    },
+    "answer-light": {
+      "status": "done",
+      "jobId": "21f0758b-4bf9-4ca0-8a69-159c7a85b21d",
+      "issues": [],
+      "cardCount": 3,
+      "priceIssues": []
+    },
+    "ask-game": {
+      "status": "done",
+      "jobId": "f2ef5ab0-5b50-49eb-9d6c-98349a2f688e",
+      "issues": [],
+      "cardCount": 0,
+      "priceIssues": []
+    },
+    "ask-graphic": {
+      "status": "done",
+      "jobId": "00365fe7-e692-4126-9b2e-13e3248c7c5e",
+      "issues": [],
+      "cardCount": 0,
+      "priceIssues": []
+    },
+    "ask-mixed": {
+      "status": "done",
+      "jobId": "80a8cf7e-696b-45ee-a8bf-6094410030c9",
+      "issues": [],
+      "cardCount": 0,
+      "priceIssues": []
+    },
+    "known-photoshop": {
+      "status": "done",
+      "jobId": "330de16c-71c3-4b9f-bb81-ad7597784a22",
+      "issues": [],
+      "cardCount": 3,
+      "priceIssues": []
+    },
+    "known-valorant": {
+      "status": "done",
+      "jobId": "853a674b-5cd8-497e-bcca-24db125629f5",
+      "issues": [],
+      "cardCount": 3,
+      "priceIssues": []
+    },
+    "proceed": {
+      "status": "done",
+      "jobId": "89c46841-05f5-420c-bc8c-9690802d8f6a",
+      "issues": [],
+      "cardCount": 3,
+      "priceIssues": []
+    }
+  },
+  "priceIssues": [],
+  "backendTests": {
+    "tests": 274,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "transportNote": "Original runner lost one GET poll to TLS error. Recovered the same Valorant job ID; no replacement POST or spliced retry model output.",
+  "scope": "Internal feature regression: nine fresh jobs on one unchanged source. Not a universal accuracy estimate or an independent blinded evaluation. Conditional hardware checks remain in cards.",
+  "sourceSha256": {
+    "backend/src/main/java/com/smartcarepc/backend/service/ai/ChatService.java": "e7fbf8b28f915ae9a58504cecf997302c1d20075a8c13ee5931cd98fd4311956",
+    "backend/src/test/java/com/smartcarepc/backend/service/ai/ChatServiceTests.java": "6ed7487834d894bee7db7c7053a95afbcd6ff0a967219fab7a16b62f641e58b8"
+  },
+  "evidenceDirectory": "/Users/yuuki2/Documents/PCsmartcare-testloop/context-fix-20261024-round2",
+  "previousAuthFailureDirectory": "/Users/yuuki2/Documents/PCsmartcare-testloop/context-fix-20261024",
+  "verifiedAt": "2026-10-24",
+  "reviewer": "Codex /root (internal)"
+}

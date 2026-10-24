@@ -1,5 +1,7 @@
 # Kết quả đối chiếu đầu ra AI tư vấn PC
 
+**Luồng hỏi thêm nhu cầu, 24/10/2026:** [báo cáo mới](advice-context-followup.md): 274 test backend đạt; 9/9 job API thật đạt kiểm tra hội thoại, cấu hình và lời tư vấn; 48/48 quan sát giá khớp trang bán trong lượt này. Đây là bộ hồi quy riêng cho tính năng, không phải tỷ lệ chính xác cho mọi đầu vào.
+
 **Cập nhật 24/10/2026:** số liệu 120 ca dưới đây thuộc bản nghiệm thu trước khi phát hiện nhánh thiết kế đồ họa thiếu ràng buộc card rời. Đã bổ sung sửa và kiểm thử riêng: [báo cáo đồ họa](advice-creator-fix.md). Không lấy tỷ lệ 100% cũ làm bảo đảm cho mọi nhu cầu hoặc cho bản sửa mới.
 
 **Đạt 100% trên bộ nghiệm thu nội bộ 120 ca; không còn lỗi được ghi nhận trong bộ này.** Hoàn tất 23/10/2026, 23:48 (UTC+7), nhánh `guide-reveal`. Lượt `eval100-acceptance15` chạy 120 phản hồi API mới trên cùng một JAR cố định sau khi provider hoạt động lại. Không ghép phản hồi từ các lượt trước.

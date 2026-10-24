@@ -2874,18 +2874,70 @@ class ChatServiceTests {
     }
 
     @Test
-    void daCoNganSachMaAiHoiLaiThiNhacLamLuon() {
-        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
-        when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
-        reply(answer("Bạn dựng video ở độ phân giải nào?"), toolCall("p1", "propose_build", """
-                {"tier":"balanced","summary":"Dựng video","items":[{"code":"ssd_m2_2280","spec":"SSD 1TB","reason":"Đủ"}]}
-                """), answer("Xong."));
-
+    void daCoNganSachVanChoHoiThemWorkloadTruocKhiDungMay() {
+        reply(answer("Bạn dựng video ở độ phân giải nào?"));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "Mình dựng video, ngân sách khoảng 40 triệu")), null, null, "advice"));
+        assertThat(res.reply()).isEqualTo("Bạn dựng video ở độ phân giải nào?");
+        assertThat(res.build()).isNull();
+        verify(client,org.mockito.Mockito.times(1)).complete(any());
+    }
 
-        assertThat(res.reply()).startsWith("Xong.");
-        assertThat(res.build()).isNotNull();
+    @Test
+    void hoi2d3dHoacGameKhongBiEpThanhBaoGia() {
+        for (String q : List.of("Ngân sách20 triệu: bạn chủ yếu làm2D hay dựng3D/render?", "Bạn chơi game nhẹ/esports hay game nặng/AAA?")) {
+            org.mockito.Mockito.reset(client);
+            reply(answer(q));
+            var res=service.reply(new ChatRequest(List.of(new Message("user","Cần máy thiết kế và chơi game20 triệu")),null,null,"advice"));
+            assertThat(res.reply()).isEqualTo(q);
+            assertThat(res.build()).isNull();
+            verify(client,org.mockito.Mockito.times(1)).complete(any());
+        }
+        assertThat(ChatService.workloadQuestion("Bạn sẽ dùng máy chủ yếu làm gì: học / văn phòng, chơi game, đồ họa hay AI?")).isFalse();
+    }
+
+    @Test
+    void traLoiNganGiuNganSachRamVaDungHoSo() {
+        var graphic=List.of(new Message("user","PC thiết kế30 triệu RAM32GB SSD1TB"),
+                new Message("assistant","Bạn làm2D hay3D/render, dùng phần mềm nào?"),new Message("user","3D"));
+        var texts=ChatService.adviceUserTexts(graphic);
+        assertThat(ChatService.needs(texts).creator()).isTrue();
+        assertThat(ChatService.needs(texts).vramMin()).isEqualTo(8);
+        assertThat(ChatService.needs(texts).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(texts).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.amounts(texts)).contains(30_000_000L);
+        var twoD=ChatService.adviceUserTexts(List.of(graphic.get(0),graphic.get(1),new Message("user","Không làm3D, chỉ2D")));
+        assertThat(ChatService.needs(twoD).vramMin()).isEqualTo(6);
+        var light=ChatService.adviceUserTexts(List.of(new Message("user","PC game25 triệu, trước chơi game nặng"),
+                new Message("assistant","Bạn chơi game nhẹ hay game nặng?"),new Message("user","Giờ chỉ nhẹ thôi")));
+        assertThat(ChatService.needs(light).vramMin()).isEqualTo(6);
+        assertThat(ChatService.amounts(light)).contains(25_000_000L);
+    }
+
+    @Test
+    void hoiLaiCungContextSauTraLoiThiNhacDungThongTinDaCo() {
+        reply(answer("Bạn làm2D hay3D?"),answer("Mình dùng thông tin bạn vừa bổ sung."));
+        var res=service.reply(new ChatRequest(List.of(new Message("user","Thiết kế20 triệu"),
+                new Message("assistant","Bạn làm2D hay3D/render?"),new Message("user","2D")),null,null,"advice"));
+        assertThat(res.reply()).isEqualTo("Mình dùng thông tin bạn vừa bổ sung.");
         assertThat(messages(1).toString()).contains("làm luôn ba phương án");
+    }
+
+    @Test
+    void khachMuonTuVanLuonThiKhongHoiVongLap() {
+        reply(answer("Bạn chơi game nhẹ hay game nặng?"),answer("Mình sẽ nêu giả định."));
+        var res=service.reply(new ChatRequest(List.of(new Message("user","PC chơi game25 triệu, tư vấn luôn, không hỏi thêm")),null,null,"advice"));
+        assertThat(res.reply()).isEqualTo("Mình sẽ nêu giả định.");
+        assertThat(messages(1).toString()).contains("làm luôn ba phương án");
+    }
+
+    @Test
+    void doiTuGameSangThietKeVanDuocHoiContextMoi() {
+        reply(answer("Bạn thiết kế2D hay dựng3D/render?"));
+        var res=service.reply(new ChatRequest(List.of(new Message("user","Máy game25 triệu"),
+                new Message("assistant","Bạn chơi game nhẹ hay game nặng?"),new Message("user","Nhẹ"),
+                new Message("assistant","Đã ghi nhận game nhẹ."),new Message("user","Đổi sang máy thiết kế30 triệu")),null,null,"advice"));
+        assertThat(res.reply()).contains("2D","3D");
+        verify(client,org.mockito.Mockito.times(1)).complete(any());
     }
 
     private static ProductSearch.Product product(String title, long price) {

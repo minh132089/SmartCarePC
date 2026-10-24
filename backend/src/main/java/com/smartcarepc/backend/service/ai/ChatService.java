@@ -62,10 +62,14 @@ public class ChatService {
             Việc của bạn:
             1. Phân tích lời kể thành: dùng máy để làm gì, ngân sách, kích thước hay kiểu dáng mong muốn, có cần nâng cấp \
             về sau không. Mở đầu câu trả lời bằng một dòng tóm tắt bạn hiểu nhu cầu thế nào, để người dùng sửa nếu sai.
-            2. CHỈ hỏi lại khi thiếu ngân sách hoặc mục đích dùng máy, gộp thành một câu ngắn. Đã có cả hai thì làm luôn \
-            ba phương án: chi tiết phụ còn thiếu (độ phân giải, game cụ thể, phần mềm) thì tự giả định mức phổ biến và \
-            nói rõ giả định trong câu trả lời (vd "mình giả định bạn dựng video Full HD / 2K"). Không hứa việc không làm \
-            (vd "trong lúc chờ mình chuẩn bị sẵn"): đã hỏi lại thì dừng ở câu hỏi.
+            2. Thiếu ngân sách hoặc mục đích thì hỏi thông tin còn thiếu. Đã có ngân sách nhưng chỉ nói chung "thiết kế \
+            đồ họa" thì hỏi ngắn: chủ yếu 2D (Photoshop/Illustrator) hay 3D/render, và phần mềm nếu biết. Chỉ nói "chơi game" \
+            thì hỏi game nhẹ/esports hay game nặng/AAA, hoặc tên game hay chơi. Có cả hai nhu cầu chưa rõ thì gộp một lượt hỏi. \
+            Nếu đã nêu phần mềm, tên game hoặc mức nặng/nhẹ thì dùng thông tin đó, không hỏi lại điểm đã rõ. Đọc cả hội thoại: \
+            câu trả lời "chỉ 2D", "3D", "nhẹ" là bổ sung cho câu hỏi trước, giữ ngân sách và ràng buộc đã có. \
+            Chưa rõ workload thì chưa tìm giá hay dựng thẻ. Chỉ hỏi thêm một lượt về workload; sau khi khách trả lời thì tư vấn. \
+            Nếu khách chưa biết hoặc muốn tư vấn luôn, nêu giả định và làm ba phương án, không hỏi vòng lặp. \
+            Không hứa việc không làm: đã hỏi lại thì dừng ở câu hỏi, không viết kèm cấu hình hay giá tự ước lượng.
             3. Chọn đủ linh kiện cho một máy từ danh mục. Luôn chọn một vỏ máy (case): app sẽ mở mô hình 3D đúng kiểu \
             vỏ đó để hướng dẫn người dùng tự lắp từng bước. Mỗi vỏ có máy mẫu dựng sẵn với bo mạch, tản nhiệt, card đồ \
             họa và nguồn cố định (xem "Món đi kèm từng vỏ" ở cuối lời dặn), và hướng dẫn lắp dạy theo đúng các món đó. \
@@ -239,7 +243,8 @@ public class ChatService {
 
             Khi người dùng hỏi chọn hay đổi linh kiện:
             1. Cần biết ngân sách và máy dùng để làm gì (học, văn phòng, chơi game, dựng phim...). Thiếu thì hỏi lại, \
-            gộp thành một câu hỏi ngắn. Có rồi thì làm luôn, đừng hỏi thêm.
+            gộp thành một câu hỏi ngắn. Với trang tư vấn, đồ họa/game còn chung thì được hỏi một lượt để rõ 2D/3D, \
+            phần mềm hoặc game nặng/nhẹ theo hướng dẫn tư vấn. Có thông tin rồi thì làm luôn.
             2. Chọn linh kiện từ danh mục của app (list_components). Một máy cần đủ: vỏ, bo mạch chủ, CPU, tản nhiệt, \
             RAM, SSD, nguồn; thêm card đồ họa khi chơi game hoặc làm đồ họa, hoặc khi CPU không có sẵn đồ họa.
             3. Luôn chạy check_build với cấu hình định đề xuất (trang tư vấn có propose_build thì bỏ bước này, propose_build \
@@ -436,7 +441,7 @@ public class ChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tin cuối cùng phải là câu hỏi của người dùng");
         }
 
-        var userTexts = request.messages().reversed().stream()
+        var userTexts = "advice".equals(request.mode()) ? adviceUserTexts(request.messages()) : request.messages().reversed().stream()
                 .filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content).toList();
         Turn turn = new Turn("advice".equals(request.mode()), amounts(userTexts), ramLayout(userTexts), needs(userTexts));
         turn.requestedGpu = requestedGpu(userTexts);
@@ -530,9 +535,19 @@ public class ChatService {
                 continue;
             }
             if (calls == null || calls.isEmpty()) {
-                // Người dùng đã nói ngân sách mà trợ lý chỉ hỏi lại chi tiết phụ (vd độ phân giải) chưa chốt gì: nhắc
-                // một lần là làm luôn với giả định phổ biến (lời dặn bước 2; DeepSeek hay hỏi thừa)
-                if (turn.advice && !nudged && turn.tiers.isEmpty() && hasBudget(lastUser)) {
+                String draft = String.valueOf(message.getOrDefault("content", ""));
+                boolean workloadQuestion = workloadQuestion(draft);
+                boolean askedBefore = request.messages().stream().anyMatch(m -> "assistant".equals(m.role()) && workloadQuestion(m.content())
+                        && (workloadTopics(m.content()) & workloadTopics(draft)) == workloadTopics(draft));
+                boolean proceed = lastUser.toLowerCase(java.util.Locale.ROOT)
+                        .matches("(?s).*(tư vấn luôn|làm luôn|tự chọn|không hỏi thêm|chưa biết|không biết).*");
+                // Câu hỏi workload không phải lỗi thiếu thẻ; ngân sách nhắc lại trong câu hỏi không thành báo giá.
+                if (turn.advice && !whyOnly && turn.last == null && turn.tiers.isEmpty() && workloadQuestion && !askedBefore && !proceed) {
+                    return new ChatResponse(clean(draft));
+                }
+                // Đã trả lời lượt hỏi workload (hoặc chủ động bỏ qua): dùng context hiện có, không hỏi vòng lặp.
+                if (turn.advice && !nudged && turn.tiers.isEmpty()
+                        && (hasBudget(lastUser) || workloadQuestion && (askedBefore || proceed) && !turn.userAmounts.isEmpty())) {
                     nudged = true;
                     log.info("Chat vòng {}: AI hỏi lại dù đã có ngân sách, nhắc làm luôn", round + 1);
                     messages.add(Map.of("role", "assistant", "content", String.valueOf(message.getOrDefault("content", ""))));
@@ -543,7 +558,6 @@ public class ChatService {
                 // Câu hỏi tiếp (vd "đổi sang card AMD") mà trợ lý viết luôn các phương án kèm giá, không gọi propose_build
                 // (ca thật n8: 0 thẻ). Chỉ khi người dùng đã nói ngân sách ở đâu đó trong hội thoại; chưa có ngân sách thì
                 // trợ lý được hỏi lại. Nhắc một lần
-                String draft = String.valueOf(message.getOrDefault("content", ""));
                 // Câu hỏi tiếp yêu cầu đổi cấu hình (ca thật n9: "đổi sang card AMD", trợ lý viết "ba phương án đều dùng card
                 // này" mà không dựng thẻ, không ghi nhãn tier)
                 boolean changeAsk = CHANGE_ASK.matcher(lastUser).find() && (MONEY_MENTION.matcher(draft).find() || draft.toLowerCase().contains("phương án"));
@@ -1297,11 +1311,54 @@ public class ChatService {
         return false;
     }
 
-    /** Nhu cầu sáng tạo, tránh nhận tên linh kiện hoặc "game đồ họa cao" thành làm thiết kế. */
-    private static boolean creatorUse(String raw) {
-        String t = raw.toLowerCase(java.util.Locale.ROOT)
+    /** Chỉ cho câu hỏi ngắn lấy context đi qua; không coi bảng giá hay thẻ giả của model là câu hỏi. */
+    static boolean workloadQuestion(String text) {
+        return text != null && text.length() <= 600 && text.contains("?")
+                && !text.toLowerCase(java.util.Locale.ROOT).contains("bạn sẽ dùng máy chủ yếu làm")
+                && !TIER_MENTION.matcher(text).find() && workloadTopics(text) != 0;
+    }
+
+    private static int workloadTopics(String text) {
+        String t = text.toLowerCase(java.util.Locale.ROOT);
+        int topics = t.matches("(?s).*(2\\s*d|3\\s*d|render|phần mềm|ứng dụng|thiết kế|photoshop|illustrator|video).*") ? 1 : 0;
+        if (t.matches("(?s).*(game|trò chơi|esport|fps).*") ) topics |= 2;
+        if (topics == 0 && t.matches("(?s).*(độ phân giải|full hd|2k|4k).*") ) topics = 3;
+        return topics;
+    }
+
+    /** Gắn câu trả lời ngắn với đúng câu hỏi trước; giữ nguyên ngân sách và yêu cầu trong tin gốc. */
+    static List<String> adviceUserTexts(List<ChatRequest.Message> history) {
+        List<String> out = new ArrayList<>();
+        String previousAssistant = null;
+        for (var m : history) {
+            if ("assistant".equals(m.role())) { previousAssistant = m.content(); continue; }
+            if (!"user".equals(m.role())) continue;
+            String raw = m.content();
+            String answer = creatorText(raw);
+            String prefix = "";
+            if (workloadQuestion(previousAssistant)) {
+                int topics = workloadTopics(previousAssistant);
+                if ((topics & 1) != 0 && answer.matches("(?s).*(3\\s*d|render|cả hai|cả 2).*") ) prefix += "Thiết kế đồ họa 3D/render. ";
+                else if ((topics & 1) != 0 && answer.matches("(?s).*2\\s*d.*")) prefix += "Thiết kế đồ họa 2D. ";
+                if ((topics & 2) != 0 && answer.matches("(?s).*(nặng|aaa|cả hai|cả 2).*") ) prefix += "Chơi game nặng AAA. ";
+                else if ((topics & 2) != 0 && answer.matches("(?s).*(nhẹ|esport).*")) prefix += "Chơi game nhẹ. ";
+            }
+            out.add(prefix + raw);
+            previousAssistant = null;
+        }
+        return out.reversed();
+    }
+
+    private static String creatorText(String raw) {
+        return raw.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("không\\s*(?:(?:làm|dựng|dùng|cần|có)\\s*)?(?:thiết kế(?:\\s+đồ\\s+h[oọ][aạ])?|render(?:\\s*3d)?|3d|2d|blender)(?:\\s+nữa)?", " ")
                 .replaceAll("(card|vga|gpu|chip|nhân)\\s+đồ\\s+h[oọ][aạ]|đồ\\s+h[oọ][aạ]\\s+(tích hợp|rời|onboard)", " ")
                 .replaceAll("(?:game|chơi)[^.!?]{0,20}đồ\\s+h[oọ][aạ]\\s+(cao|đẹp|nặng)", " ");
+    }
+
+    /** Nhu cầu sáng tạo, tránh nhận tên linh kiện hoặc "game đồ họa cao" thành làm thiết kế. */
+    private static boolean creatorUse(String raw) {
+        String t = creatorText(raw);
         return t.matches("(?s).*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|illustrator|lightroom|premiere|"
                 + "after effects|davinci|blender|sketchup|3ds max|cinema 4d).*");
     }
@@ -1356,7 +1413,7 @@ public class ChatService {
         String creatorText = "";
         for (String raw : userTexts) {
             if (raw == null) continue;
-            if (creatorUse(raw)) { creator = true; creatorText = raw.toLowerCase(java.util.Locale.ROOT); break; }
+            if (creatorUse(raw)) { creator = true; creatorText = creatorText(raw); break; }
             if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(chỉ|đổi sang|chuyển sang).*(học online|văn phòng|word|excel).*")) break;
         }
         String gameUses = all.replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
@@ -1367,6 +1424,14 @@ public class ChatService {
             String positive = t.replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
             if (positive.matches("(?s).*(game|chơi|stream).*")) { game = true; break; }
             if (!positive.equals(t)) { game = false; break; }
+        }
+        // Câu trả lời mới về nặng/nhẹ ghi đè mức cũ, còn tin chỉ đổi RAM/hãng không làm mất tên game đã nói.
+        for (String raw : userTexts) {
+            if (raw == null) continue;
+            String t = raw.toLowerCase(java.util.Locale.ROOT);
+            if (t.matches("(?s).*(game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) {
+                gameUses = t; break;
+            }
         }
         // Học AI / deep learning: chữ "học" không làm thành máy văn phòng (ca thật n3: "học AI, chạy mô hình deep learning"
         // ra RAM 8GB, SSD 256GB)

@@ -1,0 +1,155 @@
+[
+  {
+    "id": "ask-graphic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC thiết kế đồ họa,30 triệu, RAM32GB SSD1TB."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "(?is)(2\\s*d|3\\s*d|render).*\\?"
+    }
+  },
+  {
+    "id": "ask-game",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game,25 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "(?is)(game|trò chơi).*(nhẹ|nặng|aaa|tên|nào).*\\?"
+    }
+  },
+  {
+    "id": "ask-mixed",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Cần PC thiết kế đồ họa và chơi game,30 triệu."
+      }
+    ],
+    "expected": {
+      "noCards": true,
+      "replyPattern": "(?is)(?=.*(?:2\\s*d|3\\s*d|render))(?=.*game).*\\?"
+    }
+  },
+  {
+    "id": "known-photoshop",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC Photoshop Illustrator20 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 20000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "minSsdGb": 512
+    }
+  },
+  {
+    "id": "known-valorant",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi Valorant18 triệu, RAM16GB SSD512GB."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 18000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "minSsdGb": 512
+    }
+  },
+  {
+    "id": "proceed",
+    "messages": [
+      {
+        "role": "user",
+        "content": "PC chơi game25 triệu RAM16GB SSD512GB, tư vấn luôn không hỏi thêm."
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 16,
+      "minSsdGb": 512
+    }
+  },
+  {
+    "id": "answer-3d",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC thiết kế đồ họa,30 triệu, RAM32GB SSD1TB."
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn chủ yếu làm2D hay3D/render, dùng phần mềm nào?"
+      },
+      {
+        "role": "user",
+        "content": "3D"
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 8,
+      "minRamGb": 32,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "answer-2d",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC thiết kế đồ họa,30 triệu, RAM32GB SSD1TB."
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn chủ yếu làm2D hay3D/render, dùng phần mềm nào?"
+      },
+      {
+        "role": "user",
+        "content": "Không làm3D, chỉ2D"
+      }
+    ],
+    "expected": {
+      "budgetVnd": 30000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 32,
+      "minSsdGb": 1000
+    }
+  },
+  {
+    "id": "answer-light",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Mình cần PC chơi game,25 triệu, RAM16GB SSD512GB."
+      },
+      {
+        "role": "assistant",
+        "content": "Bạn chơi game nhẹ/esports hay game nặng/AAA, thường chơi game nào?"
+      },
+      {
+        "role": "user",
+        "content": "Nhẹ thôi"
+      }
+    ],
+    "expected": {
+      "budgetVnd": 25000000,
+      "minGpuVramGb": 6,
+      "minRamGb": 16,
+      "minSsdGb": 512
+    }
+  }
+]
