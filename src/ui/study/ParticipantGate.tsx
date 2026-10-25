@@ -17,6 +17,7 @@ function ProfileForm({ initial, onSave }: { initial: Participant | null; onSave:
   const dialog = useRef<HTMLDialogElement>(null)
   const form = useRef<HTMLFormElement>(null)
   const pending = useRef<Participant | null>(null)
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const title = useId()
   const occupations = useId()
   const [name, setName] = useState(initial?.name ?? '')
@@ -32,7 +33,11 @@ function ProfileForm({ initial, onSave }: { initial: Participant | null; onSave:
     el.showModal()
     const observer = new ResizeObserver(() => setWidth(Math.min(360, form.current?.clientWidth ?? el.clientWidth - 56)))
     observer.observe(el)
-    return () => { observer.disconnect(); el.close() }
+    return () => {
+      observer.disconnect()
+      el.close()
+      if (successTimer.current) clearTimeout(successTimer.current)
+    }
   }, [])
 
   return (
@@ -51,13 +56,19 @@ function ProfileForm({ initial, onSave }: { initial: Participant | null; onSave:
         </fieldset>
         <p className="participant-disclosure">Khi xác nhận, bạn đồng ý đính kèm tên, tuổi và nghề nghiệp vào phản hồi gửi cho nhóm nghiên cứu. Thông tin được ghi nhớ trên trình duyệt này và chỉ gửi lên khi bạn gửi phản hồi.</p>
         <div className="participant-confirm">
-          <SlideCommit width={width} label="Kéo để xác nhận" doneLabel="Đã xác nhận" errorLabel="Kiểm tra lại thông tin" trackColor="#292c34" handleColor="#2997ff" successColor="#2997ff" returnBounce={0.18} landingDip={0} holdMs={0} disabled={!valid}
+          <SlideCommit width={width} label="Kéo để xác nhận" doneLabel="Đã xác nhận" errorLabel="Kiểm tra lại thông tin" trackColor="#292c34" handleColor="#2997ff" successColor="#22c55e" returnBounce={0.18} landingDip={0} holdMs={0} disabled={!valid}
             onConfirm={() => {
               if (!valid || !form.current?.reportValidity()) throw new Error('Thông tin chưa hợp lệ')
               pending.current = value
               setConfirming(true)
             }}
-            onDone={() => { if (pending.current) onSave(pending.current) }}
+            onDone={() => {
+              // Giữ dấu tích và viên xanh đủ lâu để người dùng thấy đã xác nhận trước khi đóng form.
+              if (successTimer.current) clearTimeout(successTimer.current)
+              successTimer.current = setTimeout(() => {
+                if (pending.current) onSave(pending.current)
+              }, 1400)
+            }}
             onError={() => setConfirming(false)} />
         </div>
         <p className="participant-keyboard">Bạn cũng có thể dùng Tab rồi Enter hoặc phím cách để xác nhận.</p>

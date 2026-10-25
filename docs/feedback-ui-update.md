@@ -1,6 +1,7 @@
 # Giao diện phản hồi và hồ sơ người tham gia
 
 - Cloudflare Pages (`*.pages.dev`): mở form tên, tuổi (số nguyên 1–120), nghề nghiệp trước khi sử dụng; nghề nghiệp có gợi ý Học sinh và Sinh viên, vẫn cho nhập tự do. Slide Commit xác nhận sau khi điền đủ. Có mô tả việc gắn hồ sơ vào phản hồi.
+- Sau khi kéo xác nhận, thanh hiện viên xanh lá, dấu tích và “Đã xác nhận” trong 1,4 giây rồi mới đóng popup; timer được hủy khi form unmount.
 - Localhost, demo LAN: bỏ qua form bắt buộc. `/feedback` dùng khóa xem dữ liệu riêng và không mở form hồ sơ.
 - Hồ sơ lưu trong trình duyệt ở `pcsc-participant-v1`. Khi gửi feedback, đính kèm `participant_name`, `participant_age`, `participant_occupation` vào JSON `answers`. CSV hiện có tự xuất ba cột tương ứng; không cần thay bảng database. Hàng đợi giữ hồ sơ tại thời điểm gửi.
 - Dashboard `/feedback`: Magic Bento với số phản hồi, điểm sao, số phản hồi có hồ sơ, biểu đồ ngày, phân bố sao, điểm từng câu, nghề nghiệp, nhóm tuổi; danh sách hiện tên/tuổi/nghề nghiệp. Mỗi biểu đồ đếm phản hồi, không suy diễn số người duy nhất. Ngày thống kê theo thời gian do backend ghi, chưa có thông tin múi giờ.
