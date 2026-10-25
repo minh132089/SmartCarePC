@@ -6,6 +6,7 @@ import { FEEDBACK } from './questions'
 import { QuestionList } from './QuestionList'
 import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, PrimaryButton, Question, QuietButton } from './StudyParts'
+import { useParticipant } from './participant'
 
 /** Nút nhỏ "Tham gia thử nghiệm" cho người chưa có mã (người dùng bình thường bỏ qua được) */
 export function StudyJoinLink({ className = '' }: { className?: string }) {
@@ -22,14 +23,16 @@ export function StudyJoinLink({ className = '' }: { className?: string }) {
 /** Dải nhỏ cho người tham gia: mã, lần đo, và nút gửi phản hồi */
 export function StudyBar() {
   const { code, phase, answered, open } = useStudy()
-  if (!code) return null
+  const { profile, edit } = useParticipant()
+  if (!code && !profile) return null
   const sent = answered.includes('feedback')
   return (
     <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-2xl bg-info-bg px-3 py-2 text-[13px] text-info">
-      <button onClick={() => open('join')} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title="Đổi mã hoặc lần đo">
+      <button onClick={() => code ? open('join') : edit()} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title={code ? 'Đổi mã hoặc lần đo' : 'Sửa thông tin của bạn'}>
         <Flask size={15} aria-hidden />
-        Thử nghiệm · {code} · {PHASE_LABEL[phase]}
+        {code ? `Thử nghiệm · ${code} · ${PHASE_LABEL[phase]}` : `${profile!.name} · Sửa thông tin`}
       </button>
+      {code && profile && <button onClick={edit} className={`rounded-full px-2 text-[12px] hover:underline ${focus}`}>{profile.name} · Sửa thông tin</button>}
       <span className="flex-1" />
       <button onClick={() => open('feedback')} className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-medium hover:bg-surface ${focus}`}>
         <NotePencil size={14} aria-hidden />
@@ -74,7 +77,7 @@ function JoinDialog() {
     >
       <p className="text-[14px] leading-[1.5] text-ink-2">
         Cảm ơn bạn tham gia. Hãy dùng web app như bình thường: nhờ trợ lý chọn cấu hình, rồi làm theo hướng dẫn lắp máy. Dùng xong, bấm
-        "Gửi phản hồi" để trả lời 7 câu ngắn. Câu trả lời chỉ gắn với mã của bạn, app không thu tên, email hay số điện thoại.
+        "Gửi phản hồi" để trả lời 7 câu ngắn. Câu trả lời gắn với mã; thông tin bạn đã xác nhận (nếu có) cũng được đính kèm.
       </p>
       <Question label="Mã người tham gia">
         <input

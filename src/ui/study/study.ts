@@ -1,9 +1,10 @@
 import { create } from 'zustand'
+import { participantAnswers } from './participant'
 
 /**
  * Chế độ thử nghiệm 4 tuần của nhóm nghiên cứu. Người tham gia mở link có ?thunghiem=P07 hoặc tự nhập mã,
  * từ đó app hiện dải "Thử nghiệm" có nút mở form phản hồi (câu hỏi trong questions.ts).
- * Chỉ lưu mã người tham gia, không thu tên, email hay số điện thoại. Không có mã thì app chạy như bình thường.
+ * Mã thử nghiệm được lưu riêng; hồ sơ tự nguyện xác nhận ở trang Cloudflare được gắn khi gửi feedback.
  */
 export type Phase = 'before' | 'after'
 export type Answers = Record<string, unknown>
@@ -105,6 +106,8 @@ type Payload = {
   answers: Answers
 }
 
+class InvalidFeedback extends Error {}
+
 async function post(p: Payload) {
   // Quá 20 giây thì huỷ (mạng treo): không để hộp thoại khoá mãi ở trạng thái "Đang gửi"
   const res = await fetch('/api/feedback', {
@@ -114,7 +117,8 @@ async function post(p: Payload) {
     signal: AbortSignal.timeout(20_000),
   })
   // 400 là dữ liệu sai: gửi lại cũng vô ích nên bỏ, không giữ trong hàng đợi
-  if (!res.ok && res.status !== 400) throw new Error(String(res.status))
+  if (res.status === 400) throw new InvalidFeedback('Phản hồi không hợp lệ')
+  if (!res.ok) throw new Error(String(res.status))
 }
 
 /** Gửi lại những phản hồi chưa tới được máy chủ (mất mạng, backend tắt) */
@@ -125,8 +129,8 @@ export async function flushQueue() {
   for (const p of queue) {
     try {
       await post(p)
-    } catch {
-      left.push(p)
+    } catch (e) {
+      if (!(e instanceof InvalidFeedback)) left.push(p)
     }
   }
   write(QUEUE, left.length ? left : null)
@@ -151,12 +155,13 @@ export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phas
   if (useSending.getState().sending) return 'failed'
   useSending.setState({ sending: true })
   const { code, phase } = useStudy.getState()
-  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...data.answers, submission_id: id } }
+  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...data.answers, ...participantAnswers(), submission_id: id } }
   try {
     await post(payload)
     void flushQueue()
     return 'sent'
-  } catch {
+  } catch (e) {
+    if (e instanceof InvalidFeedback) return 'failed'
     return write(QUEUE, [...read<Payload[]>(QUEUE, []), payload].slice(-200)) ? 'queued' : 'failed'
   } finally {
     useSending.setState({ sending: false })

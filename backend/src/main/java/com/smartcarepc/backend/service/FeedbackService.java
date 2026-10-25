@@ -49,6 +49,7 @@ public class FeedbackService {
 
     @Transactional
     public FeedbackSaved save(FeedbackRequest request) {
+        validateParticipant(request.answers());
         // Cùng một lần gửi (mã submission_id do app tạo) tới hai lần (bấm hai lần, gửi lại từ hàng đợi): trả bản đã lưu
         Object sid = request.answers().get("submission_id");
         String submission = sid instanceof String id && SUBMISSION_ID.matcher(id).matches() ? id : null;
@@ -68,6 +69,19 @@ public class FeedbackService {
                 .submissionId(submission)
                 .build());
         return new FeedbackSaved(saved.getId());
+    }
+
+    /** Hồ sơ tùy chọn cho client cũ/local; nếu có phải đầy đủ, đúng kiểu và có giới hạn. */
+    private static void validateParticipant(Map<String, Object> answers) {
+        if (!answers.containsKey("participant_name") && !answers.containsKey("participant_age")
+                && !answers.containsKey("participant_occupation")) return;
+        Object name = answers.get("participant_name"), age = answers.get("participant_age"), job = answers.get("participant_occupation");
+        if (!(name instanceof String n) || n.strip().length() < 2 || n.strip().length() > 80
+                || !(job instanceof String j) || j.strip().length() < 2 || j.strip().length() > 80
+                || !(age instanceof Number a) || !Double.isFinite(a.doubleValue()) || a.doubleValue() != a.intValue()
+                || a.intValue() < 1 || a.intValue() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thông tin người tham gia không hợp lệ");
+        }
     }
 
     /** Bản đã lưu cùng submission_id với request (sau khi vướng ràng buộc UNIQUE do gửi trùng cùng lúc) */

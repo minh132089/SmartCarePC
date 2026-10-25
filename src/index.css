@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+.guide-step-title { text-decoration: line-through; text-decoration-color: transparent; transition: text-decoration-color 200ms ease, color 200ms ease; }
+.guide-step-title[data-done=true] { text-decoration-color: currentColor; }
+@media (prefers-reduced-motion: reduce) { .guide-step-title { transition: none; } }
+
 /* Bảng màu và chữ theo kiểu Apple: nền xám rất nhạt, chữ gần đen, một màu nhấn xanh */
 @theme {
   --color-ink: #1d1d1f;

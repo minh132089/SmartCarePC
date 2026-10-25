@@ -2,20 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowClockwise, DownloadSimple, Star } from '@phosphor-icons/react'
 import { FEEDBACK } from './questions'
 import { PrimaryButton, QuietButton, focus } from './StudyParts'
+import { FeedbackOverview } from './FeedbackOverview'
+import { participantOf, score as num, type FeedbackRow as Row } from './feedbackStats'
+import LatticeLoader from '../../components/LatticeLoader'
 
 /**
  * Trang xem phản hồi cho nhóm nghiên cứu: mở /feedback (hoặc #feedback), nhập khoá FEEDBACK_EXPORT_KEY trong backend/.env.
  * Khoá chỉ giữ trong tab đang mở (sessionStorage) và gửi qua header, không nằm trong địa chỉ trang.
  */
-type Row = {
-  id: number
-  createdAt: string | null
-  participantCode: string | null
-  phase: string | null
-  machine: string | null
-  answers: Record<string, unknown>
-}
-
 const KEY = 'pcsc-export-key'
 const SCALES = FEEDBACK.filter((q) => q.type === 'scale')
 const TEXTS = FEEDBACK.filter((q) => q.type === 'text')
@@ -27,15 +21,6 @@ function readKey() {
   } catch {
     return ''
   }
-}
-
-function num(v: unknown) {
-  return typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)) ? Number(v) : null
-}
-
-function avg(values: (number | null)[]) {
-  const xs = values.filter((v): v is number => v != null)
-  return xs.length ? { mean: xs.reduce((a, b) => a + b, 0) / xs.length, n: xs.length } : null
 }
 
 export function FeedbackAdmin() {
@@ -86,10 +71,6 @@ export function FeedbackAdmin() {
       ),
     [rows, filter],
   )
-  const starAvg = avg(shown.map((r) => num(r.answers.stars)))
-  const starCount = [1, 2, 3, 4, 5].map((n) => shown.filter((r) => num(r.answers.stars) === n).length)
-  const maxCount = Math.max(1, ...starCount)
-
   const download = async () => {
     // Khoá gửi qua header, không nằm trong địa chỉ (tránh lưu vào log truy cập)
     const res = await fetch('/api/feedback/export.csv', { headers: { 'X-Export-Key': key } })
@@ -122,7 +103,7 @@ export function FeedbackAdmin() {
             aria-label="Khoá xem dữ liệu"
             className={`mt-4 w-full rounded-xl bg-surface px-3 py-2 text-[15px] text-ink ring-1 ring-line-strong ${focus}`}
           />
-          {error && <p className="mt-2 text-[13px] text-bad">{error}</p>}
+          {error && <p role="alert" className="mt-2 text-[13px] text-bad">{error}</p>}
           <div className="mt-4 flex justify-end">
             <PrimaryButton onClick={submitKey} disabled={!draft.trim() || busy}>
               Xem dữ liệu
@@ -134,8 +115,10 @@ export function FeedbackAdmin() {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-canvas">
-      <div className="mx-auto max-w-[1100px] px-4 py-8 md:px-8">
+    <div className="feedback-dashboard h-full overflow-y-auto bg-canvas">
+      <div className="mx-auto max-w-[1240px] px-4 py-8 md:px-8">
+        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Về SmartCare PC</a>
+        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">SMARTCARE PC · NGHIÊN CỨU TRẢI NGHIỆM</p>
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="display min-w-0 flex-1">Dữ liệu phản hồi</h1>
           <QuietButton onClick={() => void load(key)}>
@@ -172,56 +155,10 @@ export function FeedbackAdmin() {
           ))}
         </div>
 
-        {error && <p className="mt-3 text-[13px] text-bad">{error}</p>}
+        {error && <p role="alert" className="mt-3 text-[13px] text-bad">{error}</p>}
+        {busy && <div className="mt-5 text-ink-2"><LatticeLoader label="Đang tải phản hồi" fontSize={13} /></div>}
 
-        <section className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl bg-panel p-5 ring-1 ring-line">
-            <p className="text-[13px] text-ink-2">Số phản hồi</p>
-            <p className="mt-1 text-[32px] font-semibold tabular-nums text-ink">{shown.length}</p>
-          </div>
-          <div className="rounded-2xl bg-panel p-5 ring-1 ring-line">
-            <p className="text-[13px] text-ink-2">Điểm sao trung bình</p>
-            <p className="mt-1 flex items-center gap-2 text-[32px] font-semibold tabular-nums text-ink">
-              {starAvg ? starAvg.mean.toFixed(1) : '–'}
-              <Star size={26} weight="fill" className="text-[#f5a524]" aria-hidden />
-              <span className="text-[13px] font-normal text-ink-3">{starAvg ? `${starAvg.n} lượt chấm` : 'chưa có'}</span>
-            </p>
-          </div>
-          <div className="rounded-2xl bg-panel p-5 ring-1 ring-line">
-            <p className="text-[13px] text-ink-2">Phân bố sao</p>
-            <div className="mt-2 space-y-1">
-              {[5, 4, 3, 2, 1].map((n) => (
-                <div key={n} className="flex items-center gap-2 text-[12.5px] tabular-nums text-ink-2">
-                  <span className="w-3">{n}</span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-fill">
-                    <div className="h-full rounded-full bg-[#f5a524]" style={{ width: `${(starCount[n - 1] / maxCount) * 100}%` }} />
-                  </div>
-                  <span className="w-6 text-right">{starCount[n - 1]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-3 rounded-2xl bg-panel p-5 ring-1 ring-line">
-          <p className="text-[13px] font-semibold text-ink">Điểm trung bình từng câu (1 đến 5)</p>
-          <div className="mt-3 space-y-3">
-            {SCALES.map((q) => {
-              const a = avg(shown.map((r) => num(r.answers[q.key])))
-              return (
-                <div key={q.key}>
-                  <div className="flex items-baseline justify-between gap-3 text-[13.5px]">
-                    <span className="text-ink-2">{q.text}</span>
-                    <span className="shrink-0 font-semibold tabular-nums text-ink">{a ? `${a.mean.toFixed(2)} (${a.n})` : '–'}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-fill">
-                    <div className="h-full rounded-full bg-accent" style={{ width: a ? `${(a.mean / 5) * 100}%` : '0%' }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+        {rows && <FeedbackOverview rows={shown} />}
 
         <section className="mt-5">
           <p className="text-[13px] font-semibold text-ink">Từng phản hồi (mới nhất trước)</p>
@@ -229,6 +166,7 @@ export function FeedbackAdmin() {
           <ul className="mt-2 space-y-2">
             {shown.map((r) => {
               const stars = num(r.answers.stars)
+              const person = participantOf(r)
               return (
                 <li key={r.id} className="rounded-2xl bg-panel p-4 ring-1 ring-line">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-3">
@@ -248,6 +186,11 @@ export function FeedbackAdmin() {
                         ))}
                       </span>
                     )}
+                  </div>
+                  <div className="feedback-person">
+                    <strong>{person.name || "Chưa có thông tin hồ sơ"}</strong>
+                    {person.age != null && <span>{person.age} tuổi</span>}
+                    {person.occupation && <span>{person.occupation}</span>}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {SCALES.map((q, i) => {

@@ -9,6 +9,7 @@ import { FlowSteps } from './AdvicePage'
 import { useStudy } from './study/study'
 import { StudyBar } from './study/StudyBar'
 import { playTick } from './sound/sfx'
+import SpringCheck from '../components/SpringCheck'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -173,7 +174,7 @@ export function GuidePanel() {
                   className={`min-w-0 flex-1 rounded text-left ${focus}`}
                 >
                   <span className={`block text-[12px] ${open ? 'text-link' : 'text-ink-3'}`}>Bước {i + 1}</span>
-                  <span className={`block text-[15px] leading-snug ${open ? 'font-semibold text-ink' : isDone ? 'text-ink-2' : 'text-ink'}`}>
+                  <span className={`guide-step-title block text-[15px] leading-snug ${open ? 'font-semibold text-ink' : isDone ? 'text-ink-2' : 'text-ink'}`} data-done={isDone}>
                     {s.title}
                   </span>
                 </button>
@@ -309,21 +310,9 @@ function StepBody({
   )
 }
 
-/** Ô đánh dấu tròn: dùng input checkbox thật để đọc được bằng trình đọc màn hình và bấm được bằng phím cách */
+/** Spring Check của ReactBits; tiêu đề bước vẫn là nút riêng để mở hướng dẫn. */
 function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
-  return (
-    <label className="relative grid size-[22px] shrink-0 cursor-pointer place-items-center">
-      <input type="checkbox" checked={checked} onChange={onChange} aria-label={label} className="peer absolute inset-0 cursor-pointer opacity-0" />
-      <span
-        aria-hidden
-        className={`grid size-[22px] place-items-center rounded-full ring-[1.5px] transition-colors duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${
-          checked ? 'bg-ok-strong text-white ring-ok-strong' : 'bg-surface text-transparent ring-ink-3/60 peer-hover:ring-ink-2'
-        }`}
-      >
-        <Check size={13} weight="bold" />
-      </span>
-    </label>
-  )
+  return <SpringCheck checked={checked} onChange={onChange} label={null} ariaLabel={label} color="var(--color-ink)" fillColor="var(--color-accent)" checkColor="#fff" boxSize={24} boxRadius={8} bounce={0.16} strike="none" className="shrink-0" />
 }
 
 const RATED = 'pcsc-rated'

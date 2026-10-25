@@ -13,8 +13,8 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 /**
- * Một lần gửi form phản hồi của người tham gia thử nghiệm. Chỉ gắn với mã người tham gia (vd P07),
- * không lưu tên hay số điện thoại. Câu trả lời để dạng JSON để thêm hoặc sửa câu hỏi không phải đổi bảng.
+ * Một lần gửi form phản hồi; hồ sơ người dùng đã xác nhận nằm trong JSON answers cùng câu trả lời.
+ * Dữ liệu cũ không có hồ sơ vẫn được đọc và xuất bình thường.
  */
 @Getter
 @Setter

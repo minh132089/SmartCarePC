@@ -50,6 +50,36 @@ class FeedbackServiceTests {
     }
 
     @Test
+    void hoSoDiCungPhanHoiVaCoTrongTrangXemVaCsv() {
+        var answers = Map.<String, Object>of("participant_name", "Nguyễn Minh", "participant_age", 21,
+                "participant_occupation", "Sinh viên", "stars", 5);
+        when(repo.save(any())).thenAnswer(inv -> {
+            Feedback f = inv.getArgument(0);
+            f.setId(9L);
+            return f;
+        });
+        assertThat(service.save(new FeedbackRequest(null, null, "gaming", answers)).id()).isEqualTo(9);
+        var stored = row(9, null, JsonMapper.builder().build().writeValueAsString(answers));
+        when(repo.findAllByOrderByIdAsc()).thenReturn(List.of(stored));
+        assertThat(service.list("khoa-bi-mat").getFirst().answers()).containsAllEntriesOf(answers);
+        assertThat(service.exportCsv("khoa-bi-mat")).contains("a.participant_name", "a.participant_age",
+                "a.participant_occupation", "Nguyễn Minh", "Sinh viên", "21");
+    }
+
+    @Test
+    void tuChoiHoSoThieuTruongSaiKieuHoacNgoaiGioiHan() {
+        for (var answers : List.of(
+                Map.<String, Object>of("participant_name", "Minh"),
+                Map.<String, Object>of("participant_name", "Minh", "participant_age", "21", "participant_occupation", "Sinh viên"),
+                Map.<String, Object>of("participant_name", "Minh", "participant_age", 21.5, "participant_occupation", "Sinh viên"),
+                Map.<String, Object>of("participant_name", "Minh", "participant_age", 121, "participant_occupation", "Sinh viên"),
+                Map.<String, Object>of("participant_name", "x".repeat(81), "participant_age", 21, "participant_occupation", "Sinh viên"))) {
+            assertThatThrownBy(() -> service.save(new FeedbackRequest(null, null, null, answers)))
+                    .isInstanceOf(ResponseStatusException.class);
+        }
+    }
+
+    @Test
     void cauTraLoiQuaDaiBiTuChoi() {
         var huge = Map.<String, Object>of("suggestions", "x".repeat(FeedbackService.MAX_ANSWERS_CHARS));
         assertThatThrownBy(() -> service.save(new FeedbackRequest(null, null, null, huge)))

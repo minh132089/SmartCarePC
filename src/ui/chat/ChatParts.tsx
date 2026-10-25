@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode, type Ref } from 'react'
 import { ArrowUp, Check, X } from '@phosphor-icons/react'
 import { PARTS, type PartId } from '../../data/parts'
 import { compatText, quantityLabel, totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
+import LatticeLoader from '../../components/LatticeLoader'
 
 /** Bong bóng tin nhắn: người dùng bên phải màu xanh, trợ lý bên trái màu trắng */
 export function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
@@ -69,7 +70,7 @@ export function Thread({
 /** Mốc thời gian (giây) đổi sang dòng trạng thái kế tiếp */
 const HINT_AT = [0, 6, 20, 50]
 
-/** Ba chấm "đang trả lời", kèm dòng trạng thái đổi theo thời gian chờ nếu có */
+/** Lattice Loader giữ đồng hồ liên tục khi backend cập nhật trạng thái. */
 function BusyBubble({ hints, stage }: { hints?: string[]; stage?: string | null }) {
   const [step, setStep] = useState(0)
   useEffect(() => {
@@ -79,17 +80,8 @@ function BusyBubble({ hints, stage }: { hints?: string[]; stage?: string | null 
   }, [hints])
   const hint = stage ?? hints?.[Math.min(step, hints.length - 1)]
   return (
-    <div className="flex w-fit items-center gap-2.5 rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 ring-1 ring-line" role="status" aria-label={hint ?? 'Trợ lý đang trả lời'}>
-      <span className="flex gap-1" aria-hidden>
-        {[0, 1, 2].map((d) => (
-          <span key={d} className="typing size-1.5 rounded-full bg-ink-3" style={{ animationDelay: `${d * 160}ms` }} />
-        ))}
-      </span>
-      {hint && (
-        <span key={hint} className="swap text-[13px] text-ink-2">
-          {hint}
-        </span>
-      )}
+    <div className="w-fit max-w-full rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 text-ink-2 ring-1 ring-line">
+      <LatticeLoader label={hint ?? 'Đang suy nghĩ'} pattern="dots" grid={3} cellSize={5} gap={2} fontSize={13} className="max-w-full flex-wrap gap-y-2" />
     </div>
   )
 }
