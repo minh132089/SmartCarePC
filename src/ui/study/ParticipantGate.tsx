@@ -51,7 +51,7 @@ function ProfileForm({ initial, onSave }: { initial: Participant | null; onSave:
         <fieldset disabled={confirming}>
           <label>Your name<input autoFocus name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={80} placeholder="Enter your name or preferred name" /></label>
           <div className="participant-fields">
-            <label>Age<input name="age" type="number" inputMode="numeric" min={1} max={120} step={1} required value={age} onChange={(e) => setAge(e.target.value)} placeholder="For example: 21" /></label>
+            <label>Age<input name="age" type="number" inputMode="numeric" min={1} max={120} step={1} required value={age} onChange={(e) => setAge(e.target.value)} placeholder="e.g. 21" /></label>
             <label>Occupation<input name="occupation" list={occupations} autoComplete="organization-title" required minLength={2} maxLength={80} value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="Choose or enter your occupation" /><datalist id={occupations}>{OCCUPATIONS.map((v) => <option key={v} value={v} />)}</datalist></label>
           </div>
         </fieldset>
