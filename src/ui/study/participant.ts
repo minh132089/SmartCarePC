@@ -25,18 +25,21 @@ function read(): Participant | null {
 
 export const useParticipant = create<{
   profile: Participant | null
+  /** Chỉ giữ trong trang hiện tại; tải lại hoặc mở tab mới phải xác nhận lại. */
+  confirmedThisVisit: boolean
   editing: boolean
   edit: () => void
   save: (profile: Participant) => void
 }>((set) => ({
   profile: read(),
+  confirmedThisVisit: false,
   editing: false,
   edit: () => set({ editing: true }),
   save: (profile) => {
     if (!validParticipant(profile)) return
     const clean = { name: profile.name.trim(), age: profile.age, occupation: profile.occupation.trim() }
     try { localStorage.setItem(KEY, JSON.stringify(clean)) } catch { /* Giữ trong phiên khi trình duyệt chặn lưu. */ }
-    set({ profile: clean, editing: false })
+    set({ profile: clean, confirmedThisVisit: true, editing: false })
   },
 }))
 

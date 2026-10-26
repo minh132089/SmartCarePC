@@ -7,9 +7,9 @@ import './participant.css'
 const OCCUPATIONS = ['Học sinh', 'Sinh viên', 'Nhân viên văn phòng', 'Công nghệ thông tin', 'Thiết kế / sáng tạo', 'Giáo viên / giảng viên', 'Kinh doanh / tự do', 'Chưa đi làm']
 
 export function ParticipantGate() {
-  const { profile, editing, save } = useParticipant()
+  const { profile, confirmedThisVisit, editing, save } = useParticipant()
   const required = needsParticipant(location.hostname)
-  if ((!required || profile) && !editing) return null
+  if ((!required || confirmedThisVisit) && !editing) return null
   return <ProfileForm initial={profile} onSave={save} />
 }
 

@@ -652,6 +652,12 @@ public class ChatService {
             log.info("Chat vòng {}: AI {} ms, {} công cụ {} chạy {} ms", round + 1, aiMs, calls.size(),
                     calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
                     (System.nanoTime() - t1) / 1_000_000);
+        // Full builds already use the deterministic explanation in respond(); another model round adds no content.
+            if (readyToReply(turn)) {
+                log.info("Chat: đủ ba phương án đã kiểm tra, trả kết quả không chờ thêm lượt AI");
+                progress.accept(STAGE_WRITE);
+                return respond(BUILDS_READY, turn);
+            }
         }
         // Hết số vòng: có phương án rồi thì vẫn gửi (kèm câu dẫn), chưa có gì mới bảo người dùng hỏi cụ thể hơn
         return respond(turn.tiers.isEmpty() && turn.last == null
@@ -660,6 +666,17 @@ public class ChatService {
 
     /** Thứ tự hiện ba phương án trong bảng so sánh */
     private static final List<String> TIERS = List.of("cheap", "balanced", "quality");
+
+    private boolean readyToReply(Turn turn) {
+        if (!turn.advice || !search.enabled() || turn.needs == null || !turn.tiers.keySet().containsAll(TIERS)) return false;
+        for (String tier : TIERS) {
+            var build = turn.tiers.get(tier);
+            var categories = build.request().items().stream().map(i -> categoryOf(i.code())).collect(Collectors.toSet());
+            if (!categories.containsAll(List.of("cpu", "motherboard", "ram", "ssd", "psu", "case"))
+                    || !showable(build, tierCap(build.budgetVnd(), tier))) return false;
+        }
+        return orderProblem(turn) == null;
+    }
 
     /**
      * Câu trả lời kèm thẻ: có nhiều phương án thì trả cả danh sách (options) và lấy "balanced" làm thẻ chính (build),
@@ -751,8 +768,8 @@ public class ChatService {
             Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
             chosen.values().forEach(list -> list.forEach(c -> c.picks().values().forEach(p -> picks.putIfAbsent(p.url(), p))));
             long w0 = System.nanoTime();
-            // Đã bắt đầu tìm từ lúc chốt từng phương án (propose_build): chỉ chờ thêm phần còn dở
-            search.warmCompare(picks.values(), 1500);
+            // Optional comparisons must not hold up the primary answer.
+            search.warmCompare(picks.values(), 0);
             log.info("Chat: so giá phụ (warmCompare) {} ms", (System.nanoTime() - w0) / 1_000_000);
         }
         List<BuildCard> options = new ArrayList<>();
@@ -5110,8 +5127,7 @@ public class ChatService {
                     if (turn.advice && search.enabled()) {
                         var before = checked.request();
                         checked = finalizeTier(checked, tier, capNow, aiTitles, turn.needs, downgrades);
-                        // Bảng so giá cùng model ở cửa hàng khác: bắt đầu tìm nền ngay, trong lúc trợ lý viết câu trả lời
-                        search.warmCompare(checked.picks().values(), 0);
+                        // Compare other stores only after the primary builds are final.
                         if (!checked.request().equals(before)) {
                             var r = withoutFalseGpuError(matched(compatibilityService.check(checked.request()), checked.request(), turn), checked.picks());
                             checked = new Checked(checked.request(), r, checked.details(), checked.summary(), checked.budgetVnd(),

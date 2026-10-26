@@ -473,6 +473,7 @@ public class PriceEngine {
 
     private List<Offer> fresh(String query, java.util.concurrent.atomic.AtomicBoolean incomplete) {
         Instant at = Instant.now();
+        long lookupDeadline = System.nanoTime() + DEADLINE.toNanos();
         // Ô tìm kiếm của cửa hàng tìm theo mọi chữ: bỏ chữ thừa ("giá rẻ", số đo) để không ra rỗng
         String shopQuery = shopQuery(query);
         var shops = Arrays.stream(ShopSearch.values())
@@ -488,19 +489,20 @@ public class PriceEngine {
         var links = CompletableFuture.supplyAsync(() -> searxng.productUrls(query, 6), pool);
 
         Map<String, Offer> all = new LinkedHashMap<>();
-        for (var f : shops) join(f, incomplete).forEach(o -> all.putIfAbsent(clean(o.url()), o));
+        for (var f : shops) join(f, incomplete, lookupDeadline).forEach(o -> all.putIfAbsent(clean(o.url()), o));
         List<Offer> ranked = rank(query, all.values());
 
         // Đọc trang sản phẩm: link SearXNG chưa có trong kết quả cửa hàng, và vài món đầu để biết còn hàng / bảo hành
         List<String> pages = new ArrayList<>();
-        for (String url : join(links, incomplete)) if (!all.containsKey(clean(url)) && pages.size() < PAGES) pages.add(url);
+        for (String url : join(links, incomplete, lookupDeadline)) if (!all.containsKey(clean(url)) && pages.size() < PAGES) pages.add(url);
         for (var o : ranked) if (o.inStock() == null && pages.size() < PAGES * 2) pages.add(o.url());
+        long pageDeadline = System.nanoTime() + DEADLINE.toNanos();
         var read = pages.stream()
                 .map(url -> CompletableFuture.supplyAsync(() -> ProductPage.parse(fetcher.get(url, Duration.ofSeconds(3)), url, Instant.now()), pool))
                 .toList();
         Set<String> readNow = new HashSet<>();
         for (var f : read) {
-            Offer page = joinOne(f);
+            Offer page = joinOne(f, pageDeadline);
             if (page == null) continue;
             all.merge(clean(page.url()), page, (shop, p) -> shop.merge(p));
             // Kết quả mới có thể không còn giá/biến thể rõ ràng: phải thay cả offer cũ, không chỉ làm mới timestamp.
@@ -530,9 +532,10 @@ public class PriceEngine {
 
     /** Khi nguồn tìm kiếm lỗi, dùng URL cũ làm gợi ý và xác minh lại trang; không dùng giá đã hết hạn. */
     List<Offer> recheckKnown(String query) {
+        long deadline = System.nanoTime() + DEADLINE.toNanos();
         var jobs = rank(query, byUrl.values()).stream().limit(PAGES)
                 .map(o -> CompletableFuture.supplyAsync(() -> quote(o.url(), o.title()), pool)).toList();
-        return jobs.stream().map(this::joinOne).filter(java.util.Objects::nonNull)
+        return jobs.stream().map(f -> joinOne(f, deadline)).filter(java.util.Objects::nonNull)
                 .filter(o -> OfferEvidence.verified(o.title(), o, pageChecked(o.url())))
                 .toList();
     }
@@ -543,8 +546,13 @@ public class PriceEngine {
 
     /** Như join, ghi lại incomplete khi nguồn hết giờ hoặc lỗi (kết quả rỗng khi đó không phải "không có hàng") */
     private <T> List<T> join(CompletableFuture<List<T>> f, java.util.concurrent.atomic.AtomicBoolean incomplete) {
+        return join(f, incomplete, System.nanoTime() + DEADLINE.toNanos());
+    }
+
+    /** Parallel sources share one deadline; waiting for each source must not restart the timeout. */
+    <T> List<T> join(CompletableFuture<List<T>> f, java.util.concurrent.atomic.AtomicBoolean incomplete, long deadline) {
         try {
-            return f.get(DEADLINE.toMillis(), TimeUnit.MILLISECONDS);
+            return f.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
             incomplete.set(true);
             return List.of();
@@ -558,9 +566,9 @@ public class PriceEngine {
         }
     }
 
-    private Offer joinOne(CompletableFuture<Offer> f) {
+    Offer joinOne(CompletableFuture<Offer> f, long deadline) {
         try {
-            return f.get(DEADLINE.toMillis(), TimeUnit.MILLISECONDS);
+            return f.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
         } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
             return null;
         } catch (InterruptedException e) {

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
 import { compatText, quantityLabel, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue, type Verdict } from './chatStore'
 import { VERDICT_INFO } from './verdict'
+import { conditionSummary } from './conditionSummary'
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 
@@ -38,7 +39,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       </h2>
       <p data-sm-item className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>{compatText(card).long}</p>
 
-      {card.verdict && <VerdictBox verdict={card.verdict} />}
+      {card.verdict && <VerdictBox verdict={card.verdict} issues={[...card.warnings, ...(card.unknowns ?? [])]} />}
 
       {total && <Total min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
 
@@ -205,8 +206,14 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
 /** Trang tìm kiếm trên web cửa hàng (GEARVN) theo thông số, cho dòng hiếm hoi chưa có sản phẩm thật; không qua Google */
 /** Một nhóm ghi chú theo mức của bộ luật (Cần xác minh, Gợi ý); không có thì không hiện */
 /** Trạng thái phương án (backend tính theo docs/pc-build-verifier): điểm đang chặn, rồi việc cần làm trước khi mua */
-function VerdictBox({ verdict }: { verdict: Verdict }) {
+function VerdictBox({ verdict, issues }: { verdict: Verdict; issues: Issue[] }) {
   const info = VERDICT_INFO[verdict.status]
+  const conditions = verdict.conditions.map((message) => ({
+    message,
+    summary: conditionSummary(message, issues.find((i) => message.includes(i.message))?.rule),
+  }))
+  const shortened = conditions.some((c) => c.summary !== c.message)
+  const vietnamese = verdict.conditions.some((c) => /[ĂăÂâĐđÊêÔôƠơƯư\u1ea0-\u1ef9]/u.test(c))
   return (
     <div data-sm-item className="mt-4 rounded-xl bg-fill px-3.5 py-3">
       <p className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
@@ -224,10 +231,20 @@ function VerdictBox({ verdict }: { verdict: Verdict }) {
         <>
           <p className="mt-2 text-[12.5px] font-medium text-ink-2">Việc cần làm trước khi mua</p>
           <ul className="mt-1 list-disc space-y-1 pl-4 text-[13.5px] leading-[1.45] text-ink-2">
-            {verdict.conditions.map((c) => (
-              <li key={c}>{c}</li>
+            {conditions.map((c) => (
+              <li key={c.message}>{c.summary}</li>
             ))}
           </ul>
+          {shortened && (
+            <details className="mt-2 text-[12.5px] leading-[1.45] text-ink-2">
+              <summary className={`w-fit cursor-pointer rounded-sm font-medium text-link ${focus}`}>
+                {vietnamese ? 'Xem chi tiết' : 'View details'}
+              </summary>
+              <ul className="mt-2 list-disc space-y-2 pl-4">
+                {conditions.map((c) => <li key={c.message}>{c.message}</li>)}
+              </ul>
+            </details>
+          )}
         </>
       )}
     </div>
