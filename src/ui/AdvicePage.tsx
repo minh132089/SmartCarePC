@@ -5,7 +5,6 @@ import MicroSlats from '@/components/MicroSlats'
 import PixelSwap from '@/components/PixelSwap'
 import StaggeredMenu from '@/components/StaggeredMenu'
 import TechText from '@/components/TechText'
-import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { useViewer } from '../store'
 import { useDark } from '../theme'
@@ -102,7 +101,7 @@ export function AdvicePage() {
     return (
       <>
         <button
-          onClick={() => open(machine)}
+          onClick={() => open(c)}
           className={`flex w-full items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
         >
           Xem và lắp máy này
@@ -445,10 +444,13 @@ function Intro({
 /** Mở trang hướng dẫn với máy đã chọn và bật luôn hướng dẫn lắp, tới bước còn dở */
 function useOpenMachine() {
   const s = useViewer()
-  return (id: FamilyId | 'gaming') => {
+  return (card: BuildCard) => {
+    const id = machineOfCard(card)
+    if (!id) return
     if (id === 'gaming') s.setBuild('gaming')
     else s.setFamily(id)
-    const steps = guideSteps(id === 'gaming' ? null : id, 'gaming')
+    s.setAdvisedBuild(card)
+    const steps = guideSteps(id === 'gaming' ? null : id, 'gaming', card.items.some((i) => i.category === 'gpu'))
     s.setGuideIndex(firstUndone(steps, loadDone(id)))
     s.setGuide(true)
     s.setPage('build')

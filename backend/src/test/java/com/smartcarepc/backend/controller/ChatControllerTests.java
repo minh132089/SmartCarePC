@@ -46,6 +46,16 @@ class ChatControllerTests {
     }
 
     @Test
+    void nhanNoiDungBuocHuongDanDayDuVaGioiHanDoDai() throws Exception {
+        when(chatService.reply(any())).thenReturn(new ChatResponse("Được."));
+        String request = "{\"messages\":[{\"role\":\"user\",\"content\":\"Lắp thế nào?\"}],\"guideStep\":\"%s\"}";
+        mockMvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content(request.formatted("a".repeat(1800))))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content(request.formatted("a".repeat(2001))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void hoiThoaiRongBiTuChoi() throws Exception {
         mockMvc.perform(post("/api/chat").contentType(MediaType.APPLICATION_JSON).content("{\"messages\":[]}"))
                 .andExpect(status().isBadRequest());

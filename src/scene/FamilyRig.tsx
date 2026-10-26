@@ -222,7 +222,8 @@ function ribbon(points: Vector3[], w: number) {
  * chui ra ở lỗ gần đầu cắm nhất rồi cắm thẳng vào đầu cắm.
  */
 function FamilyCables({ f }: { f: Family }) {
-  const routes = useMemo(() => familyRoutes(f), [f])
+  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
+  const routes = useMemo(() => familyRoutes(f, hasGpu), [f, hasGpu])
   return (
     <Part id="cables">
       {routes.map((r, i) => (
@@ -232,7 +233,7 @@ function FamilyCables({ f }: { f: Family }) {
   )
 }
 
-function familyRoutes(f: Family): Route[] {
+function familyRoutes(f: Family, hasGpu: boolean): Route[] {
   const P = familyPlacement(f)
   const L = P.L
   const tz = f.tray.z
@@ -288,10 +289,12 @@ function familyRoutes(f: Family): Route[] {
   const eps = P.header(L.headers.eps, HEADER_Z.eps)
   routes.push({ ...power([...fromPsu('G1'), ...toHeader('G1', eps)], 4, 2), plug: plug(eps, [19, 11, 20]) })
   // PCIe 6+2 tới ổ trên card
-  const gs = P.gpuSocket
-  const gn = P.gpuSocketNormal
-  const gpuEnd: Mm3[] = [front('G4'), add(gs, [gn[0] * 14 + 36, gn[1] * 14, gn[2] * 14]), add(gs, [gn[0] * 14 + 12, gn[1] * 14, gn[2] * 14]), add(gs, [gn[0] * 14, gn[1] * 14, gn[2] * 14])]
-  routes.push({ points: [...fromPsu('G4'), ...gpuEnd].map(v), cols: 4, rows: 2, r: 0.01, plug: { pos: u(add(gs, [gn[0] * 7, gn[1] * 7, gn[2] * 7])), size: u(gn[2] !== 0 ? [19, 11, 14] : gn[1] !== 0 ? [19, 14, 11] : [14, 11, 19]) } })
+  if (hasGpu) {
+    const gs = P.gpuSocket
+    const gn = P.gpuSocketNormal
+    const gpuEnd: Mm3[] = [front('G4'), add(gs, [gn[0] * 14 + 36, gn[1] * 14, gn[2] * 14]), add(gs, [gn[0] * 14 + 12, gn[1] * 14, gn[2] * 14]), add(gs, [gn[0] * 14, gn[1] * 14, gn[2] * 14])]
+    routes.push({ points: [...fromPsu('G4'), ...gpuEnd].map(v), cols: 4, rows: 2, r: 0.01, plug: { pos: u(add(gs, [gn[0] * 7, gn[1] * 7, gn[2] * 7])), size: u(gn[2] !== 0 ? [19, 11, 14] : gn[1] !== 0 ? [19, 14, 11] : [14, 11, 19]) } })
+  }
 
   // Đầu cắm nhỏ ngồi trên chân header (kích thước mm: ngang x, dọc y, cao z)
   const FAN_PLUG: Mm3 = [10.5, 6, 8]

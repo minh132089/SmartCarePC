@@ -1,6 +1,7 @@
 import { ASSEMBLY, STEPS, type AssemblyKey } from './assembly'
 import { getBuild, type BuildId } from './builds'
 import { FAMILIES, gpuBehindBoard, type FamilyId } from './families'
+import type { BuildCard } from '../ui/chat/chatStore'
 
 /**
  * Hướng dẫn lắp máy từng bước cho người mới. Thứ tự các bước lắp trùng với data/assembly.ts
@@ -55,7 +56,7 @@ function machineOf(familyId: FamilyId | null, buildId: BuildId): GuideMachine {
   }
 }
 
-export function guideSteps(familyId: FamilyId | null, buildId: BuildId): GuideStep[] {
+export function guideSteps(familyId: FamilyId | null, buildId: BuildId, hasGpu = true): GuideStep[] {
   const m = machineOf(familyId, buildId)
   const steps: GuideStep[] = [
     {
@@ -188,7 +189,8 @@ export function guideSteps(familyId: FamilyId | null, buildId: BuildId): GuideSt
       why: 'Kiểm tra lại trước khi cấp điện giúp tránh chập điện và hỏng linh kiện.',
       actions: [
         'Nhìn lại một lượt: dây quạt CPU, dây 24 chân và dây 8 chân CPU đã cắm chặt, không còn vít rơi trong vỏ.',
-        'Cắm dây màn hình vào cổng của card đồ họa, không cắm vào cổng trên bo mạch.',
+        hasGpu ? 'Cắm dây màn hình vào cổng của card đồ họa, không cắm vào cổng trên bo mạch.'
+          : 'Cấu hình dùng đồ họa tích hợp: cắm dây màn hình vào cổng HDMI hoặc DisplayPort trên bo mạch chủ.',
         'Cắm dây điện, gạt công tắc sau nguồn sang (I), rồi bấm nút nguồn.',
         'Quạt quay và màn hình hiện chữ hoặc logo là đã lắp đúng. Tắt máy, lắp lại hai nắp hông.',
       ],
@@ -196,7 +198,23 @@ export function guideSteps(familyId: FamilyId | null, buildId: BuildId): GuideSt
       check: 'Máy bật lên và hiện hình.',
     },
   ]
-  return steps
+  return hasGpu ? steps : steps.filter((s) => s.id !== 'gpu')
+}
+
+/** Gửi cùng nội dung chuẩn đang dùng cho mô hình, thay vì chỉ tên bước để AI tự đoán thao tác. */
+export function guideChatContext(familyId: FamilyId | null, buildId: BuildId, index: number | null, card: BuildCard | null) {
+  const hasGpu = card == null || card.items.some((i) => i.category === 'gpu')
+  const steps = guideSteps(familyId, buildId, hasGpu)
+  const current = index == null ? null : steps[Math.max(0, Math.min(index, steps.length - 1))]
+  const ram = steps.find((s) => s.id === 'ram')!
+  const parts = card?.items.map((i) => `${i.category}: ${i.quantity} × ${(i.productName || i.name).slice(0, 80)}`).join('; ')
+  const context = [
+    `Mô hình 3D: ${familyId ?? buildId}. ${hasGpu ? 'Có card đồ họa rời.' : 'Không có card rời; dùng đồ họa tích hợp và bỏ bước lắp GPU.'}`,
+    `Quy tắc RAM của hướng dẫn: ${ram.actions[1]}`,
+    ...(current ? [`Bước ${steps.indexOf(current) + 1}/${steps.length}: ${current.title}`, current.warning ? `An toàn: ${current.warning}` : '', `Thao tác chuẩn: ${current.actions.join(' ')}`, `Lắp đúng khi: ${current.check}`] : []),
+    ...(parts ? [`Cấu hình thực tế được ưu tiên hơn bộ máy mẫu (dùng đúng các món và số lượng này): ${parts}`] : []),
+  ]
+  return context.filter(Boolean).join('\n').slice(0, 2000)
 }
 
 function coolerStep(m: GuideMachine): GuideStep {

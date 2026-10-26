@@ -12,6 +12,7 @@ import { StudyDialogs } from './ui/study/StudyBar'
 export default function App() {
   const guide = useViewer((s) => s.guide)
   const page = useViewer((s) => s.page)
+  const machine = useViewer((s) => s.familyId ?? s.buildId)
   // Trang 1 tư vấn chọn máy; trang 2 là mô hình 3D kèm hướng dẫn lắp và khung chat hỏi khi lắp
   if (page === 'advice')
     return (
@@ -22,7 +23,7 @@ export default function App() {
     )
   return (
     <div className="flex h-full flex-col-reverse bg-canvas md:flex-row">
-      {guide ? <GuidePanel /> : <Sidebar />}
+      {guide ? <GuidePanel key={machine} /> : <Sidebar />}
       {/* Khung 3D như ảnh sản phẩm: thẻ bo góc lớn, nền trắng loang nhẹ */}
       <main className="relative m-3 min-h-0 flex-1 overflow-hidden rounded-[28px] bg-stage md:my-4 md:mr-4 md:ml-0">
         <Scene />

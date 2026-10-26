@@ -28,10 +28,12 @@ export function GuidePanel() {
   const select = useViewer((s) => s.select)
   const setGuidePart = useViewer((s) => s.setGuidePart)
   const full = useViewer((s) => s.guideFull)
+  const advised = useViewer((s) => s.advisedBuild)
+  const hasGpu = advised == null || advised.items.some((i) => i.category === 'gpu')
 
   const machine = familyId ?? buildId
   const machineLabel = familyId ? FAMILIES[familyId].label : getBuild(buildId).label
-  const steps = useMemo(() => guideSteps(familyId, buildId), [familyId, buildId])
+  const steps = useMemo(() => guideSteps(familyId, buildId, hasGpu), [familyId, buildId, hasGpu])
   const [done, setDone] = useState(() => loadDone(machine))
   const [replay, setReplay] = useState(0)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -125,6 +127,8 @@ export function GuidePanel() {
       <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">
         Làm lần lượt từng bước. Lắp xong bước nào thì đánh dấu bước đó, hình bên cạnh sẽ lắp theo.
       </p>
+      {!hasGpu && <p className="mt-3 text-[13px] text-info">Cấu hình đã chọn dùng đồ họa tích hợp. Mô hình và hướng dẫn đã bỏ card rời.</p>}
+      {advised?.modelNote && <p className="mt-3 text-[12px] leading-relaxed text-ink-3">{advised.modelNote}</p>}
 
       <div className="mt-5">
         <div className="flex items-baseline justify-between text-[13px]">
@@ -343,7 +347,8 @@ export function GuideCaption() {
   const index = useViewer((s) => s.guideIndex)
   const full = useViewer((s) => s.guideFull)
   const setFull = useViewer((s) => s.setGuideFull)
-  const steps = useMemo(() => guideSteps(familyId, buildId), [familyId, buildId])
+  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
+  const steps = useMemo(() => guideSteps(familyId, buildId, hasGpu), [familyId, buildId, hasGpu])
   if (!guide) return null
   const s = steps[Math.min(index, steps.length - 1)]
   const text = full ? 'Toàn cảnh: máy đã lắp đủ mọi linh kiện' : `Bước ${index + 1}/${steps.length}: ${s.title}`

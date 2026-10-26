@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowCounterClockwise, ChatCircleDots, X } from '@phosphor-icons/react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
-import { guideSteps } from '../data/guide'
+import { guideChatContext, guideSteps } from '../data/guide'
 import { useViewer } from '../store'
 import { useAssemblyChat } from './chat/chatStore'
 import { Bubble, Composer, IconButton, Thread } from './chat/ChatParts'
@@ -28,11 +28,13 @@ export function ChatPanel() {
   const machine = familyId ? FAMILIES[familyId].label : getBuild(buildId).label
   const guide = useViewer((s) => s.guide)
   const guideIndex = useViewer((s) => s.guideIndex)
-  const steps = useMemo(() => guideSteps(familyId, buildId), [familyId, buildId])
+  const advised = useViewer((s) => s.advisedBuild)
+  const hasGpu = advised == null || advised.items.some((i) => i.category === 'gpu')
+  const steps = useMemo(() => guideSteps(familyId, buildId, hasGpu), [familyId, buildId, hasGpu])
   const step = guide ? steps[Math.min(guideIndex, steps.length - 1)] : null
-  const stepText = step ? `Bước ${steps.indexOf(step) + 1}/${steps.length}: ${step.title}` : null
+  const stepText = step ? `Bước ${Math.min(guideIndex, steps.length - 1) + 1}/${steps.length}: ${step.title}` : null
   const suggestions = step ? [`Bước "${step.title}" mình cần chú ý gì?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
-  const ctx = { buildCode: familyId ?? buildId, guideStep: stepText }
+  const ctx = { buildCode: familyId ?? buildId, guideStep: guideChatContext(familyId, buildId, guide ? guideIndex : null, advised) }
 
   const { messages, busy, stage, error, send, retry, reset } = useAssemblyChat()
   const [open, setOpen] = useState(false)

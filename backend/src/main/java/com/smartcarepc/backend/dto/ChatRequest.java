@@ -19,7 +19,7 @@ public record ChatRequest(
         @NotEmpty(message = "Chưa có tin nhắn nào") @Size(max = 30, message = "Hội thoại quá dài, hãy bắt đầu cuộc trò chuyện mới")
         List<@Valid Message> messages,
         String buildCode,
-        @Size(max = 200) String guideStep,
+        @Size(max = 2000) String guideStep,
         @Pattern(regexp = "advice|assembly", message = "mode chỉ nhận advice hoặc assembly") String mode) {
 
     public ChatRequest(List<Message> messages, String buildCode) {

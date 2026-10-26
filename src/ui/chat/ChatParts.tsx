@@ -80,7 +80,7 @@ function BusyBubble({ hints, stage }: { hints?: string[]; stage?: string | null 
   }, [hints])
   const hint = stage ?? hints?.[Math.min(step, hints.length - 1)]
   return (
-    <div className="w-fit max-w-full rounded-2xl rounded-bl-md bg-surface px-3.5 py-3 text-ink-2 ring-1 ring-line">
+    <div className="w-fit max-w-full px-1 py-2 text-ink-2">
       <LatticeLoader label={hint ?? 'Đang suy nghĩ'} pattern="dots" grid={3} cellSize={5} gap={2} fontSize={13} className="max-w-full flex-wrap gap-y-2" />
     </div>
   )

@@ -16,7 +16,8 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
 /** Thông tin hiển thị của máy đang xem: máy Gaming đầy đủ hoặc một trong 6 họ case. */
 function useMachine() {
-  const { buildId, familyId } = useViewer()
+  const { buildId, familyId, advisedBuild } = useViewer()
+  const hasGpu = advisedBuild == null || advisedBuild.items.some((i) => i.category === 'gpu')
   if (familyId) {
     const f = FAMILIES[familyId]
     const [w, h, d] = f.body
@@ -28,7 +29,7 @@ function useMachine() {
         ['Kích thước thân', `${w} × ${h} × ${d} mm`],
         ['Bo mạch chủ', { ATX: 'ATX (305 × 244 mm)', mATX: 'Micro-ATX (244 × 244 mm)', ITX: 'Mini-ITX (170 × 170 mm)' }[f.board.ff]],
         ['Tản CPU', COOLER_NAME[f.cooler.kind]],
-        ['Card đồ họa', `${f.gpu.kind === 'gpu_280' ? '280 mm, 3 quạt' : '240 mm, 2 quạt'}${f.riser ? ', qua cáp riser' : ''}`],
+        ['Card đồ họa', hasGpu ? `${f.gpu.kind === 'gpu_280' ? '280 mm, 3 quạt' : '240 mm, 2 quạt'}${f.riser ? ', qua cáp riser' : ''}` : 'Tích hợp trong CPU'],
         ['Nguồn', f.psu.kind === 'atx' ? 'ATX' : 'SFX nhỏ gọn'],
       ] as [string, string][],
     }
@@ -42,7 +43,7 @@ function useMachine() {
       ['Thùng máy', build.caseName],
       ['Bo mạch chủ', BOARDS[build.formFactor].label],
       ['RAM', `${build.ramSticks} thanh`],
-      ['Card đồ họa', build.gpu ? 'Card rời' : 'Có sẵn trong CPU'],
+      ['Card đồ họa', hasGpu && build.gpu ? 'Card rời' : 'Có sẵn trong CPU'],
     ] as [string, string][],
   }
 }
@@ -61,9 +62,10 @@ const MACHINES: { id: FamilyId | 'gaming'; label: string; img: string }[] = [
 export function Sidebar() {
   const { familyId, setFamily, setBuild, exploded, toggleExploded, sideOpen, toggleSide, selected, select, inspect } = useViewer()
   const machine = useMachine()
+  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
   // máy slim không có quạt vỏ nên bỏ dòng "Quạt"
   const parts: PartId[] = ['case', 'motherboard', 'cpu', 'cooler', 'ram', 'gpu', 'ssd', 'psu', 'cables', 'fans', 'tools'].filter(
-    (p) => p !== 'fans' || !familyId || FAMILIES[familyId].fans.length > 0,
+    (p) => (p !== 'fans' || !familyId || FAMILIES[familyId].fans.length > 0) && (p !== 'gpu' || hasGpu),
   ) as PartId[]
   const current = familyId ?? 'gaming'
   const listRef = useRef<HTMLDivElement>(null)
@@ -258,7 +260,8 @@ function GuideCard() {
   const buildId = useViewer((s) => s.buildId)
   const setGuide = useViewer((s) => s.setGuide)
   const setGuideIndex = useViewer((s) => s.setGuideIndex)
-  const steps = guideSteps(familyId, buildId)
+  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
+  const steps = guideSteps(familyId, buildId, hasGpu)
   const done = loadDone(familyId ?? buildId)
   const count = steps.filter((s) => done.has(s.id)).length
   return (

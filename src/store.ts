@@ -3,6 +3,7 @@ import type { AssemblyKey } from './data/assembly'
 import type { BuildId } from './data/builds'
 import type { FamilyId } from './data/families'
 import type { PartId } from './data/parts'
+import type { BuildCard } from './ui/chat/chatStore'
 import { detectQuality, LOWER, loadPref, savePref, type QualityLevel, type QualityPref } from './perf/quality'
 
 interface ViewerState {
@@ -10,6 +11,9 @@ interface ViewerState {
   page: 'advice' | 'build'
   setPage: (page: 'advice' | 'build') => void
   buildId: BuildId
+  /** Cấu hình người dùng thực sự chọn từ tư vấn; null khi xem máy mẫu độc lập. */
+  advisedBuild: BuildCard | null
+  setAdvisedBuild: (card: BuildCard) => void
   /** Họ case đang xem; null = máy Gaming đầy đủ (buildId) */
   familyId: FamilyId | null
   exploded: boolean
@@ -61,6 +65,8 @@ export const useViewer = create<ViewerState>((set) => ({
   page: 'advice',
   setPage: (page) => set({ page }),
   buildId: 'gaming',
+  advisedBuild: null,
+  setAdvisedBuild: (advisedBuild) => set({ advisedBuild }),
   familyId: null,
   exploded: false,
   step: 0,
@@ -87,8 +93,8 @@ export const useViewer = create<ViewerState>((set) => ({
     set((s) => ({ qualityPref, quality: qualityPref === 'auto' ? s.detected : qualityPref }))
   },
   lowerQuality: () => set((s) => (s.qualityPref === 'auto' && LOWER[s.quality] ? { quality: LOWER[s.quality]! } : {})),
-  setBuild: (buildId) => set({ buildId, familyId: null, selected: null, exploded: false, step: 0, inspecting: null }),
-  setFamily: (familyId) => set({ familyId, selected: null, exploded: false, step: 0, inspecting: null }),
+  setBuild: (buildId) => set({ buildId, familyId: null, advisedBuild: null, selected: null, exploded: false, step: 0, inspecting: null }),
+  setFamily: (familyId) => set({ familyId, advisedBuild: null, selected: null, exploded: false, step: 0, inspecting: null }),
   toggleExploded: () => set((s) => ({ exploded: !s.exploded })),
   setStep: (step) => set({ step }),
   toggleSide: () => set((s) => ({ sideOpen: !s.sideOpen })),

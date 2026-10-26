@@ -153,6 +153,16 @@ class ChatServiceTests {
     }
 
     @Test
+    void huongDanDungThaoTacCuaMoHinhVaYeuCauTraLoiNgan() {
+        reply(answer("Dùng khe 2 và 4, tính từ CPU ra."));
+        when(builds.findByCode("standard_tower")).thenReturn(new PcBuildResponse(1L, "standard_tower", "Tower", "", BuildType.PRESET, null, List.of()));
+        String context = "Mô hình 3D: standard_tower. Bước 4/10: Cắm RAM. Thao tác chuẩn: Dùng khe 2 và 4 (A2/B2).";
+        service.reply(new ChatRequest(List.of(new Message("user", "Cắm RAM vào đâu?")), "standard_tower", context, "assembly"));
+        assertThat((String) messages(0).getFirst().get("content"))
+                .contains(context, "không quá 80 từ", "2–4 câu", "Không tự hỏi thêm ngân sách");
+    }
+
+    @Test
     void cauTraLoiRongThiThuLaiMotLanKhongTraXinLoiGiaThanhCong() {
         reply(answer(""), answer("Đặt RAM thẳng theo khe."));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "lắp RAM thế nào?")), null));

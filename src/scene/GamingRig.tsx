@@ -246,7 +246,7 @@ const top = (p: Plug): Mm3 => [p.at[0], p.at[1], p.at[2] + PLUG_SIZE[p.kind][2]]
  * chỉ chui ra ở lỗ luồn gần đầu cắm (G1, G2, G3, G5, G6) rồi cắm thẳng vào đầu cắm.
  * Dây nguồn GPU đi trong khoang nguồn, lên trong ống che G4, ra ở miệng G4 cạnh card.
  */
-function gamingWiring(): { routes: Route[]; plugs: Plug[]; splitter: Mm3; joints: Mm3[] } {
+function gamingWiring(hasGpu: boolean): { routes: Route[]; plugs: Plug[]; splitter: Mm3; joints: Mm3[] } {
   const routes: Route[] = []
   const plugs: Plug[] = []
   const power = (points: Mm3[], cols: number, rows: number): Route => ({ points: points.map(v), cols, rows, r: 0.01 })
@@ -269,8 +269,10 @@ function gamingWiring(): { routes: Route[]; plugs: Plug[]; splitter: Mm3; joints
   routes.push(power([...intoG0, behind(-110, -150), behind(-205, -60), behind(-205, 160), behind(G1[0], G1[1] - 6), front(G1[0], G1[1]), [eps.at[0], eps.at[1] + 12, -64], top(eps)], 4, 2))
 
   // PCIe 6+2: ở trong khoang nguồn, lên trong ống che G4, ra ở miệng rồi cắm vào ổ trên mép card (miệng +z)
-  const pcie = plug({ kind: 'pcie8', at: add(onBoard(ON_BOARD.gpu), GPU_POWER), latch: 'y' })
-  routes.push(power([exit, [0, -200, 25], [G4_DUCT_X - 4, -170, 25], [G4_DUCT_X, -110, 25], [G4_DUCT_X, -10, 25], [G4_MOUTH[0] - 2, G4_MOUTH[1] + 4, G4_MOUTH[2] + 4], [64, 24, 66], top(pcie)], 4, 2))
+  if (hasGpu) {
+    const pcie = plug({ kind: 'pcie8', at: add(onBoard(ON_BOARD.gpu), GPU_POWER), latch: 'y' })
+    routes.push(power([exit, [0, -200, 25], [G4_DUCT_X - 4, -170, 25], [G4_DUCT_X, -110, 25], [G4_DUCT_X, -10, 25], [G4_MOUTH[0] - 2, G4_MOUTH[1] + 4, G4_MOUTH[2] + 4], [64, 24, 66], top(pcie)], 4, 2))
+  }
 
   // Đầu cắm 1 × 4 (quạt, bơm) trùm lên 4 chân
   const pwm = (h: Mm3) => plug({ kind: 'pwm4', at: onHeader(h, PCB_TOP + 1.2) })
@@ -427,10 +429,11 @@ function fitLength(pts: Mm3[], target: number, at: number, dir: Mm3): Mm3[] {
 const FLAT = { below: -1.03, min: BEHIND_RANGE[0] / 100, max: BEHIND_RANGE[1] / 100 }
 
 function GamingCables() {
+  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
   const { routes, plugs, splitter, joints } = useMemo(() => {
-    const w = gamingWiring()
+    const w = gamingWiring(hasGpu)
     return { ...w, routes: w.routes.map((r) => ({ ...r, flatten: FLAT })) }
-  }, [])
+  }, [hasGpu])
   return (
     <Part id="cables">
       {routes.map((r, i) => (
