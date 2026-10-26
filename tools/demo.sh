@@ -10,7 +10,7 @@ PIDS=""
 MYSQL_STARTED=""
 DATADIR="$(brew --prefix)/var/mysql"
 PAGES_PROJECT=smartcarepc
-PAGES_BRANCH=preview
+PAGES_BRANCH=ai
 # SearXNG cho engine so giá (backend/service/price). Ghim đúng phiên bản đã thử.
 SEARXNG_IMAGE=searxng/searxng:2026.10.19-81371861f
 SEARXNG_NAME=smartcarepc-searxng
