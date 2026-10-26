@@ -246,7 +246,7 @@ class ChatServiceTests {
             assertThat(line.category()).isEqualTo("cpu");
             assertThat(line.productName()).contains("12400F");
         });
-        assertThat(res.reply()).contains("giữ vỏ Mini-ITX");
+        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("giữ vỏ Mini-ITX"));
     }
 
     @Test
@@ -440,7 +440,7 @@ class ChatServiceTests {
         var ram = new Line("ram", "ram", "RAM", 2, null, null, 3_000_000L, 3_000_000L, null, "https://a/ram", "RAM Corsair 2x16GB DDR4", "A");
         var card = new ChatResponse.BuildCard(List.of(cpu, ram), true, List.of(), List.of(), null, 15_000_000L, null, "balanced", 1);
         String out = ChatService.adviceExplanation(ChatService.needs(List.of("máy học online 15 triệu")), card);
-        assertThat(out).contains("đồ họa tích hợp").contains("RAM 32GB").doesNotContain("64GB").doesNotContain("BIOS");
+        assertThat(out).contains("đồ họa tích hợp").doesNotContain("64GB").doesNotContain("BIOS");
         assertThat(ChatService.safeReason("cpu", 1, "6 nhân, chơi game mượt hơn")).isNull();
         assertThat(ChatService.safeReason("motherboard", 1, "Có WiFi, bảo hành 36 tháng")).isNull();
         assertThat(ChatService.safeReason("ram", 1, "Đúng 16GB, chạy 2 kênh")).isNull();
@@ -1974,7 +1974,7 @@ class ChatServiceTests {
                 .doesNotContain("dùng bo 4 khe dù chưa kiểm tra")
                 .doesNotContain("RAM bảo hành 36 tháng dù thẻ chưa có dữ liệu")
                 .contains("**Phù hợp: 1,50 triệu** - gợi ý chính")
-                .contains("**Chất lượng: 2,39 triệu** - tham khảo, vượt ngân sách 0,39 triệu - khác Phù hợp: SSD Samsung 990 EVO 1TB")
+                .contains("**Chất lượng: 2,39 triệu** - tham khảo, vượt ngân sách 0,39 triệu")
                 .contains("Phương án Rẻ: chưa tìm được");
     }
 
@@ -1994,11 +1994,12 @@ class ChatServiceTests {
 
         String out = ChatService.withTierRows("Mình hiểu bạn chơi game Full HD.\nBạn muốn mình thử ngân sách cao hơn?", List.of(cheap, base));
 
-        assertThat(out).contains("gợi ý chính: NVIDIA RTX 4060 8GB; Intel Core i5 12400F")
-                .contains("khác Phù hợp: NVIDIA RTX 3050 6GB; Intel Core i3 12100F; Vỏ B")
+        assertThat(out).contains("**Phù hợp: 11,50 triệu** - gợi ý chính")
+                .doesNotContain("NVIDIA RTX", "Intel Core", "khác Phù hợp")
                 .contains("giá tham khảo chưa xác minh trên trang bán")
-                .contains("Lưu ý phương án chính: 6GB VRAM dưới mức khuyến nghị 8GB cho game.")
+                .doesNotContain("Lưu ý: 6GB VRAM")
                 .doesNotContain("Bạn muốn mình thử ngân sách cao hơn?");
+        assertThat(base.recommendations()).anySatisfy(i -> assertThat(i.message()).contains("6GB VRAM"));
     }
 
     @Test
@@ -2097,7 +2098,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 15 triệu card NVIDIA tối thiểu 12GB")), null, null, "advice"));
         assertThat(res.build()).isNotNull();
         assertThat(res.build().items().getFirst().productName()).contains("RTX 3060 12GB");
-        assertThat(res.reply()).contains("hiệu năng GPU thấp hơn");
+        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("hiệu năng GPU thấp hơn"));
     }
 
     @Test
@@ -2286,7 +2287,7 @@ class ChatServiceTests {
         var balanced = new ChatResponse.BuildCard(List.of(base), true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
         var quality = new ChatResponse.BuildCard(List.of(kit), true, List.of(), List.of(), null, 30_000_000L, null, "quality", 1);
         assertThat(ChatService.withTierRows("Đã chọn.", List.of(balanced, quality)))
-                .contains("mua 2 bộ, 4 thanh").doesNotContain("DDR4 x4");
+                .contains("**Phù hợp: 5,98 triệu**", "**Chất lượng: 9,40 triệu**").doesNotContain("DDR4 x4", "RAM Lexar");
     }
 
     @Test
@@ -2863,11 +2864,11 @@ class ChatServiceTests {
         var gpu=new Line("gpu_240","gpu","Card",1,null,null,5_000_000L,5_000_000L,null,"https://a/gpu","RTX 3050 6GB","A");
         var card=new ChatResponse.BuildCard(List.of(gpu),true,List.of(),List.of(),null,20_000_000L,null,"balanced",1);
         assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 triệu")),card))
-                .contains("tăng tốc GPU","không phải mọi phần mềm").doesNotContain("FPS","nhu cầu học và văn phòng");
+                .contains("card rời", "tùy phần mềm và dự án").doesNotContain("FPS","nhu cầu học và văn phòng");
         var cpu=new Line("cpu_std","cpu","CPU",1,null,null,4_000_000L,4_000_000L,null,"https://a/cpu","Intel Core i5 12400","A");
         var noGpu=new ChatResponse.BuildCard(List.of(cpu),true,List.of(),List.of(),null,20_000_000L,null,"balanced",1);
         assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 triệu không cần card rời")),noGpu))
-                .contains("Theo yêu cầu không mua card rời","phần mềm, phiên bản và driver").doesNotContain("nhu cầu học và văn phòng");
+                .contains("Theo yêu cầu", "GPU tích hợp", "phần mềm và driver").doesNotContain("nhu cầu học và văn phòng");
     }
 
     @Test

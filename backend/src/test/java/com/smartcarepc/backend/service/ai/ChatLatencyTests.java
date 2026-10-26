@@ -1,6 +1,8 @@
 package com.smartcarepc.backend.service.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -23,9 +25,33 @@ import com.smartcarepc.backend.service.ComponentService;
 import com.smartcarepc.backend.service.ModelMatchService;
 import com.smartcarepc.backend.service.PcBuildService;
 import com.smartcarepc.backend.service.price.Offer;
+import com.smartcarepc.backend.service.Io;
+import com.smartcarepc.backend.exception.AiUnavailableException;
 import tools.jackson.databind.json.JsonMapper;
 
 class ChatLatencyTests {
+    @Test
+    void slowModelCannotExtendTheWholeRequestDeadline() {
+        var client = mock(LlmClient.class);
+        var search = mock(ProductSearch.class);
+        var components = mock(ComponentService.class);
+        var builds = mock(PcBuildService.class);
+        when(components.findAll(null)).thenReturn(List.of());
+        when(builds.findPresets()).thenReturn(List.of());
+        var delayed = new java.util.concurrent.CompletableFuture<Map<String, Object>>();
+        when(client.complete(any())).thenAnswer(i -> delayed.join());
+        var service = new ChatService(client, search, components, mock(CompatibilityService.class), builds,
+                new ModelMatchService(builds, components), JsonMapper.builder().build(), "test", 4096, true);
+        try {
+            assertTimeoutPreemptively(java.time.Duration.ofSeconds(1), () ->
+                    assertThatThrownBy(() -> Io.within(java.time.Duration.ofMillis(60), () -> service.reply(new ChatRequest(
+                            List.of(new ChatRequest.Message("user", "RAM là gì?")), null, null, "assembly"))))
+                            .isInstanceOf(AiUnavailableException.class));
+        } finally {
+            delayed.complete(Map.of());
+        }
+    }
+
     @Test
     void completeVerifiedOptionsDoNotNeedAnotherModelRound() {
         run(true, 2);
@@ -97,6 +123,8 @@ class ChatLatencyTests {
                 null, null, "advice"));
         assertThat(answer.build()).isNotNull();
         if (includeQuality) assertThat(answer.options()).extracting(o -> o.tier()).containsExactly("cheap", "balanced", "quality");
+        assertThat(answer.reply().split("\\s+")).hasSizeLessThan(100);
+        assertThat(answer.reply()).doesNotContain("Kingston", "Corsair", "MSI", "khác Phù hợp");
         verify(client, times(expectedModelCalls)).complete(any());
         verify(search).warmCompare(any(), eq(0L));
     }

@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
+import com.smartcarepc.backend.service.Io;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -45,6 +46,7 @@ public class PoliteFetcher {
 
     /** Như get, kèm địa chỉ cuối cùng; null nếu robots.txt cấm, phải chờ quá maxWait, hay trang lỗi */
     public Page page(String url, Duration maxWait) {
+        if (Io.expired()) return null;
         URI uri;
         try {
             uri = URI.create(url);
@@ -59,7 +61,7 @@ public class PoliteFetcher {
             log.debug("robots.txt cấm {}", url);
             return null;
         }
-        if (!waitTurn(uri.getHost(), rules.delay(), maxWait)) return null;
+        if (!waitTurn(uri.getHost(), rules.delay(), Duration.ofNanos(Io.remainingNanos(maxWait.toNanos())))) return null;
         return fetchPage(uri, Duration.ofSeconds(6));
     }
 
@@ -69,8 +71,10 @@ public class PoliteFetcher {
     }
 
     private Page fetchPage(URI uri, Duration timeout) {
+        long left = Io.remainingNanos(timeout.toNanos());
+        if (left == 0) return null;
         try {
-            var req = HttpRequest.newBuilder(uri).timeout(timeout)
+            var req = HttpRequest.newBuilder(uri).timeout(Duration.ofNanos(left))
                     .header("User-Agent", USER_AGENT).header("Accept-Language", "vi-VN,vi;q=0.9").GET().build();
             var res = http.send(req, HttpResponse.BodyHandlers.ofString());
             return res.statusCode() == 200 ? new Page(res.body(), res.uri().toString()) : null;

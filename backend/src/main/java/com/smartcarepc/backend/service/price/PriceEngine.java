@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import com.smartcarepc.backend.service.Io;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -92,6 +93,7 @@ public class PriceEngine {
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
     /** Mọi offer đã thấy theo link, để thẻ cấu hình hiện được còn hàng, bảo hành, lúc kiểm tra */
     private final Map<String, Offer> byUrl = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<PoliteFetcher.Page>> pageLoads = new ConcurrentHashMap<>();
 
     public PriceEngine(PoliteFetcher fetcher, Searxng searxng, @Value("${app.search.engine:true}") boolean enabled) {
         this.fetcher = fetcher;
@@ -227,7 +229,13 @@ public class PriceEngine {
             return samePage(expectTitle, known.title()) && !Boolean.FALSE.equals(known.inStock()) && !usedGoods(known.title(), url)
                     ? known : null;
         }
-        var fetched = unreadable(url) ? null : fetcher.page(url, Duration.ofSeconds(8));
+        if (Io.expired()) return null;
+        PoliteFetcher.Page fetched = null;
+        if (!unreadable(url)) {
+            var loading = pageLoads.computeIfAbsent(url, key -> Io.async(() -> fetcher.page(key, Duration.ofSeconds(8))));
+            loading.whenComplete((page, error) -> pageLoads.remove(url, loading));
+            fetched = Io.await(loading, DEADLINE, null);
+        }
         if (fetched != null) {
             boolean product = Shops.productLike(fetched.finalUrl());
             Offer page = product ? ProductPage.parseLoose(fetched.html(), url, Instant.now()) : null;
@@ -392,6 +400,17 @@ public class PriceEngine {
 
     /** Sản phẩm đang bán khớp từ khoá, tốt nhất trước (tối đa MAX) */
     public List<Offer> search(String query) {
+        if (Io.expired()) return verifiedKnown(query);
+        return Io.await(Io.async(() -> searchWithinBudget(query)), Duration.ofSeconds(50), verifiedKnown(query));
+    }
+
+    private List<Offer> verifiedKnown(String query) {
+        return rank(query, byUrl.values().stream()
+                .filter(o -> Boolean.TRUE.equals(o.inStock()) && OfferEvidence.verified(o.title(), o, pageChecked(o.url())))
+                .toList());
+    }
+
+    private List<Offer> searchWithinBudget(String query) {
         // "RTX 3050 hoặc GTX 1660": tìm từng model rồi gộp, vì không sản phẩm nào có cả hai mã
         var parts = alternatives(query);
         if (parts.size() > 1) {
@@ -409,6 +428,9 @@ public class PriceEngine {
             // Cache từ khoá chỉ là gợi ý; URL sản phẩm tìm được sau lần cache vẫn phải được xét và đọc lại.
             return recoverIncomplete(query, hit.offers(), true);
         }
+        // A different spelling of an already checked product does not need another crawl.
+        var known = verifiedKnown(query);
+        if (!known.isEmpty()) return known;
         // Cùng từ khoá đang được tìm (ba phương án chốt song song hay tìm trùng, vd "tản nhiệt khí CPU" 19 lần trong một câu):
         // chờ chung một lượt, không bắn thêm request vào cửa hàng (ca thật v10: quá tải, 272/401 lượt hết giờ, trả rỗng)
         var mine = new CompletableFuture<List<Offer>>();
@@ -416,7 +438,7 @@ public class PriceEngine {
         if (running != null) {
             try {
                 // Lượt đang chạy có thể phải chờ tới lượt (SLOT_WAIT) rồi mới tìm (tới vài lần DEADLINE)
-                return running.get(SLOT_WAIT.toMillis() + DEADLINE.toMillis() * 3, TimeUnit.MILLISECONDS);
+                return running.get(Io.remainingNanos(SLOT_WAIT.plus(DEADLINE.multipliedBy(3)).toNanos()), TimeUnit.NANOSECONDS);
             } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
                 return List.of();
             } catch (InterruptedException e) {
@@ -430,7 +452,7 @@ public class PriceEngine {
             // Tối đa SEARCH_SLOTS lượt tìm mới chạy cùng lúc: mỗi lượt mở trang tìm kiếm của mọi cửa hàng, chạy quá nhiều
             // thì hàng đợi giãn cách theo cửa hàng dồn lại, lượt nào cũng hết giờ (ca thật v13: 64/98 lượt rỗng ~8,3 giây)
             long w0 = System.nanoTime();
-            slot = slots.tryAcquire(SLOT_WAIT.toMillis(), TimeUnit.MILLISECONDS);
+            slot = slots.tryAcquire(Io.remainingNanos(SLOT_WAIT.toNanos()), TimeUnit.NANOSECONDS);
             if (!slot) {
                 log.info("So giá \"{}\": chờ lượt quá {} ms, bỏ qua", query, SLOT_WAIT.toMillis());
                 return found;
@@ -552,7 +574,7 @@ public class PriceEngine {
     /** Parallel sources share one deadline; waiting for each source must not restart the timeout. */
     <T> List<T> join(CompletableFuture<List<T>> f, java.util.concurrent.atomic.AtomicBoolean incomplete, long deadline) {
         try {
-            return f.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            return f.get(Io.remainingNanos(Math.max(0, deadline - System.nanoTime())), TimeUnit.NANOSECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
             incomplete.set(true);
             return List.of();
@@ -568,7 +590,7 @@ public class PriceEngine {
 
     Offer joinOne(CompletableFuture<Offer> f, long deadline) {
         try {
-            return f.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            return f.get(Io.remainingNanos(Math.max(0, deadline - System.nanoTime())), TimeUnit.NANOSECONDS);
         } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
             return null;
         } catch (InterruptedException e) {

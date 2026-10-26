@@ -240,7 +240,7 @@ public class ProductSearch {
         }
         // Nhiều kết quả danh sách nhưng chưa đọc được trang bán vẫn là ít nguồn giá tin cậy.
         long checked = out.stream().filter(p -> checkedOffer(p.url(), p.title()) != null).count();
-        if ((out.size() < 3 || checked == 0) && serperReady()) {
+        if ((out.size() < 3 || checked == 0) && serperReady() && !Io.expired()) {
             List<Product> google = new ArrayList<>(shopping(query));
             if (out.size() + google.size() < 3) google.addAll(organic(query + " giá"));
             // Cùng bộ lọc với engine: đúng loại linh kiện, đúng mã model, không phải laptop / hàng cũ ("tản khí tháp"
@@ -462,7 +462,7 @@ public class ProductSearch {
 
     /** Chờ tới lượt: trong 1 giây gần nhất chưa quá PER_SECOND lượt (ba phương án và build tham khảo tìm link song song) */
     private void throttle() {
-        while (true) {
+        while (!Io.expired()) {
             long wait;
             synchronized (recent) {
                 long now = System.currentTimeMillis();
@@ -474,7 +474,7 @@ public class ProductSearch {
                 wait = 1000 - (now - recent.peekFirst()) + 5;
             }
             try {
-                Thread.sleep(wait);
+                Thread.sleep(Math.min(wait, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(Io.remainingNanos(Duration.ofSeconds(1).toNanos()))));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
@@ -485,16 +485,18 @@ public class ProductSearch {
     @SuppressWarnings("unchecked")
     private Map<String, Object> post(String path, String query) {
         for (int attempt = 0; attempt < 3; attempt++) {
+            if (Io.expired()) return Map.of();
             throttle();
+            if (Io.expired()) return Map.of();
             int used = keyIndex.get();
             if (used >= keys.size()) return Map.of();
             try {
-                Map<String, Object> res = serper.post().uri(path)
+                Map<String, Object> res = Io.await(Io.async(() -> serper.post().uri(path)
                         .header("X-API-KEY", keys.get(used))
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(Map.of("q", query, "gl", "vn", "hl", "vi", "num", 10))
                         .retrieve()
-                        .body(Map.class);
+                        .body(Map.class)), Duration.ofSeconds(15), null);
                 return res == null ? Map.of() : res;
             } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
                 log.info("Serper {} quá giới hạn, thử lại", path); // vòng sau throttle() tự chờ

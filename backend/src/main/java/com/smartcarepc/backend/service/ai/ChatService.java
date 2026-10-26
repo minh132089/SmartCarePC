@@ -134,7 +134,9 @@ public class ChatService {
                - price_min_vnd, price_max_vnd: chỉ ghi khi không có product_id (khoảng giá ước tính).
             6. Ngân sách quá thấp so với nhu cầu thì vẫn chọn ba phương án rẻ nhất có thể; phương án nào vẫn vượt mức thì \
             app không hiển thị, nên nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
-            7. Câu trả lời cuối phải giống một người tư vấn hiểu nhu cầu: một câu tóm tắt mục đích, ngân sách và giả định; \
+            Chỉ gửi spec khi cần phân biệt dung lượng hoặc số thanh; reason chỉ ghi cho balanced, tối đa 6 chữ. \
+            Với cheap và quality, bỏ reason; không viết đoạn giải thích trong summary. Gộp cả ba propose_build trong cùng lượt.
+            7. Câu trả lời cuối tối đa 50 từ: một câu tóm tắt mục đích, ngân sách và giả định; \
             sau đó 1 - 2 câu giải thích quyết định quan trọng nhất cho nhu cầu này (vd ưu tiên VRAM cho AI, card cho game, \
             CPU có đồ họa tích hợp cho văn phòng), nêu đánh đổi thật sự nếu phải hạ một yêu cầu. Chỉ thêm tối đa một lưu ý \
             mua hàng hoặc lắp máy liên quan trực tiếp; đừng lặp lời dặn BIOS / xả tĩnh điện cho mọi khách. Không viết lời \
@@ -429,6 +431,13 @@ public class ChatService {
 
     /** progress nhận câu báo bước đang làm (hiện cho người dùng trong lúc chờ, xem ChatJobs) */
     public ChatResponse reply(ChatRequest request, java.util.function.Consumer<String> progress) {
+        return Io.within(ANSWER_BUDGET, () -> replyWithinBudget(request, progress));
+    }
+
+    static final java.time.Duration ANSWER_BUDGET = java.time.Duration.ofSeconds(110);
+
+    @SuppressWarnings("unchecked")
+    private ChatResponse replyWithinBudget(ChatRequest request, java.util.function.Consumer<String> progress) {
         progress.accept(STAGE_READ);
         List<Map<String, Object>> messages = new ArrayList<>();
         String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
@@ -491,7 +500,7 @@ public class ChatService {
         boolean nudged = false, toolNudged = false, outputRetried = false;
         int outputLimit = maxTokens;
         // Một lượt propose thêm khi ba phương án sai thứ tự (Chất lượng không hơn Phù hợp, Rẻ không rẻ hơn rõ rệt)
-        boolean orderNudged = false;
+        boolean orderNudged = false, repaired = false;
         int proposeLimit = MAX_PROPOSE_ROUNDS;
         String lastUser = String.valueOf(messages.getLast().get("content"));
         // Câu hỏi tiếp chỉ hỏi "vì sao" (vd "Sao không có phương án Rẻ?") mà không nhờ đổi gì: trả lời bằng lời, không cho gọi
@@ -505,6 +514,7 @@ public class ChatService {
             log.info("Chat: câu hỏi vì sao, trả lời bằng lời, không dựng lại phương án");
         }
         for (int round = 0; round < MAX_ROUNDS; round++) {
+            if (Io.expired()) break;
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", outputLimit);
@@ -521,7 +531,11 @@ public class ChatService {
             long t0 = System.nanoTime();
             Map<String, Object> res;
             try {
-                res = client.complete(body);
+                res = Io.await(Io.async(() -> client.complete(body)), java.time.Duration.ofSeconds(40), null);
+                if (res == null) {
+                    if (!turn.tiers.isEmpty() || turn.last != null) return respond(BUILDS_READY, turn);
+                    throw new AiUnavailableException(HttpStatus.GATEWAY_TIMEOUT, "Nguồn tư vấn đang phản hồi chậm. Bạn thử lại nhé.");
+                }
             } catch (AiUnavailableException e) {
                 // AI lỗi ở vòng viết câu trả lời nhưng các phương án đã dựng xong: vẫn gửi phương án, không bỏ phí
                 if (turn.tiers.isEmpty() && turn.last == null) throw e;
@@ -584,7 +598,7 @@ public class ChatService {
                 // cho thêm một lượt propose_build cho đúng tier đó trước khi viết câu trả lời
                 // Rẻ không rẻ hơn Phù hợp rõ rệt (thường do Phù hợp đã được hạ thông số): dựng lại Rẻ từ Phù hợp, ép xuống dưới
                 // Phù hợp ít nhất TIER_GAP, một lần, trước khi nhắc trợ lý
-                if (turn.advice && !orderNudged && search.enabled()) {
+                if (turn.advice && !orderNudged && !repaired && search.enabled()) {
                     balancedFromQuality(turn);
                     cheapFromBalanced(turn);
                     qualityFromBalanced(turn);
@@ -640,19 +654,30 @@ public class ChatService {
                             return CompletableFuture.completedFuture(json.writeValueAsString(Map.of("error",
                                     "Đã hết lượt tìm. Chốt bằng propose_build với kết quả đã có; món chưa ưng thì app tự đổi.")));
                         }
-                        return Io.async(() -> runTool(fn, turn));
+                        return Io.async(() -> "propose_build".equals(fn.get("name"))
+                                ? Io.within(TIER_BUDGET, () -> runTool(fn, turn)) : runTool(fn, turn));
                     })
                     .toList();
             long t1 = System.nanoTime();
             for (int i = 0; i < calls.size(); i++) {
                 messages.add(Map.of("role", "tool", "tool_call_id", String.valueOf(calls.get(i).get("id")),
-                        "content", results.get(i).join()));
+                        "content", Io.await(results.get(i), ANSWER_BUDGET,
+                                "{\"error\":\"Đã hết thời gian tra cứu. Chỉ dùng kết quả đã kiểm tra.\"}")));
             }
             progress.accept(!turn.tiers.isEmpty() ? STAGE_WRITE : names.contains("search_products") ? STAGE_PICK : STAGE_READ);
             log.info("Chat vòng {}: AI {} ms, {} công cụ {} chạy {} ms", round + 1, aiMs, calls.size(),
                     calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
                     (System.nanoTime() - t1) / 1_000_000);
-        // Full builds already use the deterministic explanation in respond(); another model round adds no content.
+            // Repair from the collected products before spending another model round on prose we replace anyway.
+            if (!repaired && turn.advice && search.enabled() && turn.tiers.keySet().containsAll(TIERS) && !readyToReply(turn)) {
+                repaired = true;
+                Io.within(REBUILD_BUDGET, () -> {
+                    balancedFromQuality(turn);
+                    cheapFromBalanced(turn);
+                    qualityFromBalanced(turn);
+                    return null;
+                });
+            }
             if (readyToReply(turn)) {
                 log.info("Chat: đủ ba phương án đã kiểm tra, trả kết quả không chờ thêm lượt AI");
                 progress.accept(STAGE_WRITE);
@@ -683,14 +708,14 @@ public class ChatService {
      * để các chỗ chỉ đọc một thẻ (lịch sử hội thoại, nút xem và lắp) vẫn chạy như cũ.
      */
     private ChatResponse respond(String reply, Turn turn) {
-        if (turn.advice && search.enabled()) {
+        if (turn.advice && search.enabled() && !Io.expired()) {
             Map<String, CompletableFuture<?>> quotes = new LinkedHashMap<>();
             turn.tiers.values().forEach(c -> c.picks().forEach((code, product) -> {
                 var link = c.links().get(code);
                 String url = link == null ? null : link.join();
                 if (url != null) quotes.computeIfAbsent(url, key -> Io.async(() -> search.refreshQuote(key, product.title())));
             }));
-            CompletableFuture.allOf(quotes.values().toArray(CompletableFuture[]::new)).join();
+            Io.await(CompletableFuture.allOf(quotes.values().toArray(CompletableFuture[]::new)), java.time.Duration.ofSeconds(5), null);
             turn.tiers.replaceAll((tier, c) -> withPagePrices(c));
         }
         Map<String, List<Checked>> chosen = new LinkedHashMap<>();
@@ -964,8 +989,8 @@ public class ChatService {
     }
 
     /** Thời gian tối đa cho các bước cứu của một phương án (propose_build); dựng lại phương án từ phương án bên cạnh dùng REBUILD_BUDGET */
-    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(40);
-    static final java.time.Duration REBUILD_BUDGET = java.time.Duration.ofSeconds(25);
+    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(35);
+    static final java.time.Duration REBUILD_BUDGET = java.time.Duration.ofSeconds(15);
 
     /** Khoản vượt trần tối đa còn ép giá thêm một lượt (đổi hàng cùng thông số rẻ hơn) */
     static final long SQUEEZE_GAP = 1_500_000;
@@ -2461,6 +2486,14 @@ public class ChatService {
     /** Như trên, thử tối đa limit món (dòng bắt buộc phải có link được thử nhiều hơn) */
     private ProductSearch.Product bestLinked(List<ProductSearch.Product> candidates, String now, int limit) {
         int nowRank = rank(now);
+        // Already checked stock wins over opening every candidate again and waiting for the slowest shop.
+        if (nowRank < 3) for (var candidate : candidates.stream().limit(limit).toList()) {
+            if (candidate.url() == null || ProductSearch.isGoogle(candidate.url()) || ProductSearch.homePage(candidate.url())) continue;
+            var page = checkedOffer(candidate.url(), candidate.title());
+            if (page != null && Boolean.TRUE.equals(page.inStock())) {
+                return new ProductSearch.Product(page.title(), candidate.shop(), page.priceVnd(), candidate.url(), page.imageUrl());
+            }
+        }
         // Thử song song (mỗi lần thử có thể phải tìm và mở trang cửa hàng), rồi lấy món hạng cao nhất, gần giá nhất
         var tries = candidates.stream().limit(limit)
                 .map(c -> Io.async(() -> {
@@ -2471,7 +2504,7 @@ public class ChatService {
         ProductSearch.Product best = null;
         int bestRank = nowRank;
         for (var t : tries) {
-            var found = t.join();
+            var found = Io.await(t, java.time.Duration.ofSeconds(8), (ProductSearch.Product) null);
             int r = found == null ? 0 : rank(found.url());
             if (r > bestRank) {
                 best = found;
@@ -2547,7 +2580,7 @@ public class ChatService {
     /**
      * Lời cuối cho trang tư vấn: phần trợ lý viết (bỏ dòng nhắc tier, số tiền, hay model CPU / card không có trên thẻ;
      * các ghi chú "Phương án ... không hiển thị" của app giữ nguyên), rồi một dòng cho mỗi thẻ: tên phương án, tổng đúng
-     * thẻ, và tối đa 3 món khác thẻ chính (Phù hợp, không có thì thẻ đầu).
+     * thẻ. Chi tiết linh kiện và các điều chỉnh nằm trong thẻ, không lặp lại trong chat.
      */
     static String withTierRows(String reply, List<BuildCard> cards) {
         return withTierRows(reply, cards, List.of());
@@ -2617,57 +2650,18 @@ public class ChatService {
                     .append(gpuSaving ? "CPU, nền RAM và bảo hành từng món có thể khác; xem chi tiết từng thẻ. Chưa có benchmark để khẳng định bản đắt hơn chạy mô hình nhanh hơn.\n\n"
                             : "Các linh kiện khác được liệt kê ở từng thẻ.\n\n");
         }
-        if (main.recommendations() != null) {
-            boolean added = false;
-            for (String note : main.recommendations().stream().filter(i -> "DOWNGRADE".equals(i.rule())).map(Issue::message).distinct().toList()) {
-                if (prose.contains(note)) continue;
-                sb.append("Lưu ý phương án chính: ").append(note).append("\n");
-                added = true;
-            }
-            if (added) sb.append("\n");
-        }
         for (var c : cards) {
             long sum = c.items().stream().mapToLong(l -> l.priceMaxVnd() != null ? l.priceMaxVnd() : l.priceMinVnd() != null ? l.priceMinVnd() : 0).sum();
             sb.append("- **").append(TIER_NAME.getOrDefault(c.tier(), c.tier())).append(": ")
                     .append(String.format(java.util.Locale.ROOT, "%.2f", sum / 1e6).replace('.', ',')).append(" triệu**");
             boolean overBudget = c.budgetVnd() != null && sum > c.budgetVnd();
             if (overBudget) sb.append(" - tham khảo, vượt ngân sách ").append(millions(sum - c.budgetVnd()));
-            if (c == main) {
-                if (!overBudget) sb.append(" - gợi ý chính");
-                List<String> core = c.items().stream()
-                        .filter(l -> List.of("cpu", "gpu").contains(l.category()) && l.productName() != null)
-                        .sorted(Comparator.comparingInt(l -> "gpu".equals(l.category()) ? 0 : 1))
-                        .map(l -> ProductSearch.shortTitle(l.productName())).toList();
-                if (!core.isEmpty()) sb.append(": ").append(String.join("; ", core));
-            } else {
-                List<String> diffs = new ArrayList<>();
-                Map<String, Line> base = new LinkedHashMap<>();
-                main.items().forEach(l -> base.putIfAbsent(l.category(), l));
-                for (var l : c.items().stream().sorted(Comparator.comparingInt(l -> switch (l.category()) {
-                    case "gpu" -> 0;
-                    case "cpu" -> 1;
-                    case "ram" -> 2;
-                    case "ssd" -> 3;
-                    case "psu" -> 4;
-                    case "motherboard" -> 5;
-                    case "case" -> 6;
-                    default -> 7;
-                })).toList()) {
-                    var b = base.get(l.category());
-                    if (diffs.size() >= 3 || l.productName() == null) continue;
-                    if (b == null || b.productName() == null) diffs.add("thêm " + ProductSearch.shortTitle(l.productName()));
-                    else if (!b.productName().equals(l.productName()) || b.quantity() != l.quantity()) {
-                        diffs.add(ProductSearch.shortTitle(l.productName())
-                                + quantitySuffix(l));
-                    }
-                }
-                if (!diffs.isEmpty()) sb.append(" - khác ").append(TIER_NAME.getOrDefault(main.tier(), main.tier())).append(": ").append(String.join("; ", diffs));
-            }
+            if (c == main && !overBudget) sb.append(" - gợi ý chính");
             sb.append("\n");
         }
         long unchecked = cards.stream().flatMap(c -> c.items().stream()).filter(l -> !Boolean.TRUE.equals(l.priceChecked())).count();
         if (unchecked > 0) sb.append("\nCó giá tham khảo chưa xác minh trên trang bán; hãy kiểm tra lại giá và tồn kho trước khi đặt.\n");
-        sb.append("\nBạn bấm vào từng phương án để xem chi tiết linh kiện, giá, link mua và hướng dẫn lắp nhé.");
+        sb.append("\nChọn một phương án để xem linh kiện và hướng dẫn lắp.");
         if (!notes.isEmpty()) sb.append("\n\n").append(String.join("\n", notes));
         return sb.toString();
     }
@@ -2786,37 +2780,14 @@ public class ChatService {
 
     /** Chỉ giải thích bằng thông số của thẻ được chọn; lời AI tự đoán BIOS, số khe và tuổi thọ không thành dữ kiện. */
     static String adviceExplanation(Needs needs, BuildCard card) {
-        var cpu = card.items().stream().filter(l -> "cpu".equals(l.category())).findFirst().orElse(null);
         var gpu = card.items().stream().filter(l -> "gpu".equals(l.category())).findFirst().orElse(null);
-        var ram = card.items().stream().filter(l -> "ram".equals(l.category())).findFirst().orElse(null);
-        var ssd = card.items().stream().filter(l -> "ssd".equals(l.category())).findFirst().orElse(null);
-        Integer ramGb = ram == null ? null : amount("ram", ram.productName());
-        Integer ssdGb = ssd == null ? null : amount("ssd", ssd.productName());
-        StringBuilder text = new StringBuilder();
-        if (needs.cuda() && gpu != null) {
-            text.append("Mình giữ GPU NVIDIA với ").append(vram(gpu.productName()))
-                    .append("GB VRAM để đáp ứng yêu cầu bộ nhớ và luồng CUDA. Model AI chạy được còn phụ thuộc kích thước mô hình, cách nạp và phần mềm; chưa có benchmark để cam kết tốc độ. ");
-        } else if (needs.creator() && gpu != null) {
-            text.append("Mình chọn card rời ").append(ProductSearch.shortTitle(gpu.productName()))
-                    .append(" để hỗ trợ tác vụ đồ họa có tăng tốc GPU. Mức VRAM là lựa chọn cấu hình của app, không phải mọi phần mềm thiết kế đều bắt buộc card rời. ")
-                    .append("Khả năng tăng tốc và render còn phụ thuộc phần mềm, phiên bản, driver và kích thước dự án; chưa có benchmark để cam kết tốc độ. ");
-        } else if (gpu != null) {
-            text.append("Mình dùng card rời ").append(ProductSearch.shortTitle(gpu.productName()))
-                    .append(" cho phần xử lý đồ họa. FPS thực tế phụ thuộc game, độ phân giải và thiết lập; cấu hình này chưa có benchmark để hứa một mức FPS. ");
-        } else if (cpu != null && Boolean.TRUE.equals(ProductRules.hasIgpu(cpu.productName()))) {
-            text.append(needs.creator()
-                    ? "Theo yêu cầu không mua card rời, phương án dùng GPU tích hợp của CPU. Cần kiểm tra phần mềm, phiên bản và driver hỗ trợ GPU này; chưa xác nhận khả năng tăng tốc hoặc render dự án thực tế. "
-                    : "CPU có đồ họa tích hợp nên phương án chính không cần mua card rời, giảm chi phí cho nhu cầu học và văn phòng. ");
-        }
-        if (ramGb != null) {
-            int total = ramGb * ram.quantity() / Objects.requireNonNullElse(kitSticks(ram.productName()), 1);
-            text.append("RAM ").append(total).append("GB");
-            if (ssdGb != null) text.append(" và SSD ").append(ssdGb * ssd.quantity()).append("GB");
-            text.append(" là dung lượng của phương án chính. ");
-            if (needs.office() && total < 16) text.append("8GB phù hợp tác vụ văn phòng nhẹ; mở nhiều tab hoặc nhiều ứng dụng cùng lúc nên cân nhắc 16GB. ");
-        }
-        text.append("Các điểm còn cần xác nhận về linh kiện và lắp đặt được ghi trong thẻ; kiểm tra các điểm đó với cửa hàng trước khi mua.");
-        return text.toString();
+        String text = needs.cuda() && gpu != null
+                ? "Ưu tiên GPU NVIDIA " + vram(gpu.productName()) + "GB VRAM cho CUDA; khả năng chạy model tùy phần mềm và bộ nhớ."
+                : needs.creator() && gpu != null ? "Ưu tiên card rời cho tác vụ đồ họa; hiệu quả tùy phần mềm và dự án."
+                : gpu != null ? "Ưu tiên card rời cho game; FPS tùy độ phân giải và thiết lập."
+                : needs.creator() ? "Theo yêu cầu, dùng GPU tích hợp; cần kiểm tra phần mềm và driver hỗ trợ."
+                : "Dùng đồ họa tích hợp để tiết kiệm cho học tập và văn phòng.";
+        return text;
     }
 
     /** Tên phương án hiện cho người dùng */
@@ -3085,7 +3056,7 @@ public class ChatService {
         if (tries.isEmpty()) log.debug("Không có món {} cùng thông số rẻ hơn \"{}\" trong {} kết quả", category, now.title(), group.size());
         for (var t : tries) {
             try {
-                var p = t.get(20, java.util.concurrent.TimeUnit.SECONDS);
+                var p = t.get(Io.remainingNanos(java.time.Duration.ofSeconds(8).toNanos()), java.util.concurrent.TimeUnit.NANOSECONDS);
                 if (p != null) return p;
             } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
                 // thử món kế
@@ -4899,7 +4870,7 @@ public class ChatService {
             ProductSearch.Product p;
             long deadline = start + (mustLink.contains(code) ? MUST_LINK_BUDGET : LINK_BUDGET).toMillis();
             try {
-                p = f.get(Math.max(0, deadline - System.currentTimeMillis()), java.util.concurrent.TimeUnit.MILLISECONDS);
+                p = f.get(Io.remainingNanos(java.time.Duration.ofMillis(Math.max(0, deadline - System.currentTimeMillis())).toNanos()), java.util.concurrent.TimeUnit.NANOSECONDS);
             } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
                 return;
             } catch (InterruptedException e) {
