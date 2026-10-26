@@ -56,7 +56,7 @@ function ProfileForm({ initial, onSave }: { initial: Participant | null; onSave:
         </fieldset>
         <p className="participant-disclosure">Khi xác nhận, bạn đồng ý đính kèm tên, tuổi và nghề nghiệp vào phản hồi gửi cho nhóm nghiên cứu. Thông tin được ghi nhớ trên trình duyệt này và chỉ gửi lên khi bạn gửi phản hồi.</p>
         <div className="participant-confirm">
-          <SlideCommit width={width} label="Kéo để xác nhận" doneLabel="Đã xác nhận" errorLabel="Kiểm tra lại thông tin" trackColor="#292c34" handleColor="#2997ff" successColor="#22c55e" returnBounce={0.18} landingDip={0} holdMs={0} disabled={!valid}
+          <SlideCommit width={width} label="Kéo để xác nhận" doneLabel="Đã xác nhận" errorLabel="Kiểm tra lại thông tin" trackColor="#e8e8ed" handleColor="#0071e3" successColor="#22c55e" returnBounce={0.18} landingDip={0} holdMs={0} disabled={!valid}
             onConfirm={() => {
               if (!valid || !form.current?.reportValidity()) throw new Error('Thông tin chưa hợp lệ')
               pending.current = value

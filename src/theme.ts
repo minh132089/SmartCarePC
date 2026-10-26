@@ -1,19 +1,9 @@
-import { useSyncExternalStore } from 'react'
-
 /**
- * Chế độ sáng / tối theo cài đặt máy người dùng (prefers-color-scheme). Giao diện HTML đổi màu bằng token CSS
- * trong index.css; cảnh 3D không đọc được CSS nên lấy màu từ STAGE bên dưới, giữ trùng với token --color-stage
- * và --color-panel để khung 3D tan vào nền trang.
+ * SmartCarePC dùng giao diện sáng, đồng nhất HTML và cảnh 3D dù máy đang ở chế độ tối.
+ * Giữ màu STAGE trùng với token --color-stage và --color-panel trong index.css.
  */
-const query = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
-
-function subscribe(onChange: () => void) {
-  query?.addEventListener('change', onChange)
-  return () => query?.removeEventListener('change', onChange)
-}
-
 export function useDark() {
-  return useSyncExternalStore(subscribe, () => query?.matches ?? false, () => false)
+  return false
 }
 
 /** Màu studio 3D: nền và sương mù, sàn thường, sàn phản chiếu, lưới, bóng đổ, nền khung xem cận cảnh */
