@@ -10,6 +10,7 @@ PIDS=""
 MYSQL_STARTED=""
 DATADIR="$(brew --prefix)/var/mysql"
 PAGES_PROJECT=smartcarepc
+PAGES_BRANCH=preview
 # SearXNG cho engine so giá (backend/service/price). Ghim đúng phiên bản đã thử.
 SEARXNG_IMAGE=searxng/searxng:2026.10.19-81371861f
 SEARXNG_NAME=smartcarepc-searxng
@@ -80,7 +81,7 @@ say "5/6 Mở link công khai"
 URL=""
 for attempt in 1 2 3; do
   : >"$LOG/tunnel.log"
-  cloudflared tunnel --no-autoupdate --url http://localhost:4173 --http-host-header localhost:4173 >"$LOG/tunnel.log" 2>&1 &
+  cloudflared tunnel --no-autoupdate --protocol http2 --url http://localhost:4173 --http-host-header localhost:4173 >"$LOG/tunnel.log" 2>&1 &
   TUNNEL_PID=$!
   i=0
   while [ -z "$URL" ] && [ $i -lt 40 ]; do
@@ -98,8 +99,8 @@ done
 say "6/6 Cập nhật link ngắn trên Cloudflare Pages"
 printf "// Ghi lại bởi tools/demo.sh, không commit\nexport const BACKEND = '%s'\n" "$URL" >functions/_backend.js
 SHORT=""
-if $WRANGLER pages deploy dist --project-name "$PAGES_PROJECT" --branch main --commit-dirty=true >"$LOG/pages.log" 2>&1; then
-  SHORT="https://$PAGES_PROJECT.pages.dev"
+if $WRANGLER pages deploy dist --project-name "$PAGES_PROJECT" --branch "$PAGES_BRANCH" --commit-dirty=true >"$LOG/pages.log" 2>&1; then
+  SHORT="https://$PAGES_BRANCH.$PAGES_PROJECT.pages.dev"
 else
   echo "Không cập nhật được link ngắn (xem $LOG/pages.log). Vẫn dùng được link tạm bên dưới."
 fi
