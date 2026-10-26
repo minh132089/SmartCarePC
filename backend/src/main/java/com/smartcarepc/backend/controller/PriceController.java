@@ -26,7 +26,7 @@ public class PriceController {
     public List<Offer> prices(@RequestParam("q") String query) {
         String q = query == null ? "" : query.strip();
         if (q.length() < 2 || q.length() > 100) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Từ khoá phải dài từ 2 tới 100 ký tự");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search keywords must contain 2 to 100 characters");
         }
         return engine.search(q);
     }

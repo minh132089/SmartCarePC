@@ -5,15 +5,15 @@ import { useViewer } from '../store'
  * "Lắp lại" lắp xuôi từ bước đầu, mỗi lần một bước.
  */
 export const ASSEMBLY = [
-  { key: 'psu', install: 'Lắp nguồn vào case', remove: 'Tháo nguồn' },
-  { key: 'cpu', install: 'Đặt CPU vào socket', remove: 'Nhấc CPU ra' },
-  { key: 'ram', install: 'Cắm RAM', remove: 'Rút RAM' },
-  { key: 'ssd', install: 'Lắp ổ SSD M.2', remove: 'Tháo ổ SSD' },
-  { key: 'cooler', install: 'Bôi keo, lắp tản nhiệt', remove: 'Tháo tản nhiệt' },
+  { key: 'psu', install: "Install the power supply", remove: "Remove the power supply" },
+  { key: 'cpu', install: "Place the CPU in its socket", remove: "Lift out the CPU" },
+  { key: 'ram', install: "Install the RAM", remove: "Remove the RAM" },
+  { key: 'ssd', install: "Install the M.2 SSD", remove: "Remove the SSD" },
+  { key: 'cooler', install: "Apply thermal paste and install the cooler", remove: "Remove the cooler" },
   // Quạt trước card: card nằm ngang giữa vỏ sẽ che chỗ bắt vít quạt trước / đáy và chân cắm quạt trên bo
-  { key: 'fans', install: 'Bắt quạt case', remove: 'Tháo quạt case' },
-  { key: 'gpu', install: 'Cắm card đồ họa', remove: 'Rút card đồ họa' },
-  { key: 'cables', install: 'Cắm và gom dây', remove: 'Rút dây cáp' },
+  { key: 'fans', install: "Install the case fans", remove: "Remove the case fans" },
+  { key: 'gpu', install: "Install the graphics card", remove: "Remove the graphics card" },
+  { key: 'cables', install: "Connect and organise the cables", remove: "Disconnect the cables" },
 ] as const
 
 export type AssemblyKey = (typeof ASSEMBLY)[number]['key']

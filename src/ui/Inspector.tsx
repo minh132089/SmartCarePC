@@ -246,15 +246,15 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
   const cam: [number, number, number] = [(dir[0] / len) * 8, (dir[1] / len) * 8, (dir[2] / len) * 8]
 
   return (
-    <div className="inspector absolute inset-0 z-20 flex flex-col bg-panel" role="dialog" aria-label={`Xem cận cảnh ${PARTS[inspecting].name}`}>
+    <div className="inspector absolute inset-0 z-20 flex flex-col bg-panel" role="dialog" aria-label={`Inspect ${PARTS[inspecting].name}`}>
       <div className="flex items-start justify-between gap-4 px-6 pt-5">
         <div>
-          <p className="text-[13px] font-semibold text-ink-2">Xem cận cảnh</p>
+          <p className="text-[13px] font-semibold text-ink-2">Inspect</p>
           <h2 className="text-[24px] leading-tight font-semibold tracking-[-0.02em]">{PARTS[inspecting].name}</h2>
         </div>
         <button
           onClick={() => inspect(null)}
-          aria-label="Đóng"
+          aria-label="Close"
           className="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2 transition-transform duration-100 hover:text-ink active:scale-[0.94]"
         >
           <X size={16} aria-hidden />
@@ -296,7 +296,7 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
           </button>
         ))}
         <p className="pointer-events-none absolute bottom-3 left-0 w-full text-center text-[12px] text-ink-3">
-          Kéo để xoay, cuộn để phóng to. Bấm số để xem chi tiết.
+          Drag to rotate and scroll to zoom. Select a number to explore a detail.
         </p>
       </div>
 

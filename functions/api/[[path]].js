@@ -27,7 +27,7 @@ export async function onRequest({ request }) {
 
 function offline() {
   return Response.json(
-    { message: 'Máy chủ demo đang tắt nên trợ lý và feedback tạm thời không dùng được. Phần xem mô hình 3D vẫn dùng bình thường.' },
+    { message: 'The demo server is offline. The assistant and feedback are temporarily unavailable. You can still explore the 3D models.' },
     { status: 503 },
   )
 }

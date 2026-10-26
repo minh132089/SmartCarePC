@@ -33,7 +33,7 @@ try {
     { rule: 'COOLER_MOUNT', message: 'Chưa xác minh tản nhiệt có bộ gá cho socket LGA1700 (gá Intel và AMD khác nhau).' },
     { rule: 'GPU_CLEARANCE', message: 'Chưa đối chiếu chiều dài, bề rộng và độ dày của card với khoảng trống GPU trong vỏ.' },
   ]
-  assert.equal(conditionSummary(unknowns[1].message, 'COOLER_MOUNT'), 'Kiểm tra tản có gá cho socket LGA1700.')
+  assert.equal(conditionSummary(unknowns[1].message, 'COOLER_MOUNT'), 'Confirm the cooler includes a mounting kit for LGA1700.')
   assert.equal(conditionSummary('The cooler mounting kit for AM5 is not verified.', 'COOLER_MOUNT'), 'Confirm the cooler includes a mounting kit for AM5.')
   assert.equal(conditionSummary('Unfamiliar hardware requirement.', 'NEW_RULE'), 'Unfamiliar hardware requirement.')
   assert.equal(conditionSummary('Ask the store to confirm before buying: Check an unusual connector.'), 'Check an unusual connector.')
@@ -45,9 +45,9 @@ try {
   } }))
   const [collapsed, details] = markup.split('<details')
   assert(collapsed.includes(blocker), 'Blocking issues must stay fully visible')
-  assert(collapsed.includes('Xác nhận bo mạch hỗ trợ CPU và phiên bản BIOS.'))
-  assert(collapsed.includes('Kiểm tra tản có gá cho socket LGA1700.'))
-  assert(collapsed.includes('Kiểm tra card và đầu cáp nguồn có vừa vỏ.'))
+  assert(collapsed.includes('Confirm CPU support and the required BIOS version.'))
+  assert(collapsed.includes('Confirm the cooler includes a mounting kit for LGA1700.'))
+  assert(collapsed.includes('Check that the GPU and its power connector fit the case.'))
   assert(!collapsed.includes('CPU Support List'), 'Long checks are hidden from the compact summary')
   assert(!/^[^>]*\bopen\b/.test(details), 'Full details are closed by default')
   for (const condition of conditions) assert(details.includes(condition), 'Every original check remains available')

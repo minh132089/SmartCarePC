@@ -72,7 +72,7 @@ class ModelMatchServiceTests {
         assertThat(r.errors()).extracting(Issue::rule).containsExactly("model.motherboard", "model.cooler");
         assertThat(r.errors().get(1).message()).contains("Tản nước 240").contains("Tản khí tháp")
                 .contains("case_standard_tower");
-        assertThat(r.note()).contains("2 thanh RAM").contains("4 quạt").contains("1 thanh RAM").contains("không lắp thêm quạt");
+        assertThat(r.note()).contains("2 RAM modules").contains("4 extra fans").contains("1 RAM module").contains("no extra fans");
     }
 
     @Test
@@ -82,7 +82,7 @@ class ModelMatchServiceTests {
         var r = service.check(request("case_standard_tower", "mb_atx", "cpu_std", "tower_air_155", "psu_atx",
                 "2:ram_ddr4", "ssd_m2_2280", "3:fan120"));
         assertThat(r.errors()).isEmpty();
-        assertThat(r.note()).contains("đồ họa tích hợp").contains("bỏ qua bước lắp card");
+        assertThat(r.note()).contains("integrated graphics").contains("skip the graphics card step");
     }
 
     @Test
@@ -124,8 +124,8 @@ class ModelMatchServiceTests {
     @Test
     void lietKeMonDiKemTungVoChoTroLy() {
         assertThat(service.presetParts())
-                .contains("[case_standard_tower] Tower tiêu chuẩn: bo mạch Bo mạch ATX [mb_atx], tản nhiệt Tản khí tháp [tower_air_155]")
-                .contains("[case_gaming] Gaming:").contains("tản nhiệt Tản nước 240 [aio_240]");
+                .contains("[case_standard_tower] Tower tiêu chuẩn: motherboard Bo mạch ATX [mb_atx], cooler Tản khí tháp [tower_air_155]")
+                .contains("[case_gaming] Gaming:").contains("cooler Tản nước 240 [aio_240]");
     }
 
     /** Máy mẫu: mỗi phần tử là mã linh kiện, có thể kèm số lượng dạng "2:ram_ddr4" */

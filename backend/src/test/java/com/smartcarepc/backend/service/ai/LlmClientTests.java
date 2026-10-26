@@ -22,7 +22,7 @@ class LlmClientTests {
     void ma200NhungThanLaLoiThiBaoDichVuAiGapSuCo() {
         Map<String, Object> err = Map.of("error", Map.of("message", "Upstream returned no output", "type", "api_error"), "type", "error");
         assertThatThrownBy(() -> LlmClient.checkReply(err)).isInstanceOf(AiUnavailableException.class)
-                .hasMessageContaining("Dịch vụ AI bên ngoài đang không trả lời");
+                .hasMessageContaining("The external AI service is not returning a response");
         assertThatThrownBy(() -> LlmClient.checkReply(Map.of("choices", List.of()))).isInstanceOf(AiUnavailableException.class);
         assertThatThrownBy(() -> LlmClient.checkReply(null)).isInstanceOf(AiUnavailableException.class);
     }

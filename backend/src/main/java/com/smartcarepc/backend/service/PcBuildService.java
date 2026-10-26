@@ -30,6 +30,6 @@ public class PcBuildService {
     public PcBuildResponse findByCode(String code) {
         return pcBuildRepository.findByCode(code)
                 .map(PcBuildResponse::from)
-                .orElseThrow(() -> new ResourceNotFoundException("bộ máy", code));
+                .orElseThrow(() -> new ResourceNotFoundException("PC build", code));
     }
 }

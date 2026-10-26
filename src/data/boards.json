@@ -1,5 +1,5 @@
 {
-  "_note": "Bố trí bo mạch cho 6 họ case (design/families/00_families_spec.md mục 7.1). mm, gốc ở tâm bo, mặt lưng z = 0. Dùng chung cho tools/build_families.py và app. SYS_FAN của ITX dời xuống mép dưới vì toạ độ trong đặc tả đè lên khe M.2; SYS_FAN1 của mATX dời +2 mm để không chạm khe DIMM B2.",
+  "_note": "Board layouts for six case families (design/families/00_families_spec.md section 7.1). Dimensions in mm, origin at the board centre, rear face z = 0. Shared by tools/build_families.py and the app. The ITX SYS_FAN header is moved to the lower edge to clear the M.2 slot; mATX SYS_FAN1 is shifted +2 mm to clear DIMM B2.",
   "mATX": {
     "w": 244, "h": 244,
     "cpu": [0, 50],

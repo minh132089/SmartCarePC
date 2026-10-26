@@ -37,7 +37,7 @@ export function OptionsCanvas({
 }) {
   const tiers = ORDER.filter((t) => options.some((o) => o.tier === t))
   return (
-    <div role="radiogroup" aria-label="Ba phương án" className="grid gap-2.5 sm:grid-cols-3">
+    <div role="radiogroup" aria-label="Three options" className="grid gap-2.5 sm:grid-cols-3">
       {tiers.map((t) => (
         <TierColumn
           key={t}
@@ -83,7 +83,7 @@ function TierColumn({ tier, build, selected, recommended, onSelect }: { tier: Ti
             {selected && <Check size={13} weight="bold" className="text-accent" aria-hidden />}
             {info.label}
           </span>
-          {recommended && (diff == null || diff >= 0) && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">Gợi ý</span>}
+          {recommended && (diff == null || diff >= 0) && <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">Recommended</span>}
         </span>
         <span className="mt-0.5 text-[12px] leading-snug text-ink-2">{info.note}</span>
         {build.verdict && (
@@ -99,7 +99,7 @@ function TierColumn({ tier, build, selected, recommended, onSelect }: { tier: Ti
             </span>
             {diff != null && (
               <span className={`block whitespace-nowrap text-[12px] tabular-nums ${diff >= 0 ? 'text-ok' : 'text-warn'}`}>
-                {diff >= 0 ? `dư ${vnd(diff)}` : `vượt ${vnd(-diff)}`}
+                {diff >= 0 ? `under by ${vnd(diff)}` : `over by ${vnd(-diff)}`}
               </span>
             )}
           </span>

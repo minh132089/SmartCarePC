@@ -30,9 +30,9 @@ export interface Build {
 export const BUILDS: Build[] = [
   {
     id: 'office',
-    label: 'Văn phòng',
-    tagline: 'Nhỏ gọn, chạy êm, đủ cho soạn thảo, email và họp online.',
-    caseName: 'Case nhỏ gọn',
+    label: "Office",
+    tagline: "Compact and quiet, with enough power for documents, email and video calls.",
+    caseName: "Compact case",
     formFactor: 'ITX',
     case: { w: 1.7, h: 2.9, d: 3.2, glass: false, body: '#d9dde2', front: '#c3c8cf' },
     cooler: 'lowprofile',
@@ -45,9 +45,9 @@ export const BUILDS: Build[] = [
   },
   {
     id: 'study',
-    label: 'Học tập',
-    tagline: 'Cân bằng, dễ nâng cấp về sau, đủ cho học online và làm bài.',
-    caseName: 'Mid-tower cơ bản',
+    label: "Study",
+    tagline: "A balanced PC for online classes and coursework, with room to upgrade.",
+    caseName: "Basic mid-tower",
     formFactor: 'mATX',
     case: { w: 2.0, h: 4.0, d: 3.9, glass: false, body: '#2b2f36', front: '#23262c' },
     cooler: 'stock',
@@ -61,8 +61,8 @@ export const BUILDS: Build[] = [
   {
     id: 'gaming',
     label: 'Gaming',
-    tagline: 'Mạnh về hình ảnh, nhiều quạt, mặt kính để nhìn thấy bên trong.',
-    caseName: 'Mid-tower mặt kính',
+    tagline: "Built for graphics, with plenty of cooling and a glass side panel.",
+    caseName: "Glass-panel mid-tower",
     formFactor: 'ATX',
     case: { w: 2.2, h: 4.7, d: 4.5, glass: true, body: '#16181d', front: '#101216' },
     cooler: 'aio',
@@ -75,8 +75,8 @@ export const BUILDS: Build[] = [
   },
   {
     id: 'workstation',
-    label: 'Đồ họa',
-    tagline: 'Cho dựng phim, làm 3D và việc nặng. Thùng lớn, nhiều RAM, thoáng khí.',
+    label: "Creative work",
+    tagline: "For video editing, 3D work and demanding tasks. A large case with plenty of memory and airflow.",
     caseName: 'Full-tower',
     formFactor: 'ATX',
     case: { w: 2.4, h: 5.4, d: 5.0, glass: false, body: '#3a3f47', front: '#30343b' },

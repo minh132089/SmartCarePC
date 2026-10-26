@@ -13,7 +13,7 @@ import LatticeLoader from '../../components/LatticeLoader'
 const KEY = 'pcsc-export-key'
 const SCALES = FEEDBACK.filter((q) => q.type === 'scale')
 const TEXTS = FEEDBACK.filter((q) => q.type === 'text')
-const PHASE: Record<string, string> = { before: 'Lần đầu', after: 'Sau 4 tuần' }
+const PHASE: Record<string, string> = { before: "First use", after: "After 4 weeks" }
 
 function readKey() {
   try {
@@ -37,8 +37,8 @@ export function FeedbackAdmin() {
     setError(null)
     try {
       const res = await fetch('/api/feedback/list', { headers: { 'X-Export-Key': k } })
-      if (res.status === 403) throw new Error('Sai khoá, hoặc máy chủ chưa đặt FEEDBACK_EXPORT_KEY.')
-      if (!res.ok) throw new Error(res.status === 503 ? 'Máy chủ demo đang tắt.' : `Lỗi ${res.status}`)
+      if (res.status === 403) throw new Error("Incorrect access key, or the server has no access key configured.")
+      if (!res.ok) throw new Error(res.status === 503 ? "The demo server is offline." : `Error ${res.status}`)
       setRows((await res.json()) as Row[])
       try {
         sessionStorage.setItem(KEY, k)
@@ -47,7 +47,7 @@ export function FeedbackAdmin() {
       }
     } catch (e) {
       setRows(null)
-      setError(e instanceof Error ? e.message : 'Không tải được dữ liệu')
+      setError(e instanceof Error ? e.message : "Could not load data")
     } finally {
       setBusy(false)
     }
@@ -74,7 +74,7 @@ export function FeedbackAdmin() {
   const download = async () => {
     // Khoá gửi qua header, không nằm trong địa chỉ (tránh lưu vào log truy cập)
     const res = await fetch('/api/feedback/export.csv', { headers: { 'X-Export-Key': key } })
-    if (!res.ok) return setError(`Không tải được CSV (lỗi ${res.status})`)
+    if (!res.ok) return setError(`Could not download CSV (error ${res.status})`)
     const url = URL.createObjectURL(await res.blob())
     const a = document.createElement('a')
     a.href = url
@@ -93,20 +93,20 @@ export function FeedbackAdmin() {
           }}
           className="w-full max-w-[420px] rounded-[24px] bg-panel p-6 ring-1 ring-line"
         >
-          <h1 className="text-[20px] font-semibold text-ink">Dữ liệu phản hồi</h1>
-          <p className="mt-2 text-[14px] leading-[1.5] text-ink-2">Nhập khoá xem dữ liệu (FEEDBACK_EXPORT_KEY trong backend/.env).</p>
+          <h1 className="text-[20px] font-semibold text-ink">Feedback data</h1>
+          <p className="mt-2 text-[14px] leading-[1.5] text-ink-2">Enter your feedback access key.</p>
           <input
             type="password"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             autoComplete="off"
-            aria-label="Khoá xem dữ liệu"
+            aria-label="Feedback access key"
             className={`mt-4 w-full rounded-xl bg-surface px-3 py-2 text-[15px] text-ink ring-1 ring-line-strong ${focus}`}
           />
           {error && <p role="alert" className="mt-2 text-[13px] text-bad">{error}</p>}
           <div className="mt-4 flex justify-end">
             <PrimaryButton onClick={submitKey} disabled={!draft.trim() || busy}>
-              Xem dữ liệu
+              View data
             </PrimaryButton>
           </div>
         </form>
@@ -117,28 +117,28 @@ export function FeedbackAdmin() {
   return (
     <div className="feedback-dashboard h-full overflow-y-auto bg-canvas">
       <div className="mx-auto max-w-[1240px] px-4 py-8 md:px-8">
-        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Về SmartCare PC</a>
-        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">SMARTCARE PC · NGHIÊN CỨU TRẢI NGHIỆM</p>
+        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Back to SmartCare PC</a>
+        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">SMARTCARE PC · USER EXPERIENCE RESEARCH</p>
         <header className="flex flex-wrap items-center gap-3">
-          <h1 className="display min-w-0 flex-1">Dữ liệu phản hồi</h1>
+          <h1 className="display min-w-0 flex-1">Feedback data</h1>
           <QuietButton onClick={() => void load(key)}>
             <span className="flex items-center gap-1.5">
-              <ArrowClockwise size={15} aria-hidden /> Tải lại
+              <ArrowClockwise size={15} aria-hidden /> Refresh
             </span>
           </QuietButton>
           <PrimaryButton onClick={() => void download()}>
             <span className="flex items-center gap-1.5">
-              <DownloadSimple size={15} aria-hidden /> Tải CSV
+              <DownloadSimple size={15} aria-hidden /> Download CSV
             </span>
           </PrimaryButton>
         </header>
 
-        <div className="mt-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Lọc">
+        <div className="mt-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Filter">
           {(
             [
-              ['all', 'Tất cả'],
-              ['stars', 'Có chấm sao'],
-              ['study', 'Người tham gia thử nghiệm'],
+              ['all', "All feedback"],
+              ['stars', "With a star rating"],
+              ['study', "Study participants"],
             ] as const
           ).map(([v, label]) => (
             <button
@@ -156,13 +156,13 @@ export function FeedbackAdmin() {
         </div>
 
         {error && <p role="alert" className="mt-3 text-[13px] text-bad">{error}</p>}
-        {busy && <div className="mt-5 text-ink-2"><LatticeLoader label="Đang tải phản hồi" fontSize={13} /></div>}
+        {busy && <div className="mt-5 text-ink-2"><LatticeLoader label="Loading feedback" fontSize={13} /></div>}
 
         {rows && <FeedbackOverview rows={shown} />}
 
         <section className="mt-5">
-          <p className="text-[13px] font-semibold text-ink">Từng phản hồi (mới nhất trước)</p>
-          {shown.length === 0 && <p className="mt-2 text-[14px] text-ink-3">Chưa có phản hồi nào.</p>}
+          <p className="text-[13px] font-semibold text-ink">Responses (newest first)</p>
+          {shown.length === 0 && <p className="mt-2 text-[14px] text-ink-3">No feedback yet.</p>}
           <ul className="mt-2 space-y-2">
             {shown.map((r) => {
               const stars = num(r.answers.stars)
@@ -178,9 +178,9 @@ export function FeedbackAdmin() {
                         {r.phase ? ` · ${PHASE[r.phase] ?? r.phase}` : ''}
                       </span>
                     )}
-                    {r.machine && <span>Máy: {r.machine}</span>}
+                    {r.machine && <span>PC: {r.machine}</span>}
                     {stars != null && (
-                      <span className="flex items-center gap-0.5 text-[#f5a524]" aria-label={`${stars} sao`}>
+                      <span className="flex items-center gap-0.5 text-[#f5a524]" aria-label={`${stars} stars`}>
                         {[1, 2, 3, 4, 5].map((n) => (
                           <Star key={n} size={14} weight={n <= stars ? 'fill' : 'regular'} aria-hidden />
                         ))}
@@ -188,8 +188,8 @@ export function FeedbackAdmin() {
                     )}
                   </div>
                   <div className="feedback-person">
-                    <strong>{person.name || "Chưa có thông tin hồ sơ"}</strong>
-                    {person.age != null && <span>{person.age} tuổi</span>}
+                    <strong>{person.name || "No profile information"}</strong>
+                    {person.age != null && <span>{person.age} years old</span>}
                     {person.occupation && <span>{person.occupation}</span>}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -197,7 +197,7 @@ export function FeedbackAdmin() {
                       const v = num(r.answers[q.key])
                       return v == null ? null : (
                         <span key={q.key} title={q.text} className="rounded-full bg-fill px-2 py-0.5 text-[12px] tabular-nums text-ink-2">
-                          Câu {i + 1}: {v}
+                          Question {i + 1}: {v}
                         </span>
                       )
                     })}

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
+import com.smartcarepc.backend.support.EnglishCopy;
 
 /**
  * Câu trả lời của trợ lý. reply có thể chứa gạch đầu dòng (- ) và chữ đậm (**...**).
@@ -64,6 +65,11 @@ public record ChatResponse(String reply, BuildCard build, List<BuildCard> option
             String spec, String reason, Long priceMinVnd, Long priceMaxVnd, String imageUrl, String sourceUrl,
             String productName, String shop, Boolean inStock, Integer warrantyMonths, Instant checkedAt,
             List<ShopPrice> compare, Boolean priceChecked) {
+
+        public Line {
+            name = EnglishCopy.text(name);
+            productName = EnglishCopy.productName(productName);
+        }
 
         public Line(String code, String category, String name, int quantity, String spec, String reason, Long priceMinVnd,
                 Long priceMaxVnd, String imageUrl, String sourceUrl, String productName, String shop) {

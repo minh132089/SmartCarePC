@@ -343,17 +343,17 @@ function gamingWiring(hasGpu: boolean): { routes: Route[]; plugs: Plug[]; splitt
   const t2 = add(stubOf(f2), [0, -6, 6])
   const t3 = add(stubOf(f3), [0, -6, 6])
   const runs: [string, Mm3[], number, number, Mm3][] = [
-    ['IN quạt trên', [t1, [t1[0] - 12, t1[1] - 20, -96], onTray(150, 128), onTray(70, 126), front(64, 124), behind(66, 130), nodeTop], 450, 6, [-1, 0, 0]],
-    ['IN quạt giữa', [t2, [t2[0] - 12, t2[1] - 10, -96], onTray(150, 96), onTray(70, 92), front(64, 92), behind(70, 60), nodeMid], 450, 6, [-1, 0, 0]],
-    ['IN quạt dưới', [t3, [t3[0] - 12, t3[1] - 10, -96], onTray(150, -74), onTray(56, -98), front(G5[0] + 20, G5[1] + 2), behind(40, -108), nodeLow], 450, 6, [-1, 0.3, 0]],
-    ['OUT quạt trên', [nodeTop, outTop], 80, 1, [1, 0, 0]],
-    ['OUT quạt giữa', [nodeMid, outMid], 80, 1, [1, 0, 0]],
-    ['OUT quạt dưới', [nodeLow, outLow], 80, 1, [1, 0, 0]],
-    ['Nối dài trên → giữa', [outTop, behind(165, 50), nodeMid], 200, 1, [-1, 0, 0]],
-    ['Nối dài giữa → dưới', [outMid, behind(110, -70), nodeLow], 200, 1, [-0.7, 0.7, 0]],
+    ["Top fan IN", [t1, [t1[0] - 12, t1[1] - 20, -96], onTray(150, 128), onTray(70, 126), front(64, 124), behind(66, 130), nodeTop], 450, 6, [-1, 0, 0]],
+    ["Middle fan IN", [t2, [t2[0] - 12, t2[1] - 10, -96], onTray(150, 96), onTray(70, 92), front(64, 92), behind(70, 60), nodeMid], 450, 6, [-1, 0, 0]],
+    ["Bottom fan IN", [t3, [t3[0] - 12, t3[1] - 10, -96], onTray(150, -74), onTray(56, -98), front(G5[0] + 20, G5[1] + 2), behind(40, -108), nodeLow], 450, 6, [-1, 0.3, 0]],
+    ["Top fan OUT", [nodeTop, outTop], 80, 1, [1, 0, 0]],
+    ["Middle fan OUT", [nodeMid, outMid], 80, 1, [1, 0, 0]],
+    ["Bottom fan OUT", [nodeLow, outLow], 80, 1, [1, 0, 0]],
+    ["Top-to-middle extension", [outTop, behind(165, 50), nodeMid], 200, 1, [-1, 0, 0]],
+    ["Middle-to-bottom extension", [outMid, behind(110, -70), nodeLow], 200, 1, [-0.7, 0.7, 0]],
   ]
   const rb = plug({ kind: 'argb', at: onHeader(HEADERS.argb, PCB_TOP + 1.6) })
-  runs.push(['JRAINBOW1 → IN quạt trên', [top(rb), [rb.at[0] + 4, rb.at[1] - 14, -82], front(G5[0] + 6, G5[1], 1), behind(G5[0] + 6, G5[1] - 3), behind(120, -90), behind(130, 80), nodeTop], 650, 4, [-1, 0, 0]])
+  runs.push(["JRAINBOW1 → top fan IN", [top(rb), [rb.at[0] + 4, rb.at[1] - 14, -82], front(G5[0] + 6, G5[1], 1), behind(G5[0] + 6, G5[1] - 3), behind(120, -90), behind(130, 80), nodeTop], 650, 4, [-1, 0, 0]])
   const argbLengths: Record<string, number> = {}
   for (const [name, pts, len, at, dir] of runs) {
     const fitted = fitLength(pts, len, at, dir)

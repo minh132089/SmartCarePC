@@ -29,26 +29,26 @@ export function hotspotsFor(
       return [
         {
           at: [0, notch, 0.01],
-          title: 'Khấc khoá',
-          text: 'Khe hở nhỏ lệch khỏi chính giữa hàng chân. Nó khớp với gờ trong khe RAM, nên RAM chỉ cắm được một chiều. Cắm không vào thì xoay ngược lại, đừng cố ấn.',
+          title: "Keying notch",
+          text: "The off-centre gap in the contacts matches the slot's ridge, so the module fits only one way. Check orientation rather than forcing it.",
         },
         {
           at: [0, 0.38, 0.015],
-          title: 'Chân cắm mạ vàng',
-          text: 'Hàng tiếp điểm cắm xuống khe. Cầm RAM ở hai cạnh bên, tránh chạm tay vào phần vàng này.',
+          title: "Gold-plated contacts",
+          text: "These contacts fit into the slot. Hold the RAM by its edges and avoid touching the gold contacts.",
         },
         {
           at: [0, 0.64, 0.08],
-          title: 'Rãnh chốt',
-          text: 'Hai đầu có khuyết lõm. Khi ấn RAM đủ sâu, lẫy nhựa ở hai đầu khe bật vào đây và kêu "tách".',
+          title: "Latch notch",
+          text: "The notches at both ends catch the plastic slot latches when the RAM is fully seated.",
         },
         {
           at: [0.03, 0.1, top * 0.7],
-          title: opts.ram === 'plain' ? 'Chip nhớ' : 'Tấm tản nhiệt',
+          title: opts.ram === 'plain' ? "Memory chips" : "Heat spreader",
           text:
             opts.ram === 'plain'
-              ? 'Các con chip đen là nơi lưu dữ liệu tạm. RAM thường để lộ chip ra ngoài.'
-              : 'Lớp vỏ kim loại giúp RAM mát hơn. RAM loại này cao hơn, nên kiểm tra tản nhiệt CPU có bị cấn không.',
+              ? "The black chips hold temporary data. Standard RAM exposes these chips."
+              : "The metal heat spreader helps cool the RAM. Check that tall modules clear the CPU cooler.",
         },
       ]
     }
@@ -56,141 +56,141 @@ export function hotspotsFor(
       return [
         {
           at: [-0.18, 0.175, 0.016],
-          title: 'Dấu tam giác',
-          text: 'Góc có tam giác vàng phải trùng với góc có dấu tam giác trên socket. Đặt CPU nhẹ xuống, không ấn, không trượt.',
+          title: "Triangle marker",
+          text: "Align the CPU's gold triangle with the socket triangle. Lower it gently without pressing or sliding.",
         },
         {
           at: [0, 0, 0.045],
-          title: 'Nắp kim loại',
-          text: 'Mặt này tiếp xúc với đế tản nhiệt. Bôi một lượng keo tản nhiệt cỡ hạt đậu vào giữa trước khi lắp tản.',
+          title: "Metal heat spreader",
+          text: "This surface contacts the cooler base. Apply a pea-sized drop of thermal paste at the centre before mounting the cooler.",
         },
         {
           at: [0.19, -0.1, 0.006],
-          title: 'Đế mạch xanh',
-          text: 'Mặt dưới có chân tiếp xúc rất dễ hỏng. Chỉ cầm CPU ở hai cạnh.',
+          title: "Circuit substrate",
+          text: "The underside contacts are easily damaged. Hold the CPU only by its edges.",
         },
       ]
     case 'gpu':
       return [
         {
           at: [-0.6, 0, 0.24],
-          title: 'Chân cắm PCIe',
-          text: 'Cắm vào khe PCIe dài nhất, gần CPU nhất. Nhớ mở lẫy nhựa ở đầu khe trước, ấn đều tay đến khi lẫy tự khoá.',
+          title: "PCIe edge connector",
+          text: "Insert into the longest PCIe slot nearest the CPU. Open the end latch first and press evenly until it locks.",
         },
         {
           at: [-1.38, 0, 0.66],
-          title: 'Tấm chắn và cổng xuất hình',
-          text: 'Tấm kim loại bắt vít vào lưng case. Cắm dây màn hình vào đây, không cắm vào cổng trên mainboard.',
+          title: "Rear bracket and display outputs",
+          text: "The metal bracket screws into the rear of the case. Connect the monitor here when using this GPU.",
         },
         {
           at: [0.5, 0, 1.32],
-          title: 'Cổng nguồn PCIe',
-          text: 'Cắm dây PCIe từ nguồn vào đây. Thiếu dây này card không chạy, máy vẫn lên nhưng không có hình.',
+          title: "PCIe power socket",
+          text: "Connect the PSU's PCIe cable here. A card requiring this connection may not output an image without it.",
         },
         {
           at: [0.3, -0.27, 0.66],
-          title: 'Quạt tản nhiệt',
-          text: 'Quạt nằm ở mặt dưới, hướng xuống phía nguồn. Để trống khoảng dưới card cho gió lưu thông.',
+          title: "Cooling fans",
+          text: "The fans face down towards the PSU. Leave clearance beneath the card for airflow.",
         },
       ]
     case 'ssd':
       return [
         {
           at: [-0.39, 0, 0.012],
-          title: 'Đầu cắm M.2 có khấc',
-          text: 'Cắm nghiêng khoảng 30 độ vào khe M.2, khấc chỉ khớp một chiều, rồi ấn phần đuôi xuống.',
+          title: "Keyed M.2 connector",
+          text: "Insert at roughly 30° into the keyed M.2 slot, then lower the end of the drive.",
         },
         {
           at: [0.39, 0, 0.012],
-          title: 'Rãnh vít',
-          text: 'Nửa vòng tròn ở đuôi. Dùng con vít nhỏ đi kèm mainboard để giữ SSD nằm phẳng.',
+          title: "Screw cutout",
+          text: "The semicircular cutout at the end takes the small motherboard screw that holds the SSD flat.",
         },
         {
           at: [0.05, 0, 0.026],
-          title: 'Chip nhớ',
-          text: 'Mặt có chip quay lên trên. Nếu mainboard có tấm tản nhiệt M.2, nhớ bóc lớp nilon ở mặt dưới tấm tản.',
+          title: "Memory chips",
+          text: "The chips face upwards. Remove the protective film beneath the motherboard's M.2 heatsink if fitted.",
         },
       ]
     case 'psu':
       return [
         {
           at: [0.7, 0.05, 0.1],
-          title: 'Cổng cắm dây',
-          text: 'Mỗi ổ ghi sẵn tên (CPU, PCIe, 24-pin). Cắm dây vào nguồn trước khi đặt nguồn vào case sẽ dễ hơn.',
+          title: "Cable sockets",
+          text: "Each socket is labelled CPU, PCIe or 24-pin. Connecting cables before placing the PSU in the case is easier.",
         },
         {
           at: [-0.7, -0.15, 0.35],
-          title: 'Ổ điện và công tắc',
-          text: 'Quay ra lưng máy. Nhớ bật công tắc sang "I" sau khi lắp xong.',
+          title: "AC inlet and switch",
+          text: "These face the rear. Set the switch to I only after assembly is complete.",
         },
         {
           at: [0, 0.41, 0],
-          title: 'Quạt nguồn',
-          text: 'Nếu đáy case có lỗ thông gió, lắp quạt úp xuống để nguồn hút gió mát từ dưới lên.',
+          title: "PSU fan",
+          text: "When the case has a bottom vent, face the fan downwards to draw cool air from below.",
         },
       ]
     case 'cooler':
       // Tản nước: xem cận cảnh hiện két tản ở trên, bơm ở dưới (toạ độ theo cách xếp trong Inspector)
       if (opts.cooler === 'aio')
         return [
-          { at: [0, -1.1, 0.43], title: 'Bơm', text: 'Khối tròn đặt lên CPU, thay chỗ của tản khí. Bên trong có bơm đẩy nước đi vòng qua két.' },
-          { at: [0.33, -1.1, 0.03], title: 'Đế đồng', text: 'Áp lên CPU. Bóc lớp nilon bảo vệ trước khi lắp, và kiểm tra đã có keo tản nhiệt chưa.' },
-          { at: [-1.05, -0.08, 0.6], title: 'Két tản nhiệt', text: 'Gắn lên nóc hoặc mặt trước case. Nước nóng từ bơm chảy qua két, được quạt làm mát rồi quay về bơm qua hai ống.' },
-          { at: [0.59, -0.33, 0.3], title: 'Quạt két', text: 'Gắn nóc thì cho quạt thổi gió lên, ra ngoài. Cắm dây quạt vào cổng CPU_FAN hoặc AIO_PUMP trên mainboard.' },
+          { at: [0, -1.1, 0.43], title: "Pump", text: "The round CPU block replaces an air cooler. Its pump circulates coolant through the radiator." },
+          { at: [0.33, -1.1, 0.03], title: "Copper contact plate", text: "This contacts the CPU. Remove protective film and check whether paste is pre-applied before mounting." },
+          { at: [-1.05, -0.08, 0.6], title: "Radiator", text: "Mount at the top or front of the case. Fans cool the coolant as it flows through the radiator and back to the pump." },
+          { at: [0.59, -0.33, 0.3], title: "Radiator fans", text: "For a top radiator, exhaust air upwards. Follow the cooler manual for the correct CPU_FAN or pump header connections." },
         ]
       if (opts.cooler && opts.cooler !== 'tower')
         return [
-          { at: [0, 0, 0.02], title: 'Đế tiếp xúc', text: 'Mặt này áp lên CPU. Tản loại này thường có sẵn một lớp keo xám, không cần bôi thêm.' },
-          { at: [0, 0, 0.45], title: 'Quạt úp', text: 'Quạt thổi gió thẳng xuống CPU và các linh kiện xung quanh.' },
-          { at: [0.4, 0.3, 0.2], title: 'Lá tản nhiệt', text: 'Nhận nhiệt từ đế rồi toả ra khi có gió thổi qua.' },
+          { at: [0, 0, 0.02], title: "Contact base", text: "This contacts the CPU. Stock coolers often have pre-applied paste; do not add more if already present." },
+          { at: [0, 0, 0.45], title: "Downward-facing fan", text: "The fan blows directly over the CPU and surrounding components." },
+          { at: [0.4, 0.3, 0.2], title: "Cooling fins", text: "Receive heat from the base and release it into passing air." },
         ]
       return [
         {
           at: [0, 0, 0.03],
-          title: 'Đế tiếp xúc',
-          text: 'Mặt này áp lên CPU. Nếu có lớp nilon bảo vệ thì phải bóc ra trước khi lắp.',
+          title: "Contact base",
+          text: "This contacts the CPU. Remove any protective film before installation.",
         },
         {
           at: [0, 0.3, 0.9],
-          title: 'Lá tản nhiệt',
-          text: 'Nhiệt từ CPU truyền lên đây rồi được quạt thổi đi.',
+          title: "Cooling fins",
+          text: "CPU heat travels here and is carried away by airflow.",
         },
         {
           at: [0.42, 0, 0.95],
-          title: 'Quạt',
-          text: 'Mũi tên trên khung quạt chỉ hướng gió. Nên để gió thổi từ mặt trước ra phía lưng case.',
+          title: "Fan",
+          text: "The frame arrow shows airflow direction. Aim airflow towards the rear of the case.",
         },
       ]
     case 'fans':
       return [
         {
           at: [0.1, 0, 0],
-          title: 'Mặt hút gió',
-          text: 'Mặt thấy rõ cánh quạt là mặt hút gió. Mặt có thanh đỡ động cơ là mặt thổi gió ra.',
+          title: "Intake side",
+          text: "The open blade side draws air in. The side with motor supports exhausts air.",
         },
         {
           at: [0, 0.44, 0.44],
-          title: 'Lỗ bắt vít',
-          text: 'Bốn góc có lỗ để bắt vào case. Quạt trước hút gió vào, quạt sau và quạt nóc thổi gió ra.',
+          title: "Mounting holes",
+          text: "Four corner holes attach the fan to the case. Front fans draw air in; rear and top fans exhaust it.",
         },
       ]
     case 'motherboard': {
       const dy = opts.board === 'mATX' ? -0.33 : 0
       if (opts.board === 'ITX')
         return [
-          { at: [0.07, 0.17, 0.08], title: 'Socket CPU', text: 'Nơi đặt CPU. Mở cần gạt, đặt CPU đúng dấu tam giác rồi hạ cần xuống.' },
-          { at: [0.58, 0.06, 0.14], title: 'Khe RAM', text: 'Mở lẫy hai đầu, dóng khấc trên RAM với gờ trong khe rồi ấn thẳng xuống.' },
-          { at: [0.84, 0.45, 0.1], title: 'Cổng nguồn 24 pin', text: 'Cổng lớn nhất trên bo. Có lẫy nhựa: ấn đến khi nghe tiếng tách.' },
-          { at: [-0.35, 0.8, 0.1], title: 'Cổng nguồn CPU', text: 'Cổng nhỏ ở góc trên. Quên cắm cổng này thì máy không lên.' },
-          { at: [-0.75, -0.1, 0.25], title: 'Cụm cổng sau', text: 'Quay ra lưng case: USB, mạng, âm thanh.' },
+          { at: [0.07, 0.17, 0.08], title: 'Socket CPU', text: "The CPU sits here. Open the lever, align the triangle markers and secure the lever." },
+          { at: [0.58, 0.06, 0.14], title: 'Khe RAM', text: "Open the latches, align the RAM notch with the slot guide and press straight down." },
+          { at: [0.84, 0.45, 0.1], title: "24-pin motherboard power", text: "The largest connector on the board. Press until its latch clicks." },
+          { at: [-0.35, 0.8, 0.1], title: "CPU power connector", text: "The small connector near the top corner supplies CPU power. The PC will not boot without it." },
+          { at: [-0.75, -0.1, 0.25], title: "Rear I/O ports", text: "Rear-facing USB, network and audio ports." },
         ]
       return [
-        { at: [0.19, 0.59 + dy, 0.06], title: 'Socket CPU', text: 'Nơi đặt CPU. Mở cần gạt, đặt CPU đúng dấu tam giác rồi hạ cần xuống.' },
-        { at: [0.84, 0.62 + dy, 0.12], title: 'Khe RAM', text: 'Có 2 thanh thì cắm khe thứ 2 và thứ 4 tính từ CPU để chạy kênh đôi. Sách hướng dẫn của bo có ghi rõ.' },
-        { at: [-0.34, -0.3 + dy, 0.08], title: 'Khe PCIe x16', text: 'Khe dài nhất, gần CPU nhất. Card đồ họa cắm vào đây.' },
-        { at: [1.17, 0.4 + dy, 0.1], title: 'Cổng nguồn 24 pin', text: 'Cổng lớn nhất trên bo. Có lẫy nhựa: ấn đến khi nghe tiếng tách.' },
-        { at: [-0.6, 1.46 + dy, 0.1], title: 'Cổng nguồn CPU 8 pin', text: 'Nằm ở góc trên bên trái. Quên cắm cổng này thì máy không lên.' },
-        { at: [0.35, -0.62 + dy, 0.05], title: 'Khe M.2', text: 'Ổ SSD M.2 cắm ở đây, cố định bằng một con vít nhỏ.' },
+        { at: [0.19, 0.59 + dy, 0.06], title: 'Socket CPU', text: "The CPU sits here. Open the lever, align the triangle markers and secure the lever." },
+        { at: [0.84, 0.62 + dy, 0.12], title: 'Khe RAM', text: "For two modules, use the second and fourth slots from the CPU for dual-channel memory. Confirm with the board manual." },
+        { at: [-0.34, -0.3 + dy, 0.08], title: 'Khe PCIe x16', text: "The longest slot nearest the CPU holds the graphics card." },
+        { at: [1.17, 0.4 + dy, 0.1], title: "24-pin motherboard power", text: "The largest connector on the board. Press until its latch clicks." },
+        { at: [-0.6, 1.46 + dy, 0.1], title: "8-pin CPU power", text: "Near the upper-left corner. The PC will not boot without this power connection." },
+        { at: [0.35, -0.62 + dy, 0.05], title: 'Khe M.2', text: "Insert the M.2 SSD here and secure it with the small screw." },
       ]
     }
     default:

@@ -28,7 +28,7 @@ export function QuestionList({
             q.type === 'scale' ? (
               <Scale name={name} value={typeof value === 'number' ? value : null} onChange={(v) => set(q.key, v)} low={q.low ?? ''} high={q.high ?? ''} />
             ) : q.type === 'text' ? (
-              <Note value={typeof value === 'string' ? value : ''} onChange={(v) => set(q.key, v)} placeholder={q.placeholder ?? 'Viết bằng lời của bạn'} />
+              <Note value={typeof value === 'string' ? value : ''} onChange={(v) => set(q.key, v)} placeholder={q.placeholder ?? "Use your own words"} />
             ) : (
               <Choices
                 name={name}

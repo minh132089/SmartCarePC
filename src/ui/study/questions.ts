@@ -16,49 +16,49 @@ export type StudyQuestion = {
 }
 
 /** Thang hài lòng 1 đến 5, giống thang trong bảng khảo sát để so được với nhau */
-const SATISFACTION = { type: 'scale', low: 'Rất không hài lòng', high: 'Rất hài lòng' } as const
+const SATISFACTION = { type: 'scale', low: "Very dissatisfied", high: "Very satisfied" } as const
 
 export const FEEDBACK: StudyQuestion[] = [
   {
     key: 'budget_fit',
-    text: '1. Bạn hài lòng đến đâu với việc cấu hình được gợi ý vừa với ngân sách của bạn?',
+    text: "1. How satisfied are you that the recommended build fits your budget?",
     ...SATISFACTION,
   },
   {
     key: 'purpose_fit',
-    text: '2. Bạn hài lòng đến đâu với việc các linh kiện được chọn đúng với mục đích bạn dùng máy?',
+    text: "2. How satisfied are you that the selected components suit your intended use?",
     ...SATISFACTION,
   },
   {
     key: 'guide',
-    text: '3. Bạn hài lòng đến đâu với phần hướng dẫn lắp máy từng bước?',
+    text: "3. How satisfied are you with the step-by-step assembly guide?",
     ...SATISFACTION,
   },
   {
     key: 'confidence',
-    text: '4. Sau khi dùng web app, bạn thấy mình tự tin hơn khi tự chọn và lắp máy đến đâu?',
-    hint: '3 là không thay đổi',
+    text: "4. After using the app, how has your confidence in choosing and assembling a PC changed?",
+    hint: "3 means no change",
     type: 'scale',
-    low: 'Kém tự tin hơn nhiều',
-    high: 'Tự tin hơn nhiều',
+    low: "Much less confident",
+    high: "Much more confident",
   },
   {
     key: 'next_time',
-    text: '5. Lần tới cần chọn, lắp hoặc nâng cấp máy, bạn sẽ tự làm đến đâu?',
+    text: "5. Next time you need to choose, assemble or upgrade a PC, how independently would you do it?",
     type: 'scale',
-    low: 'Nhờ người khác làm hộ',
-    high: 'Tự làm, không cần hỏi ai',
+    low: "Ask someone else to do it",
+    high: "Do it myself without help",
   },
   {
     key: 'difficulties',
-    text: '6. Trong quá trình sử dụng web app, bạn gặp những khó khăn gì? Có chỗ nào web app chưa giúp được bạn không?',
+    text: "6. What difficulties did you encounter? Was there anything the app could not help you with?",
     type: 'text',
-    placeholder: 'Ví dụ: bước nào khó hiểu, chỗ nào phải hỏi người khác',
+    placeholder: "For example: a confusing step or something you needed help with",
   },
   {
     key: 'suggestions',
-    text: '7. Hãy góp ý cho chúng tôi để web app mang lại trải nghiệm tốt hơn.',
+    text: "7. What would improve your experience with this app?",
     type: 'text',
-    placeholder: 'Viết bằng lời của bạn',
+    placeholder: "Use your own words",
   },
 ]

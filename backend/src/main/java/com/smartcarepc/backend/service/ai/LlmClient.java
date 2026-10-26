@@ -49,7 +49,7 @@ public class LlmClient {
     public Map<String, Object> complete(Map<String, Object> body) {
         if (apiKey.isEmpty()) {
             throw new AiUnavailableException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Trợ lý AI chưa được bật vì máy chủ chưa có khoá API (biến môi trường AI_API_KEY).");
+                    "The AI assistant is unavailable because its server credentials are not configured.");
         }
         try {
             return checkReply(http.post()
@@ -62,17 +62,17 @@ public class LlmClient {
         } catch (HttpStatusCodeException e) {
             log.warn("API AI trả lỗi {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
             throw new AiUnavailableException(HttpStatus.BAD_GATEWAY, switch (e.getStatusCode().value()) {
-                case 401, 403 -> "Nhà cung cấp AI từ chối khoá API (khoá sai, hết hạn, hoặc không cho ứng dụng này dùng). "
-                        + "Hãy kiểm tra AI_API_KEY.";
-                case 400, 404 -> "Nhà cung cấp AI không nhận yêu cầu. Hãy kiểm tra tên model (AI_MODEL) và địa chỉ (AI_BASE_URL).";
-                case 402 -> "Tài khoản AI đã hết lượt dùng hoặc hết tiền.";
-                case 429, 503, 529 -> "Trợ lý đang quá tải, bạn thử lại sau ít phút nhé.";
-                default -> "Trợ lý AI đang gặp lỗi, bạn thử lại sau nhé.";
+                case 401, 403 -> "The AI provider rejected the server credentials. "
+                        + "Ask the administrator to check the configuration.";
+                case 400, 404 -> "The AI provider could not accept the request. Ask the administrator to check the model and endpoint configuration.";
+                case 402 -> "The AI provider account has no remaining quota or credit.";
+                case 429, 503, 529 -> "The assistant is busy. Please try again in a few minutes.";
+                default -> "The AI service encountered an error. Please try again.";
             });
         } catch (ResourceAccessException e) {
             log.warn("Không kết nối được API AI: {}", e.getMessage());
             throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
-                    "Không kết nối được tới trợ lý AI. Bạn kiểm tra mạng rồi thử lại nhé.");
+                    "Cannot connect to the AI service. Check your connection and try again.");
         }
     }
 
@@ -87,6 +87,6 @@ public class LlmClient {
         String detail = err instanceof Map<?, ?> m && m.get("message") != null ? String.valueOf(m.get("message")) : String.valueOf(err);
         log.warn("API AI trả 200 nhưng không có câu trả lời: {}", detail);
         throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
-                "Dịch vụ AI bên ngoài đang không trả lời, nên trợ lý chưa tư vấn được. Bạn thử lại sau ít phút nhé.");
+                "The external AI service is not returning a response. Please try again in a few minutes.");
     }
 }

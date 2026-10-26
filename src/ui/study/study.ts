@@ -9,7 +9,7 @@ import { participantAnswers } from './participant'
 export type Phase = 'before' | 'after'
 export type Answers = Record<string, unknown>
 
-export const PHASE_LABEL: Record<Phase, string> = { before: 'Lần đầu', after: 'Sau 4 tuần' }
+export const PHASE_LABEL: Record<Phase, string> = { before: "First use", after: "After 4 weeks" }
 export const CODE_PATTERN = /^[A-Za-z0-9_-]{1,20}$/
 
 const KEY = 'pcsc-study'
@@ -117,7 +117,7 @@ async function post(p: Payload) {
     signal: AbortSignal.timeout(20_000),
   })
   // 400 là dữ liệu sai: gửi lại cũng vô ích nên bỏ, không giữ trong hàng đợi
-  if (res.status === 400) throw new InvalidFeedback('Phản hồi không hợp lệ')
+  if (res.status === 400) throw new InvalidFeedback("Invalid feedback")
   if (!res.ok) throw new Error(String(res.status))
 }
 

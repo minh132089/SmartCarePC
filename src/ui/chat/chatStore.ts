@@ -77,7 +77,7 @@ export type ChatContext = { buildCode?: string | null; guideStep?: string | null
 
 /** Gửi tối đa từng này tin gần nhất, đủ để trợ lý nhớ mạch chuyện mà không quá dài */
 const HISTORY = 20
-const OFFLINE = 'Chưa kết nối được máy chủ. Hãy bật backend (cổng 8083) rồi thử lại.'
+const OFFLINE = "Cannot connect to the server. Please try again shortly."
 /** Hỏi lại kết quả vài giây một lần; mạng chập chờn thì bỏ qua tới từng này lần hỏi hỏng liên tiếp (~15 giây) */
 const POLL_MS = 1500
 const MAX_MISSES = 10
@@ -87,7 +87,7 @@ type JobView = { id: string; status: 'running' | 'done' | 'error'; stage?: strin
 
 /** Backend báo lỗi ở detail (ProblemDetail); proxy trên Cloudflare Pages báo ở message */
 function errorText(data: { detail?: string; message?: string } | null, status: number) {
-  return data?.detail ?? data?.message ?? (status >= 500 ? OFFLINE : 'Trợ lý chưa trả lời được, bạn thử lại nhé.')
+  return data?.detail ?? data?.message ?? (status >= 500 ? OFFLINE : "The assistant could not respond. Please try again.")
 }
 
 function sleep(ms: number, signal: AbortSignal) {
@@ -123,7 +123,7 @@ async function ask(body: unknown, signal: AbortSignal, onStage: (stage: string |
     }
     misses = 0
     if (data.status === 'done' && data.result) return data.result
-    if (data.status === 'error') throw new Error(data.error ?? 'Trợ lý chưa trả lời được, bạn thử lại nhé.')
+    if (data.status === 'error') throw new Error(data.error ?? "The assistant could not respond. Please try again.")
     onStage(data.stage ?? null)
   }
 }
@@ -199,13 +199,15 @@ export const useAssemblyChat = createChat('assembly')
 function toWire(m: Msg) {
   if (!m.build) return { role: m.role, content: m.content }
   const parts = m.build.items.map((i) => `${i.code}×${i.quantity}`).join(', ')
-  return { role: m.role, content: `${m.content}\n\n[Cấu hình đã kiểm tra: ${parts}]` }
+  return { role: m.role, content: `${m.content}
+
+[Verified build: ${parts}]` }
 }
 
 /** Tổng giá tham khảo của cấu hình (null nếu trợ lý chưa đưa giá) */
 export function quantityLabel(line: BuildLine): string {
   if (line.quantity <= 1) return ''
-  return line.category === 'ram' ? ` (${line.quantity} thanh)` : line.category === 'fans' ? ` (${line.quantity} quạt sử dụng)` : ` × ${line.quantity}`
+  return line.category === 'ram' ? ` (${line.quantity} modules)` : line.category === 'fans' ? ` (${line.quantity} fans used)` : ` × ${line.quantity}`
 }
 
 export function totalOf(card: BuildCard): { min: number; max: number } | null {
@@ -219,14 +221,14 @@ export function totalOf(card: BuildCard): { min: number; max: number } | null {
 
 /** Đổi số đồng thành chữ dễ đọc: 12 500 000 → "12,5 triệu", 850 000 → "850 nghìn" */
 export function vnd(n: number): string {
-  if (n >= 1e6) return `${(n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu`
-  return `${Math.round(n / 1e3).toLocaleString('vi-VN')} nghìn`
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 1 })} million VND`
+  return `${Math.round(n / 1e3).toLocaleString('en-GB')} thousand VND`
 }
 
 /** Khoảng giá: "11,2 - 13 triệu"; hai đầu bằng nhau thì chỉ ghi một số */
 export function vndRange(min: number, max: number): string {
   if (Math.abs(max - min) < 50_000) return vnd(max)
-  if (min >= 1e6 && max >= 1e6) return `${(min / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} - ${vnd(max)}`
+  if (min >= 1e6 && max >= 1e6) return `${(min / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 1 })} - ${vnd(max)}`
   return `${vnd(min)} - ${vnd(max)}`
 }
 
@@ -241,8 +243,8 @@ export function machineOfCard(card: BuildCard): FamilyId | 'gaming' | null {
  * Dòng trạng thái của thẻ cấu hình. Theo bộ luật chuẩn, chưa xác minh hết (UNKNOWN) thì không khẳng định là lắp chung được.
  */
 export function compatText(card: BuildCard): { ok: boolean; short: string; long: string } {
-  if (!card.compatible) return { ok: false, short: 'Cấu hình này chưa lắp được', long: 'Cấu hình này chưa lắp được, xem lỗi bên dưới.' }
+  if (!card.compatible) return { ok: false, short: "This build is not compatible yet", long: "This build is not compatible yet. Review the issues below." }
   if (card.unknowns?.length)
-    return { ok: true, short: 'Chưa thấy lỗi lắp chung', long: 'Chưa thấy lỗi lắp chung. Còn vài điểm cần xác minh trước khi mua (xem bên dưới).' }
-  return { ok: true, short: 'Các linh kiện lắp chung được', long: 'Các linh kiện lắp chung được.' }
+    return { ok: true, short: "No compatibility issues found", long: "No compatibility issues found. Some details still need confirmation before buying; see below." }
+  return { ok: true, short: "These components are compatible", long: "These components are compatible." }
 }

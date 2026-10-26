@@ -29,6 +29,6 @@ public class ComponentService {
     public ComponentResponse findByCode(String code) {
         return componentRepository.findByCode(code)
                 .map(ComponentResponse::withHotspots)
-                .orElseThrow(() -> new ResourceNotFoundException("linh kiện", code));
+                .orElseThrow(() -> new ResourceNotFoundException("component", code));
     }
 }

@@ -15,7 +15,7 @@ export function StudyJoinLink({ className = '' }: { className?: string }) {
   if (code) return null
   return (
     <button onClick={() => open('join')} className={`text-[13px] text-ink-3 hover:text-ink hover:underline ${focus} ${className}`}>
-      Bạn tham gia thử nghiệm của nhóm nghiên cứu? Nhập mã ở đây
+      Taking part in the research study? Enter your code here
     </button>
   )
 }
@@ -28,15 +28,15 @@ export function StudyBar() {
   const sent = answered.includes('feedback')
   return (
     <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-2xl bg-info-bg px-3 py-2 text-[13px] text-info">
-      <button onClick={() => code ? open('join') : edit()} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title={code ? 'Đổi mã hoặc lần đo' : 'Sửa thông tin của bạn'}>
+      <button onClick={() => code ? open('join') : edit()} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title={code ? "Change code or study phase" : "Edit your details"}>
         <Flask size={15} aria-hidden />
-        {code ? `Thử nghiệm · ${code} · ${PHASE_LABEL[phase]}` : `${profile!.name} · Sửa thông tin`}
+        {code ? `Study · ${code} · ${PHASE_LABEL[phase]}` : `${profile!.name} · Edit details`}
       </button>
-      {code && profile && <button onClick={edit} className={`rounded-full px-2 text-[12px] hover:underline ${focus}`}>{profile.name} · Sửa thông tin</button>}
+      {code && profile && <button onClick={edit} className={`rounded-full px-2 text-[12px] hover:underline ${focus}`}>{profile.name} · Edit details</button>}
       <span className="flex-1" />
       <button onClick={() => open('feedback')} className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-medium hover:bg-surface ${focus}`}>
         <NotePencil size={14} aria-hidden />
-        {sent ? 'Đã gửi phản hồi' : 'Gửi phản hồi'}
+        {sent ? "Feedback submitted" : "Send feedback"}
       </button>
     </div>
   )
@@ -59,45 +59,44 @@ function JoinDialog() {
   const close = () => open(null)
   return (
     <Dialog
-      title="Tham gia thử nghiệm"
+      title="Join the study"
       onClose={close}
       footer={
         <>
           {code && (
             <button onClick={leave} className={`mr-auto text-[13px] font-medium text-bad hover:underline ${focus}`}>
-              Thoát chế độ thử nghiệm
+              Leave study mode
             </button>
           )}
-          <QuietButton onClick={close}>Huỷ</QuietButton>
+          <QuietButton onClick={close}>Cancel</QuietButton>
           <PrimaryButton onClick={() => join(value, lan)} disabled={!ok}>
-            {code ? 'Lưu' : 'Bắt đầu'}
+            {code ? "Save" : "Get started"}
           </PrimaryButton>
         </>
       }
     >
       <p className="text-[14px] leading-[1.5] text-ink-2">
-        Cảm ơn bạn tham gia. Hãy dùng web app như bình thường: nhờ trợ lý chọn cấu hình, rồi làm theo hướng dẫn lắp máy. Dùng xong, bấm
-        "Gửi phản hồi" để trả lời 7 câu ngắn. Câu trả lời gắn với mã; thông tin bạn đã xác nhận (nếu có) cũng được đính kèm.
+        Thank you for participating. Use the app as usual: ask the assistant to recommend a build, then follow the assembly guide. When finished, select Send feedback to answer seven short questions. Responses are linked to your code and include any profile details you confirmed.
       </p>
-      <Question label="Mã người tham gia">
+      <Question label="Participant code">
         <input
           value={value}
           onChange={(e) => setValue(e.target.value.toUpperCase())}
           maxLength={20}
-          placeholder="Ví dụ: P07"
+          placeholder="For example: P07"
           autoCapitalize="characters"
           className={`w-full rounded-xl bg-surface px-3 py-2 text-[15px] tracking-wide text-ink ring-1 ring-line-strong placeholder:text-ink-3 ${focus}`}
         />
-        {value && !ok && <p className="mt-1 text-[12.5px] text-bad">Mã chỉ gồm chữ, số, gạch ngang, tối đa 20 ký tự.</p>}
+        {value && !ok && <p className="mt-1 text-[12.5px] text-bad">Use letters, numbers and hyphens only, up to 20 characters.</p>}
       </Question>
-      <Question label="Đây là lần nào?">
+      <Question label="Which study phase is this?">
         <Choices
           name="phase"
           value={[lan]}
           onChange={(v) => setLan(v[0])}
           options={[
-            { value: 'before', label: 'Lần đầu' },
-            { value: 'after', label: 'Sau 4 tuần' },
+            { value: 'before', label: "First use" },
+            { value: 'after', label: "After 4 weeks" },
           ]}
         />
       </Question>
@@ -126,31 +125,31 @@ function FeedbackDialog() {
 
   return (
     <Dialog
-      title="Phản hồi về web app"
+      title="App feedback"
       onClose={close}
       footer={
         <>
-          {failed && <p className="mr-auto text-[13px] text-bad">Chưa gửi được, kiểm tra mạng rồi bấm Gửi lại.</p>}
-          <QuietButton onClick={close}>Để sau</QuietButton>
+          {failed && <p className="mr-auto text-[13px] text-bad">Could not send. Check your connection and select Send again.</p>}
+          <QuietButton onClick={close}>Later</QuietButton>
           <PrimaryButton onClick={submit} disabled={busy || empty}>
-            {busy ? 'Đang gửi…' : failed ? 'Gửi lại' : 'Gửi'}
+            {busy ? "Sending…" : failed ? "Send again" : "Send"}
           </PrimaryButton>
         </>
       }
     >
-      <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">Khoảng 2 phút. Không có câu trả lời đúng hay sai, bạn có thể bỏ qua câu nào cũng được.</p>
+      <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">About two minutes. There are no right or wrong answers, and every question is optional.</p>
       <QuestionList questions={FEEDBACK} answers={a} onChange={setA} />
     </Dialog>
   )
 }
 
-const STAR_WORDS = ['', 'Rất tệ', 'Chưa tốt', 'Tạm được', 'Tốt', 'Rất tốt']
+const STAR_WORDS = ['', "Very poor", "Poor", "Fair", "Good", "Excellent"]
 
 /** Chấm 1 đến 5 sao. Dùng radio thật để đọc được bằng trình đọc màn hình và chọn được bằng phím mũi tên */
 function Stars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div>
-      <div className="flex gap-1" role="radiogroup" aria-label="Số sao">
+      <div className="flex gap-1" role="radiogroup" aria-label="Star rating">
         {[1, 2, 3, 4, 5].map((n) => (
           <label key={n} className="relative cursor-pointer">
             <input
@@ -158,7 +157,7 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
               name="stars"
               checked={value === n}
               onChange={() => onChange(n)}
-              aria-label={`${n} sao, ${STAR_WORDS[n]}`}
+              aria-label={`${n} stars, ${STAR_WORDS[n]}`}
               className="peer absolute inset-0 cursor-pointer opacity-0"
             />
             <Star
@@ -172,7 +171,7 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
           </label>
         ))}
       </div>
-      <p className="mt-1 h-5 text-[13px] text-ink-2">{value ? STAR_WORDS[value] : 'Chọn số sao'}</p>
+      <p className="mt-1 h-5 text-[13px] text-ink-2">{value ? STAR_WORDS[value] : "Choose a rating"}</p>
     </div>
   )
 }
@@ -203,23 +202,23 @@ function RatingDialog() {
 
   return (
     <Dialog
-      title="Bạn đã lắp xong cả máy!"
+      title="Your PC is assembled!"
       onClose={close}
       footer={
         <>
-          {failed && <p className="mr-auto text-[13px] text-bad">Chưa gửi được, kiểm tra mạng rồi bấm Gửi lại.</p>}
-          <QuietButton onClick={close}>Để sau</QuietButton>
+          {failed && <p className="mr-auto text-[13px] text-bad">Could not send. Check your connection and select Send again.</p>}
+          <QuietButton onClick={close}>Later</QuietButton>
           <PrimaryButton onClick={submit} disabled={busy || stars === 0}>
-            {busy ? 'Đang gửi…' : failed ? 'Gửi lại' : 'Gửi đánh giá'}
+            {busy ? "Sending…" : failed ? "Send again" : "Submit rating"}
           </PrimaryButton>
         </>
       }
     >
-      <p className="text-[14px] leading-[1.5] text-ink-2">Bạn thấy trải nghiệm chọn và lắp máy với web app thế nào?</p>
+      <p className="text-[14px] leading-[1.5] text-ink-2">How was your experience choosing and assembling a PC with the app?</p>
       <div className="mt-3">
         <Stars value={stars} onChange={setStars} />
       </div>
-      <p className="mt-5 mb-1 text-[13px] text-ink-3">Nếu có thêm 2 phút, trả lời vài câu dưới đây giúp nhóm làm app tốt hơn. Bỏ qua câu nào cũng được.</p>
+      <p className="mt-5 mb-1 text-[13px] text-ink-3">Have two more minutes? Your answers help the team improve the app. Every question is optional.</p>
       <QuestionList questions={FEEDBACK} answers={a} onChange={setA} />
     </Dialog>
   )

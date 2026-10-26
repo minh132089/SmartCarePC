@@ -58,7 +58,7 @@ public class CompatibilityService {
         componentRepository.findByCodeIn(qtyByCode.keySet()).forEach(c -> found.put(c.getCode(), c));
         List<String> missing = qtyByCode.keySet().stream().filter(code -> !found.containsKey(code)).toList();
         if (!missing.isEmpty()) {
-            throw new ResourceNotFoundException("linh kiện", String.join(", ", missing));
+            throw new ResourceNotFoundException("component", String.join(", ", missing));
         }
 
         Map<Component, Integer> parts = new LinkedHashMap<>();
@@ -69,7 +69,7 @@ public class CompatibilityService {
     /** Kiểm tra một máy có sẵn, vd /api/builds/mini_sff/check */
     public CompatibilityResponse checkBuild(String code) {
         var build = pcBuildRepository.findByCode(code)
-                .orElseThrow(() -> new ResourceNotFoundException("bộ máy", code));
+                .orElseThrow(() -> new ResourceNotFoundException("PC build", code));
         Map<Component, Integer> parts = new LinkedHashMap<>();
         build.getItems().forEach(i -> parts.put(i.getComponent(), i.getQuantity()));
         return new Checker(parts).run();
@@ -94,11 +94,11 @@ public class CompatibilityService {
         }
 
         CompatibilityResponse run() {
-            pcCase = single(PcCase.class, "case", "vỏ máy", true);
-            board = single(Motherboard.class, "motherboard", "bo mạch chủ", true);
+            pcCase = single(PcCase.class, "case", "case", true);
+            board = single(Motherboard.class, "motherboard", "motherboard", true);
             cpu = single(Cpu.class, "cpu", "CPU", true);
-            cooler = single(Cooler.class, "cooler", "tản nhiệt CPU", false); // thiếu thì checkCooler() cảnh báo
-            psu = single(Psu.class, "psu", "nguồn", true);
+            cooler = single(Cooler.class, "cooler", "CPU cooler", false); // thiếu thì checkCooler() cảnh báo
+            psu = single(Psu.class, "psu", "power supply", true);
 
             checkRequired();
             checkBoardFitsCase();
@@ -116,17 +116,17 @@ public class CompatibilityService {
         // ---- Các quy tắc ---------------------------------------------------
 
         private void checkRequired() {
-            if (count(Ram.class) == 0) error("required.ram", "Chưa có RAM. Máy cần ít nhất 1 thanh RAM để khởi động.");
-            if (count(Ssd.class) == 0) error("required.ssd", "Chưa có ổ lưu trữ. Cần một ổ SSD để cài hệ điều hành.");
+            if (count(Ram.class) == 0) error("required.ram", "No RAM selected. At least one RAM module is required to boot.");
+            if (count(Ssd.class) == 0) error("required.ssd", "No storage selected. An SSD is needed to install the operating system.");
             if (count(Gpu.class) == 0 && cpu != null && !cpu.isHasIgpu()) {
-                error("required.gpu", "CPU này không có sẵn đồ họa, cần thêm card đồ họa thì mới xuất được hình ra màn hình.");
+                error("required.gpu", "This CPU has no integrated graphics. Add a graphics card to output an image.");
             }
         }
 
         private void checkBoardFitsCase() {
             if (pcCase == null || board == null) return;
             if (!board.getFormFactor().fitsIn(pcCase.getMaxFormFactor())) {
-                error("case.form_factor", "Bo mạch " + board.getFormFactor().getLabel() + " quá lớn: vỏ này chỉ lắp được bo tới "
+                error("case.form_factor", "The " + board.getFormFactor().getLabel() + " motherboard is too large: this case supports up to "
                         + pcCase.getMaxFormFactor().getLabel() + ".");
             }
         }
@@ -134,9 +134,9 @@ public class CompatibilityService {
         private void checkPsuFitsCase() {
             if (pcCase == null || psu == null || psu.getPsuType() == pcCase.getPsuType()) return;
             if (psu.getPsuType() == PsuType.ATX) {
-                error("case.psu", "Nguồn ATX quá to cho vỏ này. Vỏ chỉ có chỗ cho nguồn SFX nhỏ gọn.");
+                error("case.psu", "An ATX PSU is too large for this case, which only supports SFX power supplies.");
             } else {
-                warning("case.psu", "Nguồn SFX nhỏ hơn chỗ dành cho nguồn ATX, cần thêm khung chuyển SFX sang ATX để bắt vít.");
+                warning("case.psu", "An SFX PSU is smaller than the ATX mounting space. An SFX-to-ATX adapter bracket is required.");
             }
         }
 
@@ -144,11 +144,11 @@ public class CompatibilityService {
             String cpuSocket = cpu == null ? null : cpu.getSocket();
             if (cpuSocket == null) return;
             if (board != null && board.getSocket() != null && !board.getSocket().equals(cpuSocket)) {
-                error("socket.board", "CPU dùng socket " + cpuSocket + " nhưng bo mạch là socket " + board.getSocket()
-                        + ", không cắm vừa.");
+                error("socket.board", "The CPU uses socket " + cpuSocket + " but the motherboard uses " + board.getSocket()
+                        + ", so they are incompatible.");
             }
             if (cooler != null && !cooler.getSupportedSockets().isEmpty() && !cooler.getSupportedSockets().contains(cpuSocket)) {
-                error("socket.cooler", "Tản nhiệt không có bộ gá cho socket " + cpuSocket + ".");
+                error("socket.cooler", "The cooler has no mounting kit for socket " + cpuSocket + ".");
             }
         }
 
@@ -156,24 +156,24 @@ public class CompatibilityService {
             int sticks = count(Ram.class);
             if (board == null || sticks == 0) return;
             if (sticks > board.getRamSlots()) {
-                error("ram.slots", "Có " + sticks + " thanh RAM nhưng bo mạch chỉ có " + board.getRamSlots() + " khe.");
+                error("ram.slots", "There are " + sticks + " RAM modules but the board has only " + board.getRamSlots() + " khe.");
             }
             all(Ram.class).stream()
                     .filter(r -> r.getRamType() != board.getRamType())
                     .findFirst()
-                    .ifPresent(r -> error("ram.type", "RAM " + r.getRamType() + " không cắm được vào bo mạch dùng "
-                            + board.getRamType() + ". Hai loại có khấc khoá ở vị trí khác nhau."));
+                    .ifPresent(r -> error("ram.type", "RAM " + r.getRamType() + " cannot fit a motherboard using "
+                            + board.getRamType() + ". The keying notches are in different positions."));
         }
 
         private void checkGpu() {
             int gpus = count(Gpu.class);
             if (board != null && gpus > board.getPcieX16Slots()) {
-                error("gpu.slots", "Có " + gpus + " card đồ họa nhưng bo mạch chỉ có " + board.getPcieX16Slots() + " khe PCIe x16.");
+                error("gpu.slots", "There are " + gpus + " graphics cards but the board has only " + board.getPcieX16Slots() + " khe PCIe x16.");
             }
             if (pcCase == null || pcCase.getMaxGpuLengthMm() == null) return;
             for (Gpu gpu : all(Gpu.class)) {
                 if (gpu.getLengthMm() > pcCase.getMaxGpuLengthMm()) {
-                    error("gpu.length", "Card đồ họa dài " + gpu.getLengthMm() + " mm, vỏ chỉ chứa được card dài tối đa "
+                    error("gpu.length", "The graphics card is " + gpu.getLengthMm() + " mm long; the case supports up to "
                             + pcCase.getMaxGpuLengthMm() + " mm.");
                 }
             }
@@ -181,22 +181,22 @@ public class CompatibilityService {
 
         private void checkCooler() {
             if (cooler == null) {
-                warning("cooler.missing", "Chưa chọn tản nhiệt. Nếu CPU không kèm tản thì máy sẽ quá nóng và tự tắt.");
+                warning("cooler.missing", "No CPU cooler selected. If the CPU does not include one, it can overheat and shut down.");
                 return;
             }
             if (pcCase == null) return;
             if (cooler.getCoolerType() == CoolerType.AIO) {
                 Integer max = pcCase.getMaxRadiatorMm();
                 if (max == null) {
-                    error("cooler.radiator", "Vỏ này không có chỗ gắn két tản nước. Hãy chọn tản khí.");
+                    error("cooler.radiator", "This case has no radiator mount. Choose an air cooler.");
                 } else if (cooler.getRadiatorMm() != null && cooler.getRadiatorMm() > max) {
-                    error("cooler.radiator", "Két tản nước " + cooler.getRadiatorMm() + " mm quá dài, vỏ chỉ gắn được két tới "
+                    error("cooler.radiator", "The radiator is " + cooler.getRadiatorMm() + " mm long; the case supports radiators up to "
                             + max + " mm.");
                 }
             } else if (cooler.getHeightMm() != null && pcCase.getMaxCoolerHeightMm() != null
                     && cooler.getHeightMm() > pcCase.getMaxCoolerHeightMm()) {
-                error("cooler.height", "Tản cao " + cooler.getHeightMm() + " mm, vỏ chỉ chứa được tản cao tối đa "
-                        + pcCase.getMaxCoolerHeightMm() + " mm. Nắp hông sẽ không đóng được.");
+                error("cooler.height", "The cooler is " + cooler.getHeightMm() + " mm tall; the case supports coolers up to "
+                        + pcCase.getMaxCoolerHeightMm() + " mm. The side panel will not close.");
             }
         }
 
@@ -207,7 +207,7 @@ public class CompatibilityService {
                     .mapToInt(s -> parts.get(s))
                     .sum();
             if (m2 > board.getM2Slots()) {
-                error("ssd.m2_slots", "Có " + m2 + " ổ M.2 nhưng bo mạch chỉ có " + board.getM2Slots() + " khe M.2.");
+                error("ssd.m2_slots", "There are " + m2 + " M.2 drives but the board has only " + board.getM2Slots() + " khe M.2.");
             }
         }
 
@@ -215,11 +215,11 @@ public class CompatibilityService {
             int fans = count(CaseFan.class);
             if (pcCase == null || fans == 0) return;
             if (fans > pcCase.getFanSlots()) {
-                error("fans.slots", "Có " + fans + " quạt nhưng vỏ chỉ có " + pcCase.getFanSlots() + " chỗ gắn quạt.");
+                error("fans.slots", "There are " + fans + " fans but the case has only " + pcCase.getFanSlots() + " fan mounts.");
             }
             boolean hasArgb = all(CaseFan.class).stream().anyMatch(CaseFan::isArgb);
             if (hasArgb && board != null && !board.isHasArgbHeader() && !pcCase.isHasFanHub()) {
-                warning("fans.argb", "Quạt có đèn ARGB nhưng bo mạch không có cổng ARGB và vỏ không có hub. Quạt vẫn quay, chỉ đèn không sáng.");
+                warning("fans.argb", "The fans have ARGB lighting but neither the board nor the case has an ARGB header or hub. The fans will spin, but the lights will not work.");
             }
         }
 
@@ -229,8 +229,8 @@ public class CompatibilityService {
             int need = (int) Math.ceil((cpu.getTdpW() + gpuWatt + BASE_WATT) * PSU_HEADROOM);
             if (psu.getWattage() < need) {
                 // docs/pc_compatibility_rules.md mục 6: ước lượng công suất chỉ là cảnh báo, không phải điều kiện tương thích tuyệt đối
-                warning("psu.wattage", "Nguồn " + psu.getWattage() + " W có thể hơi yếu. Ước lượng sơ bộ nên dùng nguồn từ " + need
-                        + " W trở lên; đối chiếu thêm công suất khuyến nghị của hãng card đồ họa.");
+                warning("psu.wattage", "A " + psu.getWattage() + " W PSU may be insufficient. A preliminary estimate suggests at least " + need
+                        + " W; also check the graphics card manufacturer's recommended PSU rating.");
             }
         }
 
@@ -240,11 +240,11 @@ public class CompatibilityService {
         private <T extends Component> T single(Class<T> type, String rule, String label, boolean required) {
             List<T> list = all(type);
             if (list.isEmpty()) {
-                if (required) error("required." + rule, "Chưa chọn " + label + ".");
+                if (required) error("required." + rule, "Missing " + label + ".");
                 return null;
             }
             if (count(type) > 1) {
-                error("duplicate." + rule, "Một máy chỉ có một " + label + ", bạn đang chọn " + count(type) + ".");
+                error("duplicate." + rule, "A PC should have only one " + label + ", but you selected " + count(type) + ".");
             }
             return list.get(0);
         }

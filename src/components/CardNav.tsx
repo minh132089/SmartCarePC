@@ -523,7 +523,7 @@ const CardNav = ({
             data-icon-only={menuLabel ? undefined : ''}
             aria-expanded={open}
             aria-controls={contentId}
-            aria-label={menuLabel ? undefined : open ? 'Đóng menu' : 'Mở menu'}
+            aria-label={menuLabel ? undefined : open ? "Close menu" : "Open menu"}
             onClick={() => setOpen(!open)}
           >
             <span className={BURGER} aria-hidden="true">
@@ -536,7 +536,7 @@ const CardNav = ({
                   Menu
                 </span>
                 <span className={WORD_CLOSE} aria-hidden={!open}>
-                  Đóng
+                  Close
                 </span>
               </span>
             )}

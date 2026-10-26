@@ -28,7 +28,7 @@ class BuildVerifierTests {
                 List.of(new Issue("CPU_SUPPORT_LIST", "Cần kiểm tra CPU có trong CPU Support List của bo.")), 12_000_000L);
         assertThat(v.status()).isEqualTo("CONDITIONAL");
         assertThat(v.purchase()).isEqualTo("READY");
-        assertThat(v.conditions()).singleElement().asString().startsWith("Hỏi cửa hàng");
+        assertThat(v.conditions()).singleElement().asString().startsWith("Ask the store");
         // Cập nhật BIOS cũng là điều kiện
         var bios = BuildVerifier.verify(full(), List.of(), List.of(new Issue("CPU_BIOS_UPDATE", "Bo đời 600 có thể cần BIOS mới.")),
                 List.of(), null);
@@ -41,7 +41,7 @@ class BuildVerifierTests {
         lines.set(0, line("cpu", "Intel Core i3-12100", 2_890_000L, null, true, true));
         var v = BuildVerifier.verify(lines, List.of(), List.of(), List.of(), 12_000_000L);
         assertThat(v.status()).isEqualTo("HOLD");
-        assertThat(v.blockers()).anySatisfy(b -> assertThat(b).contains("Chưa có link mua"));
+        assertThat(v.blockers()).anySatisfy(b -> assertThat(b).contains("No purchase link"));
         var noPrice = new ArrayList<>(full());
         noPrice.set(1, line("ram", "RAM 8GB", null, "https://gearvn.com/products/ram", true, true));
         assertThat(BuildVerifier.verify(noPrice, List.of(), List.of(), List.of(), 12_000_000L).purchase()).isEqualTo("HOLD");
@@ -54,7 +54,7 @@ class BuildVerifierTests {
         assertThat(BuildVerifier.verify(out, List.of(), List.of(), List.of(), 12_000_000L).status()).isEqualTo("BLOCKED");
         var over = BuildVerifier.verify(full(), List.of(), List.of(), List.of(), 5_000_000L);
         assertThat(over.status()).isEqualTo("BLOCKED");
-        assertThat(over.blockers()).anySatisfy(b -> assertThat(b).contains("vượt mức tối đa"));
+        assertThat(over.blockers()).anySatisfy(b -> assertThat(b).contains("exceeds the limit"));
         // Ca T18: CPU không có đồ họa, không có card
         var noGpu = BuildVerifier.verify(full(), List.of(new Issue("required.gpu", "CPU này không có sẵn đồ họa, cần thêm card.")),
                 List.of(), List.of(), 12_000_000L);
@@ -67,7 +67,7 @@ class BuildVerifierTests {
         lines.set(3, line("psu", "Nguồn 450W", 450_000L, "https://hacom.vn/nguon", true, false));
         var v = BuildVerifier.verify(lines, List.of(), List.of(), List.of(), 12_000_000L);
         assertThat(v.purchase()).isEqualTo("CONDITIONAL");
-        assertThat(v.conditions()).anySatisfy(c -> assertThat(c).contains("Xem lại giá"));
+        assertThat(v.conditions()).anySatisfy(c -> assertThat(c).contains("Recheck the price"));
     }
 
     @Test
@@ -75,7 +75,7 @@ class BuildVerifierTests {
         // Ca T28: không có dòng nào thì không được READY
         var v = BuildVerifier.verify(List.of(), List.of(), List.of(), List.of(), 12_000_000L);
         assertThat(v.status()).isNotEqualTo("READY");
-        assertThat(v.blockers()).anySatisfy(b -> assertThat(b).contains("thiếu CPU"));
+        assertThat(v.blockers()).anySatisfy(b -> assertThat(b).contains("missing CPU"));
     }
 
     private static List<Line> full() {

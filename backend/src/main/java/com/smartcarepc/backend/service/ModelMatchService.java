@@ -34,7 +34,7 @@ public class ModelMatchService {
     /** Các loại linh kiện mô hình 3D và hướng dẫn lắp dựng cố định theo từng vỏ */
     static final List<String> FIXED = List.of("motherboard", "cooler", "gpu", "psu");
     private static final Map<String, String> LABEL = Map.of(
-            "motherboard", "bo mạch", "cooler", "tản nhiệt", "gpu", "card đồ họa", "psu", "nguồn");
+            "motherboard", "motherboard", "cooler", "cooler", "gpu", "graphics card", "psu", "power supply");
 
     private final PcBuildService pcBuildService;
     private final ComponentService componentService;
@@ -71,11 +71,11 @@ public class ModelMatchService {
         }
         String note = note(model.get(), chosenQty);
         if (fixed.containsKey("cooler") && !chosen.containsKey("cooler")) {
-            String stock = "Máy mẫu 3D có tản nhiệt rời; cấu hình này dùng quạt tản đi kèm CPU (bản Box) nên bạn lắp quạt đó thay cho tản rời.";
+            String stock = "The 3D sample has a separate CPU cooler. This build uses the cooler included with the boxed CPU; install that cooler instead.";
             note = note == null ? stock : note + " " + stock;
         }
                 if (fixed.containsKey("gpu") && !chosen.containsKey("gpu")) {
-            String noGpu = "Máy mẫu 3D có card đồ họa rời; cấu hình này dùng đồ họa tích hợp của CPU nên bạn bỏ qua bước lắp card.";
+            String noGpu = "The 3D sample includes a dedicated GPU. This build uses CPU integrated graphics, so skip the graphics card step.";
             note = note == null ? noGpu : note + " " + noGpu;
         }
         return new Result(errors, note);
@@ -128,7 +128,7 @@ public class ModelMatchService {
     public String presetParts() {
         StringBuilder sb = new StringBuilder();
         for (var p : pcBuildService.findPresets()) {
-            modelOf("case_" + p.code()).ifPresent(b -> sb.append("- vỏ [case_").append(p.code()).append("] ")
+            modelOf("case_" + p.code()).ifPresent(b -> sb.append("- case [case_").append(p.code()).append("] ")
                     .append(p.name()).append(": ")
                     .append(fixedParts(b).entrySet().stream()
                             .map(e -> LABEL.get(e.getKey()) + " " + e.getValue().name() + " [" + e.getValue().code() + "]")
@@ -160,9 +160,9 @@ public class ModelMatchService {
     /** Lời nhắn cho trợ lý: đổi lại món của máy mẫu, hoặc đổi sang vỏ có sẵn món đang chọn */
     private String mismatch(ComponentResponse pcCase, String category, ComponentResponse want, ComponentResponse have) {
         String label = LABEL.get(category);
-        String head = "Mô hình 3D và hướng dẫn lắp của vỏ " + pcCase.name() + " dùng " + label + " " + want.name()
+        String head = "The 3D model and assembly guide for case " + pcCase.name() + " use " + label + " " + want.name()
                 + " [" + want.code() + "]. ";
-        if (have == null) return head + "Hãy thêm món này để hướng dẫn lắp khớp với máy.";
+        if (have == null) return head + "Add this component so the guide matches the build.";
         List<String> others = new ArrayList<>();
         for (var p : pcBuildService.findPresets()) {
             modelOf("case_" + p.code())
@@ -170,8 +170,8 @@ public class ModelMatchService {
                     .filter(b -> have.code().equals(codeOf(fixedParts(b).get(category))))
                     .ifPresent(b -> others.add(p.name() + " [case_" + p.code() + "]"));
         }
-        return head + "Hãy đổi " + have.name() + " [" + have.code() + "] thành món đó"
-                + (others.isEmpty() ? "." : ", hoặc đổi sang vỏ có sẵn " + label + " này: " + String.join(", ", others) + ".");
+        return head + "Replace " + have.name() + " [" + have.code() + "] with that component"
+                + (others.isEmpty() ? "." : ", or choose a case already fitted with " + label + ": " + String.join(", ", others) + ".");
     }
 
     private static String codeOf(ComponentResponse c) {
@@ -185,8 +185,9 @@ public class ModelMatchService {
         int fans = chosenQty.getOrDefault("fans", 0);
         int ram = chosenQty.getOrDefault("ram", 0);
         if (fans == modelFans && ram == modelRam) return null;
-        return "Mô hình 3D là máy minh họa có " + modelRam + " thanh RAM và " + modelFans + " quạt lắp thêm; cấu hình này có "
-                + ram + " thanh RAM và " + (fans == 0 ? "không lắp thêm quạt" : fans + " quạt") + ". Cách lắp vẫn giống nhau.";
+        return "The 3D sample illustrates " + modelRam + " RAM modules and " + modelFans + " extra fans; this build has "
+                + ram + (ram == 1 ? " RAM module and " : " RAM modules and ")
+                + (fans == 0 ? "no extra fans" : fans + (fans == 1 ? " fan" : " fans")) + ". The installation method is the same.";
     }
 
     private static int qty(PcBuildResponse model, String category) {

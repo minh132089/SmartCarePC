@@ -29,7 +29,7 @@ public class GlobalExceptionHandler {
         List<String> messages = ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .toList();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Dữ liệu gửi lên không hợp lệ");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request data");
         problem.setProperty("errors", messages);
         return problem;
     }
@@ -37,6 +37,6 @@ public class GlobalExceptionHandler {
     /** Body không phải JSON hoặc sai kiểu dữ liệu */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleUnreadable(HttpMessageNotReadableException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Body phải là JSON đúng định dạng");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The request body must be valid JSON");
     }
 }

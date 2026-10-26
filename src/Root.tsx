@@ -10,13 +10,13 @@ export default function Root() {
   const feedbackRoute = location.pathname.replace(/\/$/, '') === '/feedback' || location.hash === '#feedback'
   const sampleRoute = uiPreview && location.pathname === '/feedback-preview'
   if (feedbackRoute || sampleRoute) return (
-    <Suspense fallback={<div role="status" className="grid h-full place-items-center text-ink-2">Đang mở dữ liệu phản hồi…</div>}>
+    <Suspense fallback={<div role="status" className="grid h-full place-items-center text-ink-2">Opening feedback data…</div>}>
       {sampleRoute ? <FeedbackPreview /> : <FeedbackAdmin />}
     </Suspense>
   )
   return <>
     <App />
     <ParticipantGate />
-    {uiPreview && <a href="/feedback-preview" className="fixed right-3 bottom-3 z-40 rounded-full border border-line-strong bg-surface px-4 py-2 text-[12px] font-medium text-ink shadow-sm">Preview giao diện · Xem dashboard minh họa ↗</a>}
+    {uiPreview && <a href="/feedback-preview" className="fixed right-3 bottom-3 z-40 rounded-full border border-line-strong bg-surface px-4 py-2 text-[12px] font-medium text-ink shadow-sm">UI preview · View sample dashboard ↗</a>}
   </>
 }

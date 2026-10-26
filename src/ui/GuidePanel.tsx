@@ -119,21 +119,21 @@ export function GuidePanel() {
         className={`-ml-1 mt-5 flex items-center gap-1 rounded-full px-1 py-0.5 text-[15px] font-medium text-link hover:underline ${focus}`}
       >
         <CaretLeft size={14} aria-hidden />
-        Xem mô hình và linh kiện
+        Back to the model and components
       </button>
 
       <p className="mt-4 text-[13px] font-semibold text-ink-2">{machineLabel}</p>
-      <h1 className="display mt-1">Hướng dẫn lắp máy</h1>
+      <h1 className="display mt-1">Assembly guide</h1>
       <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">
-        Làm lần lượt từng bước. Lắp xong bước nào thì đánh dấu bước đó, hình bên cạnh sẽ lắp theo.
+        Follow the steps in order. Mark each one complete as you go; the 3D view follows your progress.
       </p>
-      {!hasGpu && <p className="mt-3 text-[13px] text-info">Cấu hình đã chọn dùng đồ họa tích hợp. Mô hình và hướng dẫn đã bỏ card rời.</p>}
+      {!hasGpu && <p className="mt-3 text-[13px] text-info">Your selected build uses integrated graphics. The model and guide omit the dedicated GPU.</p>}
       {advised?.modelNote && <p className="mt-3 text-[12px] leading-relaxed text-ink-3">{advised.modelNote}</p>}
 
       <div className="mt-5">
         <div className="flex items-baseline justify-between text-[13px]">
           <span className="font-semibold text-ink">
-            Đã xong {count}/{steps.length} bước
+            Completed {count}/{steps.length} steps
           </span>
           <span className="text-ink-3">{Math.round((count / steps.length) * 100)}%</span>
         </div>
@@ -143,7 +143,7 @@ export function GuidePanel() {
           aria-valuemin={0}
           aria-valuemax={steps.length}
           aria-valuenow={count}
-          aria-label="Tiến độ lắp máy"
+          aria-label="Assembly progress"
         >
           <div className="h-full rounded-full bg-ok-strong transition-[width] duration-300 ease-out" style={{ width: `${(count / steps.length) * 100}%` }} />
         </div>
@@ -151,14 +151,14 @@ export function GuidePanel() {
 
       {allDone && (
         <div className="swap mt-5 rounded-2xl bg-ok-bg p-4 text-[14px] leading-[1.45] text-ok">
-          <p className="text-[15px] font-semibold">Bạn đã lắp xong cả máy!</p>
-          <p className="mt-1">Nếu máy chưa lên hình, mở lại bước cuối để xem các lỗi hay gặp.</p>
+          <p className="text-[15px] font-semibold">Your PC is assembled!</p>
+          <p className="mt-1">If there is no display, revisit the final step for common checks.</p>
           {askFeedback && (
             <button
               onClick={() => openStudy('rating')}
               className={`mt-3 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
             >
-              Đánh giá trải nghiệm
+              Rate your experience
             </button>
           )}
         </div>
@@ -171,13 +171,13 @@ export function GuidePanel() {
           return (
             <li key={s.id} data-step={s.id} className={i < steps.length - 1 ? 'border-b border-line' : ''}>
               <div className="flex items-center gap-3 px-4 py-3">
-                <CheckBox checked={isDone} onChange={() => toggle(s.id)} label={`Đánh dấu đã xong bước ${i + 1}: ${s.title}`} />
+                <CheckBox checked={isDone} onChange={() => toggle(s.id)} label={`Mark step complete: ${i + 1}: ${s.title}`} />
                 <button
                   onClick={() => setIndex(i)}
                   aria-expanded={open}
                   className={`min-w-0 flex-1 rounded text-left ${focus}`}
                 >
-                  <span className={`block text-[12px] ${open ? 'text-link' : 'text-ink-3'}`}>Bước {i + 1}</span>
+                  <span className={`block text-[12px] ${open ? 'text-link' : 'text-ink-3'}`}>Step {i + 1}</span>
                   <span className={`guide-step-title block text-[15px] leading-snug ${open ? 'font-semibold text-ink' : isDone ? 'text-ink-2' : 'text-ink'}`} data-done={isDone}>
                     {s.title}
                   </span>
@@ -213,7 +213,7 @@ export function GuidePanel() {
           onBlur={() => setConfirmReset(false)}
           className={`mt-4 px-1 text-[13px] font-medium ${confirmReset ? 'text-bad' : 'text-ink-2 hover:text-ink'} ${focus}`}
         >
-          {confirmReset ? 'Bấm lần nữa để xoá hết dấu tích' : 'Làm lại từ đầu'}
+          {confirmReset ? "Select again to clear all checkmarks" : "Start over"}
         </button>
       )}
     </aside>
@@ -247,16 +247,16 @@ function StepBody({
 
       {behind && (
         <p className="mt-3 rounded-xl bg-info-bg px-3 py-2 text-[13px] text-info">
-          Bạn chưa đánh dấu xong bước {behind.n} ({behind.title}). Nên lắp theo đúng thứ tự.{' '}
+          You have not completed step {behind.n} ({behind.title}). Follow the steps in order.{' '}
           <button onClick={behind.go} tabIndex={tab} className="font-semibold underline">
-            Về bước {behind.n}
+            Go to step {behind.n}
           </button>
         </p>
       )}
 
       {step.tools && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold text-ink-2">Cần chuẩn bị</p>
+          <p className="text-[12px] font-semibold text-ink-2">What you need</p>
           <ul className="mt-1.5 flex flex-wrap gap-1.5">
             {step.tools.map((t) => (
               <li key={t} className="rounded-full bg-fill px-2.5 py-1 text-[12.5px] text-ink">
@@ -267,7 +267,7 @@ function StepBody({
         </div>
       )}
 
-      <p className="mt-3 text-[12px] font-semibold text-ink-2">Làm theo thứ tự</p>
+      <p className="mt-3 text-[12px] font-semibold text-ink-2">Follow these instructions</p>
       <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 text-ink marker:text-ink-3">
         {step.actions.map((a) => (
           <li key={a} className="pl-1">
@@ -278,12 +278,12 @@ function StepBody({
 
       {step.warning && (
         <p className="mt-3 rounded-xl bg-warn-bg px-3 py-2 text-[13px] text-warn">
-          <span className="font-semibold">Cẩn thận: </span>
+          <span className="font-semibold">Caution: </span>
           {step.warning}
         </p>
       )}
       <p className="mt-2 rounded-xl bg-ok-bg px-3 py-2 text-[13px] text-ok">
-        <span className="font-semibold">Lắp đúng khi: </span>
+        <span className="font-semibold">Check: </span>
         {step.check}
       </p>
 
@@ -291,7 +291,7 @@ function StepBody({
         {done ? (
           !last && (
             <button onClick={onNext} tabIndex={tab} className={`rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}>
-              Sang bước tiếp
+              Next step
             </button>
           )
         ) : (
@@ -301,12 +301,12 @@ function StepBody({
             className={`flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
           >
             <Check size={14} aria-hidden />
-            {last ? 'Xong, máy đã lên hình' : 'Xong bước này'}
+            {last ? "Done, the PC has a display" : "Complete this step"}
           </button>
         )}
         {onReplay && (
           <button onClick={onReplay} tabIndex={tab} className={`rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}>
-            Xem lại cách lắp
+            Replay installation
           </button>
         )}
       </div>
@@ -351,7 +351,7 @@ export function GuideCaption() {
   const steps = useMemo(() => guideSteps(familyId, buildId, hasGpu), [familyId, buildId, hasGpu])
   if (!guide) return null
   const s = steps[Math.min(index, steps.length - 1)]
-  const text = full ? 'Toàn cảnh: máy đã lắp đủ mọi linh kiện' : `Bước ${index + 1}/${steps.length}: ${s.title}`
+  const text = full ? "Overview: all components are assembled" : `Step ${index + 1}/${steps.length}: ${s.title}`
   const pill = 'glass rounded-full bg-glass shadow-[0_6px_24px_rgba(0,0,0,0.10)] ring-1 ring-line backdrop-blur-xl'
   return (
     <div className="pointer-events-none absolute top-4 left-0 z-10 flex w-full flex-wrap items-center justify-center gap-2 px-4">
@@ -365,7 +365,7 @@ export function GuideCaption() {
         className={`pointer-events-auto flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-link hover:text-ink ${pill} ${press} ${focus}`}
       >
         {full ? <ListNumbers size={15} aria-hidden /> : <Cube size={15} aria-hidden />}
-        {full ? 'Về bước đang lắp' : 'Xem toàn cảnh'}
+        {full ? "Return to current step" : "Full view"}
       </button>
     </div>
   )

@@ -59,7 +59,7 @@ public class FeedbackService {
         }
         String answers = json.writeValueAsString(request.answers());
         if (answers.length() > MAX_ANSWERS_CHARS) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu trả lời quá dài");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The response is too long");
         }
         Feedback saved = repository.save(Feedback.builder()
                 .participantCode(blankToNull(request.participantCode()))
@@ -80,7 +80,7 @@ public class FeedbackService {
                 || !(job instanceof String j) || j.strip().length() < 2 || j.strip().length() > 80
                 || !(age instanceof Number a) || !Double.isFinite(a.doubleValue()) || a.doubleValue() != a.intValue()
                 || a.intValue() < 1 || a.intValue() > 120) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thông tin người tham gia không hợp lệ");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid participant details");
         }
     }
 
@@ -116,11 +116,11 @@ public class FeedbackService {
 
     private void checkKey(String key) {
         if (exportKey.length == 0) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chưa đặt FEEDBACK_EXPORT_KEY nên chưa xuất được dữ liệu");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Feedback export is unavailable because the server has no access key configured");
         }
         byte[] given = (key == null ? "" : key).getBytes(StandardCharsets.UTF_8);
         if (!MessageDigest.isEqual(exportKey, given)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sai khoá xuất dữ liệu");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Incorrect feedback access key");
         }
     }
 

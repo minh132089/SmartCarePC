@@ -45,17 +45,17 @@ final class BuildVerifier {
         for (String cat : REQUIRED) {
             if (have.contains(cat)) continue;
             // Danh sách trống / thiếu loại bắt buộc không được coi là "không có lỗi" (mục 9.2, ca T28)
-            blockers.add("Cấu hình thiếu " + label(cat) + ".");
+            blockers.add("The build is missing " + label(cat) + ".");
             technical = worst(technical, HOLD);
         }
         for (var w : warnings) {
             if (w.rule() != null && w.rule().contains("BIOS")) {
-                conditions.add("Hỏi cửa hàng cập nhật BIOS hỗ trợ CPU trước khi giao: " + w.message());
+                conditions.add("Ask the store to update the BIOS for CPU support before delivery: " + w.message());
                 technical = worst(technical, CONDITIONAL);
             }
         }
         for (var u : unknowns) {
-            conditions.add("Hỏi cửa hàng xác nhận trước khi mua: " + u.message());
+            conditions.add("Ask the store to confirm before buying: " + u.message());
             technical = worst(technical, CONDITIONAL);
         }
 
@@ -66,30 +66,30 @@ final class BuildVerifier {
             String name = l.productName() != null ? l.productName() : label(l.category());
             Long price = l.priceMaxVnd() != null ? l.priceMaxVnd() : l.priceMinVnd();
             if (l.sourceUrl() == null) {
-                blockers.add("Chưa có link mua cho " + name + ".");
+                blockers.add("No purchase link for " + name + ".");
                 purchase = worst(purchase, HOLD);
             }
             if (price == null) {
-                blockers.add("Chưa có giá cho " + name + ".");
+                blockers.add("No price available for " + name + ".");
                 purchase = worst(purchase, HOLD);
             } else {
                 total += price;
             }
             if (Boolean.FALSE.equals(l.inStock())) {
-                blockers.add(name + " đang hết hàng ở cửa hàng đã chọn.");
+                blockers.add(name + " is out of stock at the selected store.");
                 purchase = worst(purchase, BLOCKED);
             }
             if (l.sourceUrl() != null && !Boolean.TRUE.equals(l.priceChecked())) {
-                conditions.add("Xem lại giá " + name + " trên trang cửa hàng (giá tham khảo, chưa đọc được trên trang).");
+                conditions.add("Recheck the price of " + name + " on the store page; this reference price has not been verified there.");
                 purchase = worst(purchase, CONDITIONAL);
             } else if (l.sourceUrl() != null && l.inStock() == null) {
-                conditions.add("Hỏi cửa hàng còn hàng " + name + " không (trang không ghi tình trạng hàng).");
+                conditions.add("Ask the store whether " + name + " is in stock; the page does not state availability.");
                 purchase = worst(purchase, CONDITIONAL);
             }
         }
         if (cap != null && total > cap) {
-            blockers.add("Tổng " + Math.round(total / 1e5) / 10.0 + " triệu vượt mức tối đa " + Math.round(cap / 1e5) / 10.0
-                    + " triệu của phương án.");
+            blockers.add("Total " + Math.round(total / 1e5) / 10.0 + " million VND exceeds the limit of " + Math.round(cap / 1e5) / 10.0
+                    + " million VND for this option.");
             purchase = worst(purchase, BLOCKED);
         }
         return new Verdict(worst(technical, purchase), technical, purchase, blockers, conditions);
@@ -102,13 +102,13 @@ final class BuildVerifier {
     private static String label(String category) {
         return switch (category) {
             case "cpu" -> "CPU";
-            case "motherboard" -> "bo mạch chủ";
+            case "motherboard" -> "motherboard";
             case "ram" -> "RAM";
-            case "ssd" -> "ổ SSD";
-            case "psu" -> "nguồn";
-            case "case" -> "vỏ máy";
-            case "gpu" -> "card đồ họa";
-            case "cooler" -> "tản nhiệt";
+            case "ssd" -> "SSD";
+            case "psu" -> "power supply";
+            case "case" -> "case";
+            case "gpu" -> "graphics card";
+            case "cooler" -> "cooler";
             default -> category;
         };
     }

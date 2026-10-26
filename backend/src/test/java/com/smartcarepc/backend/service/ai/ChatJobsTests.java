@@ -59,6 +59,6 @@ class ChatJobsTests {
         when(chat.reply(any(), any())).thenThrow(new LinkageError("lỗi liên kết lớp"));
         var done = jobs.await(jobs.start(req).id(), Duration.ofSeconds(5));
         assertThat(done.status()).isEqualTo(ChatJobs.Status.error);
-        assertThat(done.error()).contains("Trợ lý gặp lỗi");
+        assertThat(done.error()).contains("The assistant encountered an error");
     }
 }

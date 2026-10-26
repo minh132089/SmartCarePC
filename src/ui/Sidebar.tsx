@@ -26,11 +26,11 @@ function useMachine() {
       tagline: f.tagline,
       glass: f.side_open?.type === 'glass' || familyId === 'showcase_dual_chamber',
       rows: [
-        ['Kích thước thân', `${w} × ${h} × ${d} mm`],
-        ['Bo mạch chủ', { ATX: 'ATX (305 × 244 mm)', mATX: 'Micro-ATX (244 × 244 mm)', ITX: 'Mini-ITX (170 × 170 mm)' }[f.board.ff]],
-        ['Tản CPU', COOLER_NAME[f.cooler.kind]],
-        ['Card đồ họa', hasGpu ? `${f.gpu.kind === 'gpu_280' ? '280 mm, 3 quạt' : '240 mm, 2 quạt'}${f.riser ? ', qua cáp riser' : ''}` : 'Tích hợp trong CPU'],
-        ['Nguồn', f.psu.kind === 'atx' ? 'ATX' : 'SFX nhỏ gọn'],
+        ["Case dimensions", `${w} × ${h} × ${d} mm`],
+        ["Motherboard", { ATX: 'ATX (305 × 244 mm)', mATX: 'Micro-ATX (244 × 244 mm)', ITX: 'Mini-ITX (170 × 170 mm)' }[f.board.ff]],
+        ["CPU cooling", COOLER_NAME[f.cooler.kind]],
+        ["Graphics card", hasGpu ? `${f.gpu.kind === 'gpu_280' ? "280 mm, 3 fans" : "240 mm, 2 fans"}${f.riser ? ", connected by riser" : ''}` : "Integrated in the CPU"],
+        ["Power supply", f.psu.kind === 'atx' ? 'ATX' : "Compact SFX"],
       ] as [string, string][],
     }
   }
@@ -40,15 +40,15 @@ function useMachine() {
     tagline: build.tagline,
     glass: build.case.glass,
     rows: [
-      ['Thùng máy', build.caseName],
-      ['Bo mạch chủ', BOARDS[build.formFactor].label],
-      ['RAM', `${build.ramSticks} thanh`],
-      ['Card đồ họa', hasGpu && build.gpu ? 'Card rời' : 'Có sẵn trong CPU'],
+      ["Case", build.caseName],
+      ["Motherboard", BOARDS[build.formFactor].label],
+      ['RAM', `${build.ramSticks} ${build.ramSticks === 1 ? 'module' : 'modules'}`],
+      ["Graphics card", hasGpu && build.gpu ? "Dedicated GPU" : "Integrated in the CPU"],
     ] as [string, string][],
   }
 }
 
-const COOLER_NAME = { tower_air_155: 'Tản khí dạng tháp', low_profile_47: 'Tản khí thấp', aio_240: 'Tản nước 240 mm', aio_360: 'Tản nước 360 mm' }
+const COOLER_NAME = { tower_air_155: "Tower air cooler", low_profile_47: "Low-profile air cooler", aio_240: "240 mm liquid cooler", aio_360: "360 mm liquid cooler" }
 
 /** Số thứ tự ảnh concept trong public/families (giữ theo bản vẽ gốc của người dùng). */
 const THUMB: Record<FamilyId, string> = { standard_tower: '01', compact_tower: '02', showcase_dual_chamber: '03', mini_sff: '04', full_tower: '06' }
@@ -56,7 +56,7 @@ const THUMB: Record<FamilyId, string> = { standard_tower: '01', compact_tower: '
 /** Các máy người dùng chọn được: 6 họ case theo dáng và máy Gaming đã dựng đầy đủ. */
 const MACHINES: { id: FamilyId | 'gaming'; label: string; img: string }[] = [
   ...FAMILY_IDS.map((id) => ({ id, label: FAMILIES[id].label, img: `/families/${THUMB[id]}_${id}.jpg` })),
-  { id: 'gaming', label: 'Gaming (đầy đủ)', img: '' },
+  { id: 'gaming', label: "Gaming (complete)", img: '' },
 ]
 
 export function Sidebar() {
@@ -84,13 +84,13 @@ export function Sidebar() {
         <FlowSteps current={2} />
         <StudyBar />
         <p className="mt-6 text-[13px] font-semibold tracking-[0.01em] text-ink-2">PC SmartCare</p>
-        <h1 className="display mt-1">Nhìn vào bên trong chiếc máy tính.</h1>
-        <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">Chọn kiểu máy bạn thích, rồi bấm vào từng linh kiện để biết nó làm gì.</p>
+        <h1 className="display mt-1">Explore the inside of a PC.</h1>
+        <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">Choose a PC style, then select a component to learn what it does.</p>
       </div>
 
       <div className="enter" style={{ '--i': 1 } as React.CSSProperties}>
-      <SectionTitle>Chọn kiểu máy</SectionTitle>
-      <div role="radiogroup" aria-label="Kiểu máy" className="grid grid-cols-3 gap-2">
+      <SectionTitle>Choose a PC style</SectionTitle>
+      <div role="radiogroup" aria-label="PC style" className="grid grid-cols-3 gap-2">
         {MACHINES.map((m) => {
           const on = m.id === current
           return (
@@ -129,13 +129,13 @@ export function Sidebar() {
           onClick={toggleExploded}
           className={`rounded-full bg-accent px-5 py-2.5 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
         >
-          {exploded ? 'Lắp lại' : 'Tách rời linh kiện'}
+          {exploded ? "Reassemble" : "Explode view"}
         </button>
         <button
           onClick={toggleSide}
           className={`rounded-full bg-fill px-5 py-2.5 text-[15px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}
         >
-          {machine.glass ? (sideOpen ? 'Lắp kính hông' : 'Tháo kính hông') : sideOpen ? 'Đóng nắp hông' : 'Mở nắp hông'}
+          {machine.glass ? (sideOpen ? "Fit glass panel" : "Remove glass panel") : sideOpen ? "Close side panel" : "Open side panel"}
         </button>
         <PowerButton />
       </div>
@@ -143,7 +143,7 @@ export function Sidebar() {
       <GuideCard />
 
       <div ref={listRef} className="enter" style={{ '--i': 3 } as React.CSSProperties}>
-      <SectionTitle>Linh kiện trong máy</SectionTitle>
+      <SectionTitle>Inside this PC</SectionTitle>
       <Group>
         {parts.map((id, i) => {
           const open = selected === id
@@ -168,7 +168,7 @@ export function Sidebar() {
                       tabIndex={open ? 0 : -1}
                       className={`mx-4 mb-3.5 text-[14px] font-medium text-link hover:underline ${focus}`}
                     >
-                      Xem cận cảnh ›
+                      Inspect ›
                     </button>
                   )}
                 </div>
@@ -180,11 +180,11 @@ export function Sidebar() {
       </div>
 
       <p className="mt-5 text-[12px] leading-[1.45] text-ink-3">
-        Kéo để xoay, cuộn để phóng to. Bấm vào một linh kiện trong hình để xem nó là gì.
+        Drag to rotate and scroll to zoom. Select a component to learn about it.
       </p>
 
       <details className="mt-3 text-[12px] leading-[1.45] text-ink-3">
-        <summary className="cursor-pointer select-none hover:text-ink-2">Nguồn model 3D</summary>
+        <summary className="cursor-pointer select-none hover:text-ink-2">3D model credits</summary>
         <ul className="mt-2 space-y-1">
           {CREDITS.map((c) => (
             <li key={c.url}>
@@ -192,16 +192,16 @@ export function Sidebar() {
               <a href={c.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
                 {c.title}
               </a>
-              ” của {c.author}
+              ” by {c.author}
             </li>
           ))}
         </ul>
         <p className="mt-2">
-          Dùng theo giấy phép{' '}
+          Licensed under{' '}
           <a href={LICENSE.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
             {LICENSE.label}
           </a>
-          . Đã chỉnh sửa: xoá logo, đổi hướng, thu nhỏ.
+          . Modified: logos removed, orientation changed and scale adjusted.
         </p>
       </details>
     </aside>
@@ -249,7 +249,7 @@ function PowerButton() {
       }`}
     >
       <span className={`size-2 rounded-full ${powered ? 'bg-ok-strong' : 'bg-ink-3'}`} aria-hidden />
-      {powered ? 'Tắt máy' : 'Bật máy'}
+      {powered ? "Power off" : "Power on"}
     </button>
   )
 }
@@ -266,9 +266,9 @@ function GuideCard() {
   const count = steps.filter((s) => done.has(s.id)).length
   return (
     <div className="enter mt-6 rounded-2xl bg-surface p-4" style={{ '--i': 3 } as React.CSSProperties}>
-      <p className="text-[15px] font-semibold text-ink">Tự lắp máy này?</p>
+      <p className="text-[15px] font-semibold text-ink">Ready to build this PC?</p>
       <p className="mt-1 text-[14px] leading-[1.45] text-ink-2">
-        Làm theo hướng dẫn từng bước, có hình minh hoạ. Lắp xong bước nào thì đánh dấu bước đó.
+        Follow the illustrated guide and mark each completed step.
       </p>
       {count > 0 && (
         <div className="mt-3">
@@ -276,7 +276,7 @@ function GuideCard() {
             <div className="h-full rounded-full bg-ok-strong" style={{ width: `${(count / steps.length) * 100}%` }} />
           </div>
           <p className="mt-1 text-[12px] text-ink-3">
-            Đã xong {count}/{steps.length} bước
+            Completed {count}/{steps.length} steps
           </p>
         </div>
       )}
@@ -287,7 +287,7 @@ function GuideCard() {
         }}
         className={`mt-3 rounded-full bg-accent px-5 py-2.5 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
       >
-        {count === 0 ? 'Bắt đầu hướng dẫn' : count === steps.length ? 'Xem lại hướng dẫn' : 'Tiếp tục hướng dẫn'}
+        {count === 0 ? "Start the guide" : count === steps.length ? "Review the guide" : "Continue the guide"}
       </button>
     </div>
   )
@@ -303,10 +303,10 @@ function QualityPicker() {
   return (
     <div className="enter mt-4" style={{ '--i': 2 } as React.CSSProperties}>
       <div className="flex items-baseline justify-between px-1">
-        <span className="text-[13px] font-semibold text-ink-2">Chất lượng hình</span>
-        {pref === 'auto' && <span className="text-[12px] text-ink-3">đang dùng: {QUALITY_LABEL[level]}</span>}
+        <span className="text-[13px] font-semibold text-ink-2">Render quality</span>
+        {pref === 'auto' && <span className="text-[12px] text-ink-3">current: {QUALITY_LABEL[level]}</span>}
       </div>
-      <div role="radiogroup" aria-label="Chất lượng hình" className="mt-1.5 grid grid-cols-4 gap-1 rounded-full bg-fill p-1">
+      <div role="radiogroup" aria-label="Render quality" className="mt-1.5 grid grid-cols-4 gap-1 rounded-full bg-fill p-1">
         {PREFS.map((p) => (
           <button
             key={p}
@@ -317,11 +317,11 @@ function QualityPicker() {
               pref === p ? 'bg-surface text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)]' : 'text-ink-2 hover:text-ink'
             }`}
           >
-            {p === 'auto' ? 'Tự động' : QUALITY_LABEL[p]}
+            {p === 'auto' ? "Automatic" : QUALITY_LABEL[p]}
           </button>
         ))}
       </div>
-      <p className="mt-1.5 px-1 text-[12px] leading-[1.4] text-ink-3">Máy chậm hoặc nóng thì chọn Nhẹ. Quạt chỉ quay khi bấm Bật máy.</p>
+      <p className="mt-1.5 px-1 text-[12px] leading-[1.4] text-ink-3">Choose Low if your device becomes slow or hot. Fans animate only when Power on is selected.</p>
     </div>
   )
 }

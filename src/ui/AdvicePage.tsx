@@ -25,12 +25,12 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  * ngắn dùng trong thanh CardNav.
  */
 const EXAMPLES = [
-  { label: 'Sinh viên, 12 triệu', text: 'Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.' },
-  { label: 'Chơi game, 25 triệu', text: 'Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.' },
-  { label: 'Dựng video, 40 triệu', text: 'Mình dựng video cho công việc, máy phải chạy ổn định nhiều giờ, ngân sách khoảng 40 triệu.' },
-  { label: 'Văn phòng, 10 triệu', text: 'Mình cần máy cho văn phòng nhỏ, chạy phần mềm kế toán và in ấn, khoảng 10 triệu, càng êm càng tốt.' },
-  { label: 'Thiết kế, 20 triệu', text: 'Mình học thiết kế đồ họa, dùng Photoshop và Illustrator, có khoảng 20 triệu, muốn máy êm và không quá to.' },
-  { label: 'Lập trình, 18 triệu', text: 'Mình là lập trình viên, hay mở nhiều tab và chạy Docker, có khoảng 18 triệu, cần nhiều RAM để sau này nâng cấp.' },
+  { label: "Student, VND 12 million", text: "I am a university student with a budget of VND 12 million. I need a compact PC for online classes, Word and Excel." },
+  { label: "Gaming, VND 25 million", text: "I play online games and occasionally livestream. My budget is VND 25 million and I would like a glass-panel case." },
+  { label: "Video editing, VND 40 million", text: "I edit videos for work and need a PC that runs reliably for long sessions. My budget is VND 40 million." },
+  { label: "Office, VND 10 million", text: "I need a quiet PC for a small office, accounting software and printing. My budget is VND 10 million." },
+  { label: "Design, VND 20 million", text: "I study graphic design and use Photoshop and Illustrator. I have VND 20 million and want a quiet, reasonably compact PC." },
+  { label: "Programming, VND 18 million", text: "I am a programmer who runs Docker and keeps many tabs open. My budget is VND 18 million, and I need plenty of RAM with room to upgrade." },
 ]
 
 /** Mặc định xem build trợ lý chọn của phương án "Phù hợp cho bạn" */
@@ -38,10 +38,10 @@ const defaultPick = (build?: BuildCard | null): Pick => ({ tier: build?.tier ?? 
 
 /** Trợ lý phải tìm giá ở nhiều cửa hàng nên trả lời mất khoảng 1 đến 2 phút: báo cho người dùng đang làm gì */
 const BUSY_HINTS = [
-  'Đang đọc nhu cầu của bạn…',
-  'Đang tìm giá ở các cửa hàng…',
-  'Đang so giá và kiểm tra các linh kiện lắp chung được không…',
-  'Sắp xong, đang tổng hợp lại…',
+  "Understanding your requirements…",
+  "Checking store prices…",
+  "Comparing prices and checking compatibility…",
+  "Putting your recommendations together…",
 ]
 
 /**
@@ -97,14 +97,14 @@ export function AdvicePage() {
   const buildButton = (c: BuildCard) => {
     const machine = machineOfCard(c)
     if (!c.compatible) return null
-    if (!machine) return <p className="text-[12.5px] text-ink-2">App chưa có mô hình 3D cho kiểu vỏ này.</p>
+    if (!machine) return <p className="text-[12.5px] text-ink-2">A 3D model is not available for this case yet.</p>
     return (
       <>
         <button
           onClick={() => open(c)}
           className={`flex w-full items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
         >
-          Xem và lắp máy này
+          View and assemble this PC
           <CaretRight size={13} aria-hidden />
         </button>
         {c.modelNote && <p className="mt-2 text-[12.5px] leading-[1.45] text-ink-2">{c.modelNote}</p>}
@@ -125,13 +125,13 @@ export function AdvicePage() {
         index === shown ? 'bg-ink text-on-ink' : 'bg-fill text-ink hover:bg-fill-hover'
       }`}
     >
-      Xem chi tiết linh kiện
+      View component details
     </button>
   )
 
   const soundButton = (
     <IconButton
-      label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
+      label={muted ? "Enable sound" : "Mute sound"}
       onClick={toggleSound}
       icon={muted ? <SpeakerSlash size={16} aria-hidden /> : <SpeakerHigh size={16} aria-hidden />}
     />
@@ -143,9 +143,9 @@ export function AdvicePage() {
         <FlowSteps current={1} />
         <div className="flex items-center gap-2">
           {soundButton}
-          <IconButton label="Cuộc trò chuyện mới" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
+          <IconButton label="New conversation" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
-            Bỏ qua, xem mô hình 3D ›
+            Skip to the 3D viewer ›
           </button>
         </div>
       </header>
@@ -182,8 +182,8 @@ export function AdvicePage() {
       </div>
       <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">
         <div className="mx-auto max-w-[820px]">
-          <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={chatInputRef} placeholder="Hỏi thêm hoặc nhờ đổi linh kiện…" />
-          <p className="mt-1.5 text-center text-[11px] text-ink-3">Trợ lý AI có thể nhầm. Hãy kiểm tra lại trước khi mua.</p>
+          <Composer value={draft} onChange={setDraft} onSend={ask} busy={busy} inputRef={chatInputRef} placeholder="Ask a follow-up or request a different component…" />
+          <p className="mt-1.5 text-center text-[11px] text-ink-3">AI can make mistakes. Verify the details before buying.</p>
         </div>
       </div>
     </div>
@@ -231,9 +231,9 @@ export function AdvicePage() {
           open={sheet}
           onOpenChange={setSheet}
           hideToggleWhenClosed
-          panelLabel="chi tiết linh kiện"
-          menuText="Linh kiện"
-          closeText="Đóng"
+          panelLabel="component details"
+          menuText="Components"
+          closeText="Close"
           displaySocials={false}
           displayItemNumbering={false}
           colors={dark ? ['#16253a', '#0a4fa3'] : ['#dcebfd', '#0071e3']}
@@ -245,7 +245,7 @@ export function AdvicePage() {
           <div key={`${shown}-${card.tier ?? ''}-${card.variant ?? 1}`} className="text-ink">
             {card.tier && (
               <p data-sm-item className="mb-2 text-[13px] font-semibold text-accent">
-                Phương án: {TIER_INFO[card.tier].label}
+                Option: {TIER_INFO[card.tier].label}
               </p>
             )}
             <ProposalView card={card} action={buildButton(card)} />
@@ -259,24 +259,24 @@ export function AdvicePage() {
 /** Mục trong thanh CardNav ở màn giới thiệu */
 const NAV_ITEMS: CardNavItem[] = [
   {
-    label: 'Tư vấn',
-    description: 'Kể nhu cầu, trợ lý chọn linh kiện và so giá ở các cửa hàng.',
+    label: "Advice",
+    description: "Describe your needs to get component recommendations and compare store prices.",
     links: [
       ...EXAMPLES.slice(0, 3).map((ex) => ({ label: ex.label, href: '#' })),
     ],
   },
   {
-    label: 'Lắp máy 3D',
-    description: 'Xem mô hình máy và làm theo hướng dẫn từng bước.',
+    label: "3D assembly",
+    description: "Explore the PC model and follow the assembly guide.",
     links: [
-      { label: 'Xem mô hình 3D', href: '#' },
-      { label: 'Hướng dẫn lắp máy', href: '#' },
+      { label: "Open 3D viewer", href: '#' },
+      { label: "Assembly guide", href: '#' },
     ],
   },
   {
-    label: 'Nghiên cứu',
-    description: 'Dành cho người tham gia thử nghiệm của nhóm.',
-    links: [{ label: 'Nhập mã tham gia', href: '#' }],
+    label: "Research",
+    description: "For participants in the team's user study.",
+    links: [{ label: "Enter participant code", href: '#' }],
   },
 ]
 
@@ -337,11 +337,11 @@ function Intro({
     event.preventDefault()
     const example = EXAMPLES.find((ex) => ex.label === link.label)
     if (example) fill(example.text)
-    else if (link.label === 'Xem mô hình 3D') setPage('build')
-    else if (link.label === 'Hướng dẫn lắp máy') {
+    else if (link.label === "Open 3D viewer") setPage('build')
+    else if (link.label === "Assembly guide") {
       setGuide(true)
       setPage('build')
-    } else if (link.label === 'Nhập mã tham gia') openStudy('join')
+    } else if (link.label === "Enter participant code") openStudy('join')
   }
 
   return (
@@ -380,15 +380,15 @@ function Intro({
             accentColor={dark ? '#2997ff' : '#0071e3'}
             maxWidth={820}
             cardHeight={150}
-            cta={{ label: 'Bắt đầu', onClick: () => inputRef.current?.focus() }}
+            cta={{ label: "Get started", onClick: () => inputRef.current?.focus() }}
             onLinkClick={onLink}
-            ariaLabel="Điều hướng"
+            ariaLabel="Navigation"
           />
         </div>
         <div className="absolute top-5 right-5 z-30 hidden xl:block">{soundButton}</div>
 
         <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center px-5 pt-6 pb-10 md:px-10">
-          <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">SmartCare PC · trợ lý build máy</p>
+          <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">SmartCare PC · Your PC building assistant</p>
           <h1 className="mt-2 text-ink">
             <span className="sr-only">Create your own PC</span>
             <div ref={titleRef} aria-hidden className="relative h-[clamp(84px,13vw,150px)] w-full">
@@ -419,13 +419,13 @@ function Intro({
               onSend={ask}
               busy={busy}
               inputRef={inputRef}
-              placeholder="Ví dụ: mình học thiết kế, có khoảng 20 triệu, muốn máy êm và không quá to"
+              placeholder="For example: I study design, have VND 20 million and want a quiet, compact PC"
               extra={
                 <button
                   type="button"
                   onClick={random}
-                  aria-label="Điền một gợi ý ngẫu nhiên"
-                  title="Gợi ý ngẫu nhiên"
+                  aria-label="Fill in a random example"
+                  title="Random example"
                   className={`grid size-10 shrink-0 place-items-center rounded-full bg-fill text-ink-2 hover:bg-fill-hover hover:text-ink ${press} ${focus}`}
                 >
                   <DiceFive size={18} aria-hidden />
@@ -461,11 +461,11 @@ function useOpenMachine() {
 export function FlowSteps({ current }: { current: 1 | 2 }) {
   const setPage = useViewer((s) => s.setPage)
   const items = [
-    { n: 1, label: 'Tư vấn chọn máy', short: 'Tư vấn', page: 'advice' as const },
-    { n: 2, label: 'Hướng dẫn lắp máy', short: 'Lắp máy', page: 'build' as const },
+    { n: 1, label: "Choose your PC", short: "Advice", page: 'advice' as const },
+    { n: 2, label: "Assembly guide", short: "Assemble", page: 'build' as const },
   ]
   return (
-    <nav aria-label="Các bước" className="flex items-center gap-2 text-[13px]">
+    <nav aria-label="Your steps" className="flex items-center gap-2 text-[13px]">
       {items.map((it, i) => {
         const on = it.n === current
         return (

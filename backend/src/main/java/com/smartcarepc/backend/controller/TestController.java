@@ -19,17 +19,17 @@ public class TestController {
 
     @GetMapping("/ping")
     public Map<String, Object> ping() {
-        log.info("Nhận request GET /api/test/ping");
+        log.info("Received GET /api/test/ping");
         return Map.of(
                 "ok", true,
-                "message", "SmartCarePC backend đang chạy",
+                "message", "SmartCarePC backend is running",
                 "time", LocalDateTime.now().toString());
     }
 
     // Gửi JSON lên, backend trả lại đúng nội dung đó
     @PostMapping("/echo")
     public Map<String, Object> echo(@RequestBody Map<String, Object> body) {
-        log.info("Nhận request POST /api/test/echo: {}", body);
+        log.info("Received POST /api/test/echo: {}", body);
         return Map.of("ok", true, "received", body);
     }
 }

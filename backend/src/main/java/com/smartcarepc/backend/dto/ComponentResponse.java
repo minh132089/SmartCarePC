@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.hibernate.Hibernate;
+import com.smartcarepc.backend.support.EnglishCopy;
 
 import com.smartcarepc.backend.entity.component.CaseFan;
 import com.smartcarepc.backend.entity.component.Component;
@@ -43,8 +44,8 @@ public record ComponentResponse(
 
     private static ComponentResponse of(Component c, List<HotspotResponse> hotspots) {
         Component real = (Component) Hibernate.unproxy(c);
-        return new ComponentResponse(real.getId(), real.getCode(), real.getCategory().getCode(), real.getName(),
-                real.getDescription(), real.getModelUrl(), real.getImageUrl(), real.getPrice(), specs(real), hotspots);
+        return new ComponentResponse(real.getId(), real.getCode(), real.getCategory().getCode(), EnglishCopy.text(real.getName()),
+                EnglishCopy.text(real.getDescription()), real.getModelUrl(), real.getImageUrl(), real.getPrice(), specs(real), hotspots);
     }
 
     private static Map<String, Object> specs(Component c) {

@@ -23,7 +23,7 @@ try {
   assert.equal(score(6), null)
   const row = (id, createdAt, occupation) => ({ id, createdAt, participantCode: null, phase: null, machine: null, answers: occupation ? { participant_occupation: occupation } : {} })
   const rows = [row(1, '2026-10-23 09:00:00', 'Sinh viên'), row(2, '2026-10-25 10:00:00', 'sinh viên'), row(3, 'bad', null), row(4, '2026-02-31 00:00:00', null)]
-  assert.deepEqual(occupationCounts(rows), [{ label: 'Sinh viên', count: 2 }])
+  assert.deepEqual(occupationCounts(rows), [{ label: 'University student', count: 2 }])
   const days = dailyCounts(rows)
   assert.equal(days.length, 14)
   assert.equal(days.at(-1).count, 1)

@@ -87,8 +87,8 @@ class ChatServiceTests {
             var fan=res.build().items().getFirst();
             assertThat(fan.quantity()).isEqualTo(qty);
             assertThat(fan.priceMaxVnd()).isEqualTo(((qty+2)/3)*490_000L);
-            assertThat(fan.spec()).contains(qty+" quạt sử dụng", "mua "+((qty+2)/3)+" bộ");
-            if(qty%3!=0)assertThat(fan.spec()).contains("dư");
+            assertThat(fan.spec()).contains(qty + (qty == 1 ? " fan used" : " fans used"), "buy " + ((qty+2)/3) + (((qty+2)/3) == 1 ? " pack" : " packs"));
+            if(qty%3!=0)assertThat(fan.spec()).contains("spare");
         }
     }
 
@@ -134,8 +134,8 @@ class ChatServiceTests {
             var res = service.reply(new ChatRequest(List.of(new Message("user",
                     "Máy game 1 triệu, phải có RTX 4090 24GB mới.")), null, null, "advice"));
             assertThat(res.build()).isNull();
-            assertThat(res.reply()).contains("1 triệu", "RTX 4090", "chưa có cấu hình và giá bán đã xác minh")
-                    .doesNotContain("40 - 50", "60 triệu", "40.000.000", "40 củ");
+            assertThat(res.reply()).contains("1 million VND", "RTX 4090", "do not yet have a verified build and price")
+                    .doesNotContain("40 - 50", "60 million VND", "40.000.000", "40 củ");
         }
         org.mockito.Mockito.verifyNoInteractions(compatibility);
     }
@@ -185,17 +185,17 @@ class ChatServiceTests {
     void itemsLaChuoiThiGuiLaiLoiSchemaDeAiSua() {
         reply(toolCall("bad", "propose_build", "{\"tier\":\"balanced\",\"items\":\"như lần trước\"}"), answer("Mình sẽ gửi đúng danh sách."));
         service.reply(new ChatRequest(List.of(new Message("user", "xem cấu hình")), null, null, "advice"));
-        assertThat((String) messages(1).get(3).get("content")).contains("items phải là mảng");
+        assertThat((String) messages(1).get(3).get("content")).contains("items must be an array");
         org.mockito.Mockito.verifyNoInteractions(compatibility);
     }
 
     @Test
     void yeuCauMoiBoMiniVaDungLuongKitRamKhongBiDocSai() {
-        assertThat(ChatService.needs(List.of("không cần mini ITX, dùng mATX", "máy mini game 30 triệu")).miniItx()).isFalse();
-        assertThat(ChatService.needs(List.of("máy game RAM 2x16GB 30 triệu")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("không cần mini ITX, dùng mATX", "máy mini game 30 million VND")).miniItx()).isFalse();
+        assertThat(ChatService.needs(List.of("máy game RAM 2x16GB 30 million VND")).ramMin()).isEqualTo(32);
         assertThat(ChatService.needs(List.of("RAM 32GB đủ rồi", "RAM 2x32GB")).ramMin()).isEqualTo(32);
-        assertThat(ChatService.needs(List.of("game AAA và dựng video, card VRAM 8GB, 29 triệu")).ramMin()).isEqualTo(16);
-        assertThat(ChatService.needs(List.of("chơi game VRAM 8GB, RAM 32GB, 30 triệu")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("game AAA và dựng video, card VRAM 8GB, 29 million VND")).ramMin()).isEqualTo(16);
+        assertThat(ChatService.needs(List.of("chơi game VRAM 8GB, RAM 32GB, 30 million VND")).ramMin()).isEqualTo(32);
         for (String text : List.of("dạy Teams, soạn giáo án", "PowerPoint, trình chiếu", "xem bài giảng và bảng tính", "luận văn và tra cứu web")) {
             assertThat(ChatService.needs(List.of(text)).office()).as(text).isTrue();
         }
@@ -216,18 +216,18 @@ class ChatServiceTests {
 
     @Test
     void thayDoiDungLuongTrongCauNoiMoiGhiDeMucCu() {
-        assertThat(ChatService.needs(List.of("Đổi RAM lên 32GB, giữ ngân sách đó.", "PC game 30 triệu, RAM 16GB.")).ramMin()).isEqualTo(32);
-        assertThat(ChatService.needs(List.of("ĐỔI RAM XUỐNG 16GB", "PC game RAM 32GB 30 triệu")).ramMin()).isEqualTo(16);
-        assertThat(ChatService.needs(List.of("SSD lên 1TB, giữ ngân sách", "PC game SSD 512GB 30 triệu")).ssdMin()).isEqualTo(1000);
-        assertThat(ChatService.needs(List.of("PC game VRAM ít nhất 8GB 30 triệu")).ramMin()).isEqualTo(16);
-        assertThat(ChatService.noDiscreteGpu(List.of("Bỏ card rời, chỉ Word và học online", "PC game có RTX 4060"))).isTrue();
-        assertThat(ChatService.noDiscreteGpu(List.of("Không bỏ card rời", "PC không cần card rời"))).isFalse();
-        assertThat(ChatService.requestedGpu(List.of("Bỏ card rời", "PC game RTX 4060 8GB"))).isNull();
+        assertThat(ChatService.needs(List.of("Đổi RAM lên 32GB, giữ ngân sách đó.", "PC game 30 million VND, RAM 16GB.")).ramMin()).isEqualTo(32);
+        assertThat(ChatService.needs(List.of("ĐỔI RAM XUỐNG 16GB", "PC game RAM 32GB 30 million VND")).ramMin()).isEqualTo(16);
+        assertThat(ChatService.needs(List.of("SSD lên 1TB, giữ ngân sách", "PC game SSD 512GB 30 million VND")).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.needs(List.of("PC game VRAM ít nhất 8GB 30 million VND")).ramMin()).isEqualTo(16);
+        assertThat(ChatService.noDiscreteGpu(List.of("Bỏ dedicated GPU, chỉ Word và học online", "PC game có RTX 4060"))).isTrue();
+        assertThat(ChatService.noDiscreteGpu(List.of("Không bỏ dedicated GPU", "PC không cần dedicated GPU"))).isFalse();
+        assertThat(ChatService.requestedGpu(List.of("Bỏ dedicated GPU", "PC game RTX 4060 8GB"))).isNull();
     }
 
     @Test
     void nguoiDungChotDdr5ThiKhongDoiDdr4DeLamDepNganSach() {
-        assertThat(platformBudgetResponse("PC chơi game 24 triệu, đúng RX 7600 8GB, RAM 32GB DDR5").build()).isNull();
+        assertThat(platformBudgetResponse("PC chơi game 24 million VND, đúng RX 7600 8GB, RAM 32GB DDR5").build()).isNull();
     }
 
     private ChatResponse platformBudgetResponse(String user) {
@@ -246,12 +246,12 @@ class ChatServiceTests {
             assertThat(line.category()).isEqualTo("cpu");
             assertThat(line.productName()).contains("12400F");
         });
-        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("giữ vỏ Mini-ITX"));
+        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("keeping the Mini-ITX case"));
     }
 
     @Test
     void khongTimDuocBoItxVanGiuCpuNguoiDungChot() {
-        assertThat(platformBudgetResponse("PC mini ITX Valorant36 triệu, phải dùng CPU AMD Ryzen5 5600X, RAM16GB", true).build()).isNull();
+        assertThat(platformBudgetResponse("PC mini ITX Valorant36 million VND, phải dùng CPU AMD Ryzen5 5600X, RAM16GB", true).build()).isNull();
     }
 
     private ChatResponse platformBudgetResponse(String user, boolean missingMini) {
@@ -440,7 +440,7 @@ class ChatServiceTests {
         var ram = new Line("ram", "ram", "RAM", 2, null, null, 3_000_000L, 3_000_000L, null, "https://a/ram", "RAM Corsair 2x16GB DDR4", "A");
         var card = new ChatResponse.BuildCard(List.of(cpu, ram), true, List.of(), List.of(), null, 15_000_000L, null, "balanced", 1);
         String out = ChatService.adviceExplanation(ChatService.needs(List.of("máy học online 15 triệu")), card);
-        assertThat(out).contains("đồ họa tích hợp").doesNotContain("64GB").doesNotContain("BIOS");
+        assertThat(out).contains("integrated graphics").doesNotContain("64GB").doesNotContain("BIOS");
         assertThat(ChatService.safeReason("cpu", 1, "6 nhân, chơi game mượt hơn")).isNull();
         assertThat(ChatService.safeReason("motherboard", 1, "Có WiFi, bảo hành 36 tháng")).isNull();
         assertThat(ChatService.safeReason("ram", 1, "Đúng 16GB, chạy 2 kênh")).isNull();
@@ -466,7 +466,7 @@ class ChatServiceTests {
                 """), answer("Xong."), answer("Xong."));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "máy học SSD 1TB 2 triệu")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("2,5 triệu").contains("vượt mức tối đa 2 triệu");
+        assertThat(res.reply()).contains("2.5 million VND").contains("above the limit of 2 million VND");
     }
 
     @Test
@@ -484,7 +484,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "lắp nguồn ATX vào vỏ mini được không?")), "mini_sff"));
 
         assertThat(res.reply()).isEqualTo("Nguồn này không vừa vỏ.");
-        assertThat((String) messages(0).getFirst().get("content")).contains("đang xem máy \"Mini / SFF\"");
+        assertThat((String) messages(0).getFirst().get("content")).contains("viewing \"Mini / SFF\"");
         var req = ArgumentCaptor.forClass(BuildCheckRequest.class);
         verify(compatibility).check(req.capture());
         assertThat(req.getValue().items()).extracting(BuildCheckRequest.Item::code).containsExactly("case_mini_sff", "psu_atx");
@@ -498,7 +498,7 @@ class ChatServiceTests {
 
         // Thẻ cấu hình cho khung chat
         assertThat(res.build().compatible()).isFalse();
-        assertThat(res.build().items()).extracting(Line::name).containsExactly("Vỏ Mini / SFF", "Nguồn ATX");
+        assertThat(res.build().items()).extracting(Line::name).containsExactly("Mini / SFF case", "ATX power supply");
         assertThat(res.build().errors()).extracting(Issue::rule).containsExactly("case.psu");
     }
 
@@ -540,7 +540,7 @@ class ChatServiceTests {
         assertThat(ram.sourceUrl()).as("đã đổi sang link cửa hàng").isEqualTo("https://shop-a.vn/ram-16gb");
         assertThat(ram.imageUrl()).isEqualTo("https://img/ram.jpg");
         var vo = card.items().getFirst();
-        assertThat(vo.productName()).as("id không có trong kết quả tìm kiếm: app tự tìm").isEqualTo("Vỏ máy tính Xigmatek XA-22 Micro-ATX");
+        assertThat(vo.productName()).as("id không có trong kết quả tìm kiếm: app tự tìm").isEqualTo("Case Xigmatek XA-22 Micro-ATX");
         assertThat(vo.sourceUrl()).isEqualTo("https://shop-b.vn/vo");
         // Trợ lý chỉ thấy id, tên, cửa hàng, giá; không thấy link dài
         String toolResult = (String) messages(1).get(3).get("content");
@@ -912,7 +912,7 @@ class ChatServiceTests {
 
         // Sản phẩm thật lắp không được (dù danh mục đều DDR4): không gửi thẻ, câu trả lời nói rõ
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("Phương án Phù hợp: chưa tìm được cấu hình lắp chung được");
+        assertThat(res.reply()).contains("Option Best fit: no compatible build with purchase links was found");
         // Trợ lý được báo lỗi để chọn lại, và thấy thông số khi tìm
         String toolResults = sent.getLast().get("messages").toString();
         assertThat(toolResults).contains("product_errors").contains("chipset B760, DDR5");
@@ -983,7 +983,7 @@ class ChatServiceTests {
         assertThat(ssd.productName()).isEqualTo("SSD B 1TB M.2 NVMe");
         assertThat(ssd.inStock()).isTrue();
         var pcCase = items.stream().filter(i -> i.category().equals("case")).findFirst().orElseThrow();
-        assertThat(pcCase.productName()).isEqualTo("Vỏ Montech Air 100");
+        assertThat(pcCase.productName()).isEqualTo("Case Montech Air 100");
         assertThat(pcCase.sourceUrl()).isEqualTo("https://c.vn/vo");
     }
 
@@ -1019,7 +1019,7 @@ class ChatServiceTests {
 
         // Lần tìm thứ 3 (trợ lý vẫn gọi dù công cụ đã bị bỏ) không chạy
         org.mockito.Mockito.verify(search, org.mockito.Mockito.never()).search("Card");
-        assertThat(sent.get(3).get("messages").toString()).contains("Đã hết lượt tìm");
+        assertThat(sent.get(3).get("messages").toString()).contains("The search limit has been reached");
         // Vòng 3 (sau 2 vòng tìm) không còn công cụ search_products
         assertThat(sent.get(1).get("tools").toString()).contains("name=search_products");
         assertThat(sent.get(2).get("tools").toString()).doesNotContain("name=search_products");
@@ -1040,7 +1040,7 @@ class ChatServiceTests {
         assertThat(res.reply()).startsWith("Xong.");
         // Vòng 4: không cho gọi công cụ nữa; lời gọi thứ 4 bị từ chối
         assertThat(sent.get(3).get("tool_choice")).isEqualTo("none");
-        assertThat(sent.get(4).get("messages").toString()).contains("Đã chốt đủ phương án");
+        assertThat(sent.get(4).get("messages").toString()).contains("The options are finalised");
     }
 
     @Test
@@ -1116,7 +1116,7 @@ class ChatServiceTests {
         var items = service.reply(new ChatRequest(List.of(new Message("user", "tìm bo phù hợp cho CPU này")), null, null, "advice")).build().items();
 
         assertThat(items).filteredOn(i -> i.category().equals("motherboard")).extracting(Line::productName)
-                .containsExactly("Bo mạch chủ MSI PRO B760-P DDR4 ATX");
+                .containsExactly("Motherboard MSI PRO B760-P DDR4 ATX");
     }
 
     @Test
@@ -1148,7 +1148,7 @@ class ChatServiceTests {
         assertThat(balanced.compatible()).isTrue();
         assertThat(balanced.warnings()).anySatisfy(i -> assertThat(i.rule()).isEqualTo("cpu.igpu"));
         assertThat(res.options()).as("chỉ còn một phương án").isNull();
-        assertThat(res.reply()).contains("Phương án Rẻ: chưa tìm được cấu hình lắp chung được");
+        assertThat(res.reply()).contains("Option Budget: no compatible build with purchase links was found");
     }
 
     @Test
@@ -1204,7 +1204,7 @@ class ChatServiceTests {
 
         var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
 
-        assertThat(line.productName()).isEqualTo("Tản nhiệt khí Cooler Master Hyper 212");
+        assertThat(line.productName()).isEqualTo("Air cooler Cooler Master Hyper 212");
     }
 
     @Test
@@ -1288,7 +1288,7 @@ class ChatServiceTests {
 
         var tools = (List<Map<String, Object>>) sent.getFirst().get("tools");
         assertThat(tools).extracting(t -> ((Map<String, Object>) t.get("function")).get("name")).doesNotContain("search_products");
-        assertThat((String) messages(0).getFirst().get("content")).contains("tìm kiếm sản phẩm đang tắt");
+        assertThat((String) messages(0).getFirst().get("content")).contains("product search is disabled");
     }
 
     @Test
@@ -1297,7 +1297,7 @@ class ChatServiceTests {
 
         service.reply(new ChatRequest(List.of(new Message("user", "?")), null, null, "advice"));
 
-        assertThat((String) messages(1).get(3).get("content")).contains("Chưa bật tìm kiếm");
+        assertThat((String) messages(1).get(3).get("content")).contains("Product search is disabled");
     }
 
     @Test
@@ -1314,7 +1314,7 @@ class ChatServiceTests {
 
         service.reply(new ChatRequest(List.of(new Message("user", "?")), null));
 
-        assertThat((String) messages(1).get(3).get("content")).startsWith("Lỗi:");
+        assertThat((String) messages(1).get(3).get("content")).startsWith("Error:");
     }
 
     @Test
@@ -1324,7 +1324,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "?")), null));
 
         assertThat(res.reply()).isEqualTo("Ok.");
-        assertThat((String) messages(1).get(3).get("content")).startsWith("Lỗi:");
+        assertThat((String) messages(1).get(3).get("content")).startsWith("Error:");
     }
 
     @Test
@@ -1333,7 +1333,7 @@ class ChatServiceTests {
 
         service.reply(new ChatRequest(List.of(new Message("user", "CPU không nằm phẳng")), null, "Bước 3/10: Đặt CPU vào socket"));
 
-        assertThat((String) messages(0).getFirst().get("content")).contains("hiện ở: Bước 3/10: Đặt CPU vào socket");
+        assertThat((String) messages(0).getFirst().get("content")).contains("assembly guide context: Bước 3/10: Đặt CPU vào socket");
     }
 
     @Test
@@ -1435,17 +1435,17 @@ class ChatServiceTests {
 
         assertThat(res.options()).as("chỉ còn balanced").isNull();
         assertThat(res.build().tier()).isEqualTo("balanced");
-        assertThat(res.reply()).contains("Phương án Chất lượng: chưa tìm được").contains("43 triệu");
+        assertThat(res.reply()).contains("Option Upgraded: no compatible build").contains("43 million VND");
     }
 
     @Test
     void nganSachKiemTranLayTheoLoiNguoiDung() {
-        assertThat(ChatService.amounts(List.of("dựng video tầm 40 triệu, card khoảng 10 triệu"))).first().isEqualTo(40_000_000L);
-        assertThat(ChatService.amounts(List.of("có sẵn màn hình 3 triệu, ngân sách 20tr"))).first().isEqualTo(20_000_000L);
+        assertThat(ChatService.amounts(List.of("dựng video tầm 40 million VND, card khoảng 10 million VND"))).first().isEqualTo(40_000_000L);
+        assertThat(ChatService.amounts(List.of("có sẵn màn hình 3 million VND, ngân sách 20tr"))).first().isEqualTo(20_000_000L);
         assertThat(ChatService.amounts(List.of("budget 25.000.000"))).containsExactly(25_000_000L);
         assertThat(ChatService.amounts(List.of("học online"))).isEmpty();
-        assertThat(ChatService.amounts(List.of("Máy game 1 triệu, RTX 4090 24GB"))).containsExactly(1_000_000L);
-        assertThat(ChatService.amounts(List.of("ngân sách 0,5 triệu"))).containsExactly(500_000L);
+        assertThat(ChatService.amounts(List.of("Máy game 1 million VND, RTX 4090 24GB"))).containsExactly(1_000_000L);
+        assertThat(ChatService.amounts(List.of("ngân sách 0.5 million VND"))).containsExactly(500_000L);
         // Trợ lý ghi đúng khoản người dùng nói: dùng; ghi khác hay quên: lấy lời người dùng; người dùng chưa nói: số trợ lý
         assertThat(ChatService.budgetOf(List.of(40_000_000L), 40_000_000L)).isEqualTo(40_000_000L);
         assertThat(ChatService.budgetOf(List.of(40_000_000L), 50_000_000L)).isEqualTo(40_000_000L);
@@ -1470,11 +1470,11 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game, có 12 triệu")), null, null, "advice"));
 
-        assertThat(res.build()).as("15 triệu > trần 12 triệu: không hiện").isNull();
+        assertThat(res.build()).as("15 million VND > trần 12 million VND: không hiện").isNull();
         assertThat((String) messages(2).get(5).get("content")).contains("over_budget");
         // Đủ link, lắp được mà vượt trần, không có phương án nào khác hiện: nói thật là thiếu tiền và cần khoảng bao nhiêu
-        assertThat(res.reply()).contains("Phương án Phù hợp: với giá hiện tại, cấu hình đã thử cho phương án này").contains("vượt mức tối đa 12 triệu")
-                .contains("Ngân sách hiện tại chưa đủ").contains("nới lên khoảng 15 triệu");
+        assertThat(res.reply()).contains("Option Best fit: at current prices, the attempted compatible build").contains("above the limit of 12 million VND")
+                .contains("Your current budget is insufficient").contains("raising it to around 15 million VND");
     }
 
     @Test
@@ -1548,12 +1548,12 @@ class ChatServiceTests {
         var line = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice")).build().items().getFirst();
 
         assertThat(line.code()).isEqualTo("mb_matx");
-        assertThat(line.productName()).isEqualTo("Bo mạch chủ ASUS PRIME B550M-A");
+        assertThat(line.productName()).isEqualTo("Motherboard ASUS PRIME B550M-A");
     }
 
     @Test
     void ramChiNoiDungLuongThiMotHayHaiThanhDeuDuocKemGhiChu() {
-        assertThat(ChatService.ramLayout(List.of("máy chơi game 16GB RAM, 25 triệu"))).isNull();
+        assertThat(ChatService.ramLayout(List.of("a gaming PC 16GB RAM, 25 million VND"))).isNull();
         assertThat(ChatService.ramLayout(List.of("RAM 2x8GB nhé"))).isEqualTo("2x8GB");
         assertThat(ChatService.ramLayout(List.of("mình muốn 1 thanh 16GB"))).isEqualTo("1x16GB");
         assertThat(ChatService.ramLayout(List.of("16GB (2 thanh)"))).isEqualTo("2x8GB");
@@ -1575,7 +1575,7 @@ class ChatServiceTests {
         assertThat(ram.quantity()).as("1 thanh 16GB: cùng dung lượng").isEqualTo(1);
         assertThat(ram.spec()).startsWith("1x16GB");
         assertThat(card.warnings()).noneSatisfy(i -> assertThat(i.rule()).isEqualTo("RAM_LAYOUT"));
-        assertThat(card.recommendations()).anySatisfy(i -> assertThat(i.message()).contains("1 thanh RAM"));
+        assertThat(card.recommendations()).anySatisfy(i -> assertThat(i.message()).contains("one RAM module"));
     }
 
     @Test
@@ -1624,12 +1624,12 @@ class ChatServiceTests {
 
     @Test
     void mucToiThieuTheoNhuCau() {
-        assertThat(ChatService.needs(List.of("Mình là sinh viên, có khoảng 12 triệu, cần máy nhỏ gọn để học online và làm Word, Excel.")))
+        assertThat(ChatService.needs(List.of("Mình là sinh viên, có khoảng 12 million VND, cần máy nhỏ gọn để học online và làm Word, Excel.")))
                 .isEqualTo(new ChatService.Needs(8, 256, null, true, false));
-        assertThat(ChatService.needs(List.of("Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu")))
+        assertThat(ChatService.needs(List.of("Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 million VND")))
                 .isEqualTo(new ChatService.Needs(16, 512, 8));
         assertThat(ChatService.needs(List.of("học online, cần RAM 16GB và SSD 1TB"))).isEqualTo(new ChatService.Needs(16, 1000, null, true, false));
-        assertThat(ChatService.needs(List.of("chơi game 25 triệu, thích máy có kính")).glass()).isTrue();
+        assertThat(ChatService.needs(List.of("chơi game 25 million VND, thích máy có kính")).glass()).isTrue();
         assertThat(ChatService.needs(List.of("xin chào"))).isNull();
     }
 
@@ -1745,7 +1745,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "game")), null, null, "advice"));
 
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("Phương án Phù hợp: chưa tìm được");
+        assertThat(res.reply()).contains("Option Best fit: no compatible build");
     }
 
     // ---- Hồi quy vòng đo v9 (review Sol 6.1, 21/10/2026) ---------------
@@ -1809,7 +1809,7 @@ class ChatServiceTests {
         var ssd = service.reply(new ChatRequest(List.of(new Message("user", "chơi game, có 3 triệu")), null, null, "advice"))
                 .build().items().getFirst();
 
-        assertThat(ssd.productName()).isEqualTo("Ổ Cứng SSD WD Green SN3000 500GB M.2 NVMe");
+        assertThat(ssd.productName()).isEqualTo("Drive SSD WD Green SN3000 500GB M.2 NVMe");
     }
 
     @Test
@@ -1859,7 +1859,7 @@ class ChatServiceTests {
         var cpu = service.reply(new ChatRequest(List.of(new Message("user", "học online, Word, Excel, có 3 triệu")), null, null, "advice"))
                 .build().items().getFirst();
 
-        assertThat(cpu.productName()).as("bản có đồ họa tích hợp (máy không card rời), không lấy bản F").isEqualTo("CPU Intel Core i3-12100 Box");
+        assertThat(cpu.productName()).as("bản có integrated graphics (máy không dedicated GPU), không lấy bản F").isEqualTo("CPU Intel Core i3-12100 Box");
     }
 
     @Test
@@ -1893,18 +1893,18 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 2 triệu")), null, null, "advice"));
 
         // Lần trả lời đầu bị chặn: trợ lý được nhắc chọn lại tier Chất lượng (tốt hơn Phù hợp)
-        assertThat(sent.get(3).get("messages").toString()).contains("Chất lượng").contains("không tốt hơn Phù hợp");
+        assertThat(sent.get(3).get("messages").toString()).contains("Chất lượng").contains("does not improve on Best fit");
         // Trợ lý không sửa: bản trùng không hiện, chỉ còn Phù hợp, câu trả lời nói rõ
         assertThat(res.options()).isNull();
         assertThat(res.build().tier()).isEqualTo("balanced");
-        assertThat(res.reply()).contains("Phương án Chất lượng trùng cấu hình với Phù hợp");
+        assertThat(res.reply()).contains("Option Upgraded duplicates Best fit");
     }
 
     @Test
     void nguoiDungMuonMiniItxThiGiuVoMini() {
-        assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 20 triệu."))
+        assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 20 million VND."))
                 .miniItx()).isTrue();
-        assertThat(ChatService.needs(List.of("máy nhỏ gọn để học, 12 triệu")).miniItx()).as("nhỏ gọn là Micro-ATX, không phải mini").isFalse();
+        assertThat(ChatService.needs(List.of("máy nhỏ gọn để học, 12 million VND")).miniItx()).as("nhỏ gọn là Micro-ATX, không phải mini").isFalse();
         // Trợ lý chọn vỏ nhỏ gọn cho câu "mini ITX": app đổi về vỏ Mini, bỏ vỏ mATX để tìm vỏ ITX
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("case_compact_tower")).thenReturn(part("case_compact_tower", "case", "Vỏ nhỏ gọn"));
@@ -1922,7 +1922,7 @@ class ChatServiceTests {
         var card = service.reply(new ChatRequest(List.of(new Message("user", "máy mini ITX chơi game nhẹ 20 triệu")), null, null, "advice")).build();
 
         assertThat(card.items().getFirst().code()).isEqualTo("case_mini_sff");
-        assertThat(card.items().getFirst().productName()).isEqualTo("Vỏ máy tính Jonsbo A4 Mini-ITX");
+        assertThat(card.items().getFirst().productName()).isEqualTo("Case Jonsbo A4 Mini-ITX");
     }
 
     @Test
@@ -1950,7 +1950,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 2 triệu")), null, null, "advice"));
 
         assertThat(res.options()).isNull();
-        assertThat(res.reply()).contains("Phương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp");
+        assertThat(res.reply()).contains("Option Upgraded does not offer a clear upgrade over Best fit");
     }
 
     @Test
@@ -1962,20 +1962,20 @@ class ChatServiceTests {
                 "SSD Samsung 990 EVO 1TB M.2 NVMe", "B", true, null, null, List.of(), true);
         var b = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1, List.of(), List.of(), null);
         var q = new ChatResponse.BuildCard(List.of(line2), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1, List.of(), List.of(), null);
-        String ai = "Mình hiểu bạn cần máy học, ngân sách 2 triệu.\n\n- **Phù hợp cho bạn - 25,0 triệu:** vỏ kính, Ryzen 5 5600\n- **Chất lượng - 40 triệu**\n\nNhớ xả tĩnh điện trước khi lắp."
+        String ai = "I understand you need a study PC, with a budget of 2 million VND.\n\n- **Phù hợp cho bạn - 25,0 triệu:** vỏ kính, Ryzen 5 5600\n- **Chất lượng - 40 triệu**\n\nNhớ xả tĩnh điện trước khi lắp."
                 + "\n\nNâng những món còn lại:\n- RAM bảo hành 36 tháng dù thẻ chưa có dữ liệu.\n- Vỏ tốt hơn bản Phù hợp."
                 + "\nPhương án \"Phù hợp\" dùng bo 4 khe dù chưa kiểm tra."
                 + "\n\nPhương án Rẻ: chưa tìm được cấu hình lắp chung được, có link mua trong mức tối đa 1,8 triệu, nên app không hiển thị.";
 
-        String out = ChatService.withTierRows(ai, List.of(b, q), List.of("Phương án Rẻ: chưa tìm được cấu hình lắp chung được, nên app không hiển thị."));
+        String out = ChatService.withTierRows(ai, List.of(b, q), List.of("Option Budget: no compatible build with purchase links was found, so it is not shown."));
 
-        assertThat(out).startsWith("Mình hiểu bạn cần máy học, ngân sách 2 triệu.").contains("Nhớ xả tĩnh điện")
-                .doesNotContain("25,0 triệu").doesNotContain("Ryzen 5 5600")
+        assertThat(out).startsWith("I understand you need a study PC, with a budget of 2 million VND.").contains("Nhớ xả tĩnh điện")
+                .doesNotContain("25.0 million VND").doesNotContain("Ryzen 5 5600")
                 .doesNotContain("dùng bo 4 khe dù chưa kiểm tra")
                 .doesNotContain("RAM bảo hành 36 tháng dù thẻ chưa có dữ liệu")
-                .contains("**Phù hợp: 1,50 triệu** - gợi ý chính")
-                .contains("**Chất lượng: 2,39 triệu** - tham khảo, vượt ngân sách 0,39 triệu")
-                .contains("Phương án Rẻ: chưa tìm được");
+                .contains("**Best fit: 1.50 million VND** - recommended")
+                .contains("**Upgraded: 2.39 million VND** - reference option, over budget by 0.39 million VND")
+                .contains("Option Budget: no compatible build");
     }
 
     @Test
@@ -1994,9 +1994,9 @@ class ChatServiceTests {
 
         String out = ChatService.withTierRows("Mình hiểu bạn chơi game Full HD.\nBạn muốn mình thử ngân sách cao hơn?", List.of(cheap, base));
 
-        assertThat(out).contains("**Phù hợp: 11,50 triệu** - gợi ý chính")
+        assertThat(out).contains("**Best fit: 11.50 million VND** - recommended")
                 .doesNotContain("NVIDIA RTX", "Intel Core", "khác Phù hợp")
-                .contains("giá tham khảo chưa xác minh trên trang bán")
+                .contains("reference prices have not been verified on product pages")
                 .doesNotContain("Lưu ý: 6GB VRAM")
                 .doesNotContain("Bạn muốn mình thử ngân sách cao hơn?");
         assertThat(base.recommendations()).anySatisfy(i -> assertThat(i.message()).contains("6GB VRAM"));
@@ -2022,7 +2022,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 20 triệu")), null, null, "advice"));
 
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("chưa chốt được cấu hình").contains("Phương án Phù hợp:")
+        assertThat(res.reply()).contains("could not finalise an eligible build").contains("Option Best fit:")
                 .doesNotContain("Cả ba phương án").doesNotContain("hãy chọn phương án Rẻ");
     }
 
@@ -2049,7 +2049,7 @@ class ChatServiceTests {
         assertThat(res.build()).isNotNull();
         assertThat(res.build().tier()).isEqualTo("balanced");
         assertThat(res.build().items().getFirst().priceMaxVnd()).isEqualTo(19_000_000L);
-        assertThat(res.reply()).contains("Phương án Rẻ:").contains("App chưa tìm được");
+        assertThat(res.reply()).contains("Option Budget:").contains("No suitable Budget build was found");
     }
 
     @Test
@@ -2064,14 +2064,14 @@ class ChatServiceTests {
         assertThat(ChatService.cpuUpgrade("Intel Core i3 12100 Box", "Intel Core i5 12400")).isFalse();
         assertThat(ChatService.needs(List.of("chỉ học online, không chơi game")).office()).isTrue();
         assertThat(ChatService.needs(List.of("chỉ học online, không chơi game")).vramMin()).isNull();
-        assertThat(ChatService.needs(List.of("không chơi game nữa, chỉ học online", "chơi game 20 triệu")).office()).isTrue();
+        assertThat(ChatService.needs(List.of("không chơi game nữa, chỉ học online", "chơi game 20 million VND")).office()).isTrue();
         assertThat(ChatService.requestedGpu(List.of("cần RTX 4060 Ti 16GB"))).isEqualTo("rtx4060ti");
         assertThat(ChatService.requestedGpu(List.of("đổi card sang AMD", "cần RTX 4060"))).isNull();
         assertThat(ChatService.requestedGpu(List.of("so RTX 4060 với RTX 4070"))).isNull();
         assertThat(ChatService.entryCpu("CPU AMD Athlon 3000G")).isTrue();
         assertThat(ChatService.entryCpu("CPU Intel Core i3 12100F")).isFalse();
         assertThat(ChatService.adviceIntro(ChatService.needs(List.of("học online không chơi game")), 20_550_000L))
-                .isEqualTo("Bạn cần máy học tập / văn phòng, ngân sách 20,55 triệu.");
+                .isEqualTo("You need a PC for study and office work, with a budget of 20.55 million VND.");
         var changed = List.of("chỉ học online, không cần card rời", "chơi game RTX 4060 8GB 30 triệu");
         assertThat(ChatService.noDiscreteGpu(changed)).isTrue();
         assertThat(ChatService.noDiscreteGpu(List.of("KHÔNG CẦN CARD ĐỒ HOẠ RỜI"))).isTrue();
@@ -2098,7 +2098,7 @@ class ChatServiceTests {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 15 triệu card NVIDIA tối thiểu 12GB")), null, null, "advice"));
         assertThat(res.build()).isNotNull();
         assertThat(res.build().items().getFirst().productName()).contains("RTX 3060 12GB");
-        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("hiệu năng GPU thấp hơn"));
+        assertThat(res.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("GPU performance is lower"));
     }
 
     @Test
@@ -2134,7 +2134,7 @@ class ChatServiceTests {
                 """), answer("Cả ba đều đủ VRAM."));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học AI 35 triệu")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("card chưa đủ 12GB VRAM").doesNotContain("đều đủ VRAM");
+        assertThat(res.reply()).contains("GPU has less than 12GB VRAM").doesNotContain("đều đủ VRAM");
     }
 
     @Test
@@ -2149,7 +2149,7 @@ class ChatServiceTests {
                 """), answer("Đủ RAM rồi."));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "máy học RAM 32GB 30 triệu")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("RAM chưa đủ 32GB").doesNotContain("Đủ RAM rồi");
+        assertThat(res.reply()).contains("RAM is below 32GB").doesNotContain("Đủ RAM rồi");
     }
 
     @Test
@@ -2157,27 +2157,27 @@ class ChatServiceTests {
         var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 2_500_000L, 2_500_000L, null, "https://a.vn/ssd", "SSD A 1TB M.2 NVMe", "A");
         var card = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "quality", 1);
         assertThat(ChatService.withTierRows("Mình hiểu bạn cần máy học.", List.of(card)))
-                .contains("tham khảo, vượt ngân sách 0,5 triệu").doesNotContain("gợi ý chính");
+                .contains("reference option, over budget by 0.5 million VND").doesNotContain("recommended");
     }
 
     @Test
     void khongGiuSoTienTietKiemChoThayDoiChuaKiemTra() {
         var line = new Line("ssd", "ssd", "SSD", 1, "1TB", null, 1_000_000L, 1_000_000L, null, "https://a.vn/ssd", "SSD A 1TB M.2 NVMe", "A");
         var card = new ChatResponse.BuildCard(List.of(line), true, List.of(), List.of(), null, 2_000_000L, null, "balanced", 1);
-        String out = ChatService.withTierRows("Mình hiểu bạn cần máy học, ngân sách 2 triệu.\n\n"
+        String out = ChatService.withTierRows("I understand you need a study PC, with a budget of 2 million VND.\n\n"
                 + "Bỏ bộ quạt thêm sẽ bớt khoảng 690.000đ vì vỏ có quạt sẵn dù chưa kiểm tra.", List.of(card));
-        assertThat(out).startsWith("Mình hiểu bạn cần máy học, ngân sách 2 triệu.")
+        assertThat(out).startsWith("I understand you need a study PC, with a budget of 2 million VND.")
                 .doesNotContain("690.000đ").doesNotContain("vỏ có quạt sẵn");
     }
 
     @Test
     void hoiLyDoPhuongAnBiAnThiDungSoDaTinhKhongGoiAi() {
-        String note = "Phương án Rẻ: cấu hình đã thử 18,2 triệu vượt mức 18 triệu. App không hiển thị phương án này.";
+        String note = "Option Budget: the attempted build costs 18.2 million VND, above the 18 million VND limit. The app does not display this option.";
         var res = service.reply(new ChatRequest(List.of(
                 new Message("user", "chơi game 20 triệu"),
                 new Message("assistant", "Các thẻ ở dưới.\n\n" + note),
                 new Message("user", "Vì sao không có phương án Rẻ?")), null, null, "advice"));
-        assertThat(res.reply()).contains(note).doesNotContain("21 triệu");
+        assertThat(res.reply()).contains(note).doesNotContain("21 million VND");
         assertThat(res.build()).isNull();
         org.mockito.Mockito.verifyNoInteractions(client);
     }
@@ -2186,7 +2186,7 @@ class ChatServiceTests {
     void aiChotAmdThiKhongAmThamDoiSangNvidia() {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học AI 35 triệu phải dùng card AMD")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("Bạn đã chốt card AMD").contains("chưa kiểm chứng");
+        assertThat(res.reply()).contains("You requested an AMD GPU").contains("have not been verified");
         org.mockito.Mockito.verifyNoInteractions(client);
     }
 
@@ -2194,14 +2194,14 @@ class ChatServiceTests {
     void chuaNoiMucDichThiHoiLaiKhongTuGanGameVaHoc() {
         var res = service.reply(new ChatRequest(List.of(new Message("user", "Mình có ngân sách 15 triệu để mua máy tính.")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("dùng máy chủ yếu làm gì");
+        assertThat(res.reply()).contains("What is your main use");
         org.mockito.Mockito.verifyNoInteractions(client);
     }
 
     @Test
     void dungLuongRamSatSsdKhongBiDocThanhDungLuongDia() {
-        assertThat(ChatService.needs(List.of("Văn phòng21 triệu, RAM32GB SSD1TB, không card rời.")).ssdMin()).isEqualTo(1000);
-        assertThat(ChatService.needs(List.of("Văn phòng21 triệu, 1TB SSD và RAM32GB.")).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.needs(List.of("Văn phòng21 million VND, RAM32GB SSD1TB, không dedicated GPU.")).ssdMin()).isEqualTo(1000);
+        assertThat(ChatService.needs(List.of("Văn phòng21 million VND, 1TB SSD và RAM32GB.")).ssdMin()).isEqualTo(1000);
         assertThat(ChatService.needs(List.of("RAM32GB SSD512GB", "SSD1TB RAM16GB")).ssdMin()).isEqualTo(512);
     }
 
@@ -2239,7 +2239,7 @@ class ChatServiceTests {
         assertThat(res.build().tier()).isEqualTo("balanced");
         assertThat(res.options()).noneMatch(option -> "quality".equals(option.tier()));
         assertThat(res.build().items()).filteredOn(item -> "gpu".equals(item.category())).allSatisfy(item -> assertThat(item.productName()).contains("RTX 4060"));
-        assertThat(res.reply()).contains("Phương án Chất lượng chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp");
+        assertThat(res.reply()).contains("Option Upgraded does not offer a clear upgrade over Best fit");
     }
 
     @Test
@@ -2266,16 +2266,16 @@ class ChatServiceTests {
         var balanced = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, large), true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
         assertThat(ChatService.recommendedCard(List.of(cheap, balanced))).isSameAs(cheap);
         assertThat(ChatService.withTierRows("Đã chọn cấu hình.", List.of(cheap, balanced)))
-                .contains("Mình ưu tiên bản Rẻ").contains("**Rẻ: 12,00 triệu** - gợi ý chính");
+                .contains("I recommend Budget").contains("**Budget: 12.00 million VND** - recommended");
         var faster = new ChatResponse.BuildCard(List.of(cpu, core.apply("gpu", "RTX 5060 Ti 8GB"), ram, large),
                 true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
         assertThat(ChatService.recommendedCard(List.of(cheap, faster))).isSameAs(faster);
         assertThat(ChatService.recommendedCard(List.of(cheap, faster), true)).isSameAs(cheap);
         assertThat(ChatService.withTierRows("Đã chọn cấu hình.", List.of(cheap, faster), List.of(), true))
-                .contains("bạn muốn tiết kiệm nhất").doesNotContain("cùng model CPU, chip GPU");
+                .contains("you prioritised savings").doesNotContain("keeps the CPU model, GPU chip");
         assertThat(ChatService.prefersCheapest(List.of("cần máy rẻ nhất có thể"))).isTrue();
         assertThat(ChatService.prefersCheapest(List.of("không cần rẻ nhất nữa", "cần máy rẻ nhất"))).isFalse();
-        assertThat(ChatService.prefersCheapest(List.of("Không cần card rời nữa, chỉ học online và Word. Giữ 30 triệu là mức tối đa, muốn rẻ nhất."))).isTrue();
+        assertThat(ChatService.prefersCheapest(List.of("Không cần dedicated GPU nữa, chỉ học online và Word. Giữ 30 million VND là mức tối đa, muốn rẻ nhất."))).isTrue();
     }
 
     @Test
@@ -2287,7 +2287,7 @@ class ChatServiceTests {
         var balanced = new ChatResponse.BuildCard(List.of(base), true, List.of(), List.of(), null, 30_000_000L, null, "balanced", 1);
         var quality = new ChatResponse.BuildCard(List.of(kit), true, List.of(), List.of(), null, 30_000_000L, null, "quality", 1);
         assertThat(ChatService.withTierRows("Đã chọn.", List.of(balanced, quality)))
-                .contains("**Phù hợp: 5,98 triệu**", "**Chất lượng: 9,40 triệu**").doesNotContain("DDR4 x4", "RAM Lexar");
+                .contains("**Best fit: 5.98 million VND**", "**Upgraded: 9.40 million VND**").doesNotContain("DDR4 x4", "RAM Lexar");
     }
 
     @Test
@@ -2305,8 +2305,8 @@ class ChatServiceTests {
         assertThat(ChatService.recommendedCard(List.of(cheap, balanced), false, false)).isSameAs(balanced);
         assertThat(ChatService.recommendedCard(List.of(cheap, balanced), false, true)).isSameAs(cheap);
         assertThat(ChatService.withTierRows("Máy học AI.", List.of(cheap, balanced), List.of(), false, true))
-                .contains("AI trên GPU", "không giảm tổng RAM/SSD", "CPU, nền RAM và bảo hành", "**Rẻ: 12,00 triệu** - gợi ý chính")
-                .doesNotContain("vì bạn muốn tiết kiệm nhất", "cùng model CPU");
+                .contains("GPU-based AI work", "without reducing total RAM or SSD capacity", "CPU, memory platform and warranty", "**Budget: 12.00 million VND** - recommended")
+                .doesNotContain("because you prioritised savings", "cùng model CPU");
         var small = new ChatResponse.BuildCard(List.of(cpu, gpu, ram, line.apply("ssd", "SSD512GB")), true, List.of(), List.of(), null, 48_000_000L, null, "cheap", 1);
         assertThat(ChatService.recommendedCard(List.of(small, balanced), false, true)).isSameAs(balanced);
         var faster = new ChatResponse.BuildCard(List.of(costlyCpu, line.apply("gpu", "RTX4070 SUPER12GB"), ram, ssd), true,
@@ -2338,7 +2338,7 @@ class ChatServiceTests {
                 """), answer("Đây là cấu hình game chất lượng."));
         var res = service.reply(new ChatRequest(List.of(new Message("user", "chơi game 20 triệu card AMD")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("CPU phổ thông quá thấp").doesNotContain("Đây là cấu hình game chất lượng");
+        assertThat(res.reply()).contains("entry-level CPU is below the requirement").doesNotContain("Đây là cấu hình game chất lượng");
     }
 
     @Test
@@ -2360,7 +2360,7 @@ class ChatServiceTests {
                 new Message("assistant", "Mình đã chọn RTX 4060."),
                 new Message("user", "chỉ học online, không cần card rời")), null, null, "advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("người dùng yêu cầu không dùng card rời").doesNotContain("Vẫn giữ card RTX");
+        assertThat(res.reply()).contains("the user requested no dedicated GPU").doesNotContain("Vẫn giữ card RTX");
     }
 
     // ---- Dựng phản hồi giả theo chuẩn OpenAI chat/completions ---------------
@@ -2663,7 +2663,7 @@ class ChatServiceTests {
         assertThat(n.vramMin()).isEqualTo(12);
         assertThat(n.ramMin()).isEqualTo(16);
         assertThat(n.ssdMin()).isEqualTo(512);
-        assertThat(ChatService.needs(List.of("máy học online, ai trong nhà cũng dùng được, 12 triệu")).cuda())
+        assertThat(ChatService.needs(List.of("máy học online, ai trong nhà cũng dùng được, 12 million VND")).cuda())
                 .as("\"ai\" viết thường là đại từ").isFalse();
         assertThat(ChatService.cudaOk(Map.of("gpu_280", Map.of("gpu_vendor", "nvidia")), "gpu_280",
                 new ProductSearch.Product("Card ASUS Dual Radeon RX 7700 XT 12GB", "s", 12_000_000L, "https://a/b", null))).isFalse();
@@ -2684,26 +2684,26 @@ class ChatServiceTests {
         assertThat(ChatService.gpuVendor(List.of("mình muốn thích VGA từ bên hãng NVIDA mình chưa ưa chuộng VGA nhà AMD cho làm bạn giúp mình chọn lại theo NVIDA VGA được ko")))
                 .isEqualTo("nvidia");
         assertThat(ChatService.gpuVendor(List.of("Không dùng NVIDIA, chọn card AMD"))).isEqualTo("amd");
-        assertThat(ChatService.gpuVendor(List.of("Đổi sang card AMD giúp mình", "Mình chơi game 25 triệu, CPU Intel"))).isEqualTo("amd");
+        assertThat(ChatService.gpuVendor(List.of("Đổi sang card AMD giúp mình", "Mình chơi game 25 million VND, CPU Intel"))).isEqualTo("amd");
         assertThat(ChatService.gpuVendor(List.of("Thôi hãng nào cũng được", "Đổi sang card AMD"))).isNull();
-        assertThat(ChatService.gpuVendor(List.of("Mình muốn dùng CPU AMD Ryzen, chơi game 25 triệu"))).as("CPU AMD không phải card AMD").isNull();
+        assertThat(ChatService.gpuVendor(List.of("Mình muốn dùng CPU AMD Ryzen, chơi game 25 million VND"))).as("CPU AMD không phải card AMD").isNull();
         assertThat(ChatService.gpuVendor(List.of("cần RTX 4060 cho game"))).isEqualTo("nvidia");
-        assertThat(ChatService.gpuVendor(List.of("cần máy chơi game 20 triệu có card NVIDA"))).as("viết sai NVIDIA").isEqualTo("nvidia");
+        assertThat(ChatService.gpuVendor(List.of("cần a gaming PC 20 million VND có card NVIDA"))).as("viết sai NVIDIA").isEqualTo("nvidia");
         assertThat(ChatService.gpuVendor(List.of("muốn card nvdia"))).isEqualTo("nvidia");
-        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).allowedVendor()).isEqualTo("nvidia");
-        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).vramMin()).isEqualTo(8);
-        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDIA 8GB")).explicitGpuVram()).isTrue();
-        assertThat(ChatService.needs(List.of("cần máy chơi game 20 triệu có card NVIDA")).explicitGpuVram()).isFalse();
+        assertThat(ChatService.needs(List.of("cần a gaming PC 20 million VND có card NVIDA")).allowedVendor()).isEqualTo("nvidia");
+        assertThat(ChatService.needs(List.of("cần a gaming PC 20 million VND có card NVIDA")).vramMin()).isEqualTo(8);
+        assertThat(ChatService.needs(List.of("cần a gaming PC 20 million VND có card NVIDIA 8GB")).explicitGpuVram()).isTrue();
+        assertThat(ChatService.needs(List.of("cần a gaming PC 20 million VND có card NVIDA")).explicitGpuVram()).isFalse();
         assertThat(ChatService.needs(List.of("cần card NVIDA và RAM 8GB để chơi game")).explicitGpuVram()).isFalse();
         assertThat(ChatService.gpuVendor(List.of("RTX 4060 hay RX 7600 tốt hơn?"))).as("so sánh hai hãng").isNull();
         var n = ChatService.needs(List.of("Đổi sang card AMD giúp mình", "Mình chơi game và livestream, 25 triệu, thích kính"));
         assertThat(n.allowedVendor()).isEqualTo("amd");
-        assertThat(ChatService.needs(List.of("chơi game 25 triệu")).allowedVendor()).as("không nói hãng thì đổi khác hãng được").isNull();
+        assertThat(ChatService.needs(List.of("chơi game 25 million VND")).allowedVendor()).as("không nói hãng thì đổi khác hãng được").isNull();
         assertThat(ChatService.needs(List.of("Đổi card đồ họa sang AMD giúp mình nhé, vẫn trong ngân sách đó.",
-                "Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 triệu, thích máy có kính.")).vramMin())
+                "Mình chơi game online và thỉnh thoảng livestream, có khoảng 25 million VND, thích máy có kính.")).vramMin())
                 .as("card đồ họa là linh kiện, không phải làm đồ họa").isEqualTo(8);
-        assertThat(ChatService.needs(List.of("mình học thiết kế đồ họa, 30 triệu")).vramMin()).isEqualTo(6);
-        assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 25 triệu.")).vramMin())
+        assertThat(ChatService.needs(List.of("mình học design and content creation, 30 million VND")).vramMin()).isEqualTo(6);
+        assertThat(ChatService.needs(List.of("Mình muốn máy thật nhỏ gọn kiểu mini ITX để đặt cạnh TV, chơi game nhẹ, khoảng 25 million VND.")).vramMin())
                 .as("game nhẹ: card 6GB đủ").isEqualTo(6);
     }
 
@@ -2728,9 +2728,9 @@ class ChatServiceTests {
         var out=service.reply(new ChatRequest(List.of(new Message("user","PC Photoshop thiết kế2D, 30 triệu, RAM32GB SSD1TB dùng RTX")),null,null,"advice"));
         assertThat(out.reply()).isNotEqualTo(question);
         assertThat(sent).hasSize(2);
-        assertThat(ChatService.knownWorkloadTopics(List.of("PC Photoshop thiết kế2D30 triệu"))).isEqualTo(1);
-        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game25 triệu"))).isZero();
-        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi Valorant25 triệu"))).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC Photoshop thiết kế2D30 million VND"))).isEqualTo(1);
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game25 million VND"))).isZero();
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi Valorant25 million VND"))).isEqualTo(2);
     }
 
     @Test
@@ -2763,7 +2763,7 @@ class ChatServiceTests {
 
     @Test
     void thietKeChotCpuThiKhongTuBoIgpuDeEpNganSach() {
-        assertThat(creatorIgpuBudgetResponse("Máy Blender render3D12 triệu, phải dùng CPU Intel Core i5-12400, dùng RTX").build()).isNull();
+        assertThat(creatorIgpuBudgetResponse("Máy Blender render3D12 million VND, phải dùng CPU Intel Core i5-12400, dùng RTX").build()).isNull();
     }
 
     @Test
@@ -2825,9 +2825,9 @@ class ChatServiceTests {
     void gameDoHoaCaoVanLaGameVaGiuSanVram() {
         var needs = ChatService.needs(List.of("Chơi game đồ họa cao ở Full HD, 33 triệu, RAM 32GB."));
         assertThat(needs.vramMin()).isEqualTo(8);
-        assertThat(ChatService.adviceIntro(needs, 33_000_000L)).contains("máy chơi game");
-        assertThat(ChatService.needs(List.of("Game Valorant và dựng video, 30 triệu")).vramMin()).isEqualTo(6);
-        assertThat(ChatService.needs(List.of("làm đồ họa Photoshop 30 triệu")).vramMin()).isEqualTo(6);
+        assertThat(ChatService.adviceIntro(needs, 33_000_000L)).contains("a gaming PC");
+        assertThat(ChatService.needs(List.of("Game Valorant và dựng video, 30 million VND")).vramMin()).isEqualTo(6);
+        assertThat(ChatService.needs(List.of("làm đồ họa Photoshop 30 million VND")).vramMin()).isEqualTo(6);
     }
 
     @Test
@@ -2837,14 +2837,14 @@ class ChatServiceTests {
             assertThat(n.creator()).as(text).isTrue();
             assertThat(n.office()).isFalse();
             assertThat(n.vramMin()).isEqualTo(6);
-            assertThat(ChatService.adviceIntro(n,20_000_000L)).contains("thiết kế đồ họa").doesNotContain("máy chơi game");
+            assertThat(ChatService.adviceIntro(n,20_000_000L)).contains("design and content creation").doesNotContain("a gaming PC");
         }
         for (String text : List.of("Dựng3D Blender Cycles30 triệu", "Render3D30 triệu", "Dựng video4K Premiere30 triệu", "After Effects30 triệu"))
             assertThat(ChatService.needs(List.of(text)).vramMin()).as(text).isEqualTo(8);
-        assertThat(ChatService.needs(List.of("Chơi game đồ hoạ cao30 triệu")).creator()).isFalse();
-        assertThat(ChatService.needs(List.of("Đổi card đồ hoạ sang AMD", "Chơi game30 triệu")).creator()).isFalse();
-        assertThat(ChatService.adviceIntro(ChatService.needs(List.of("Chơi Valorant và dựng video30 triệu")),30_000_000L))
-                .contains("chơi game và thiết kế");
+        assertThat(ChatService.needs(List.of("Chơi game đồ hoạ cao30 million VND")).creator()).isFalse();
+        assertThat(ChatService.needs(List.of("Đổi card đồ hoạ sang AMD", "Chơi game30 million VND")).creator()).isFalse();
+        assertThat(ChatService.adviceIntro(ChatService.needs(List.of("Chơi Valorant và dựng video30 million VND")),30_000_000L))
+                .contains("gaming and creative work");
     }
 
     @Test
@@ -2855,20 +2855,20 @@ class ChatServiceTests {
         var integrated=ChatService.needs(List.of("Photoshop2D nhẹ20 triệu, không cần card rời"));
         assertThat(integrated.creator()).isTrue();
         assertThat(integrated.vramMin()).isNull();
-        assertThat(ChatService.needs(List.of("Chỉ học online Word, không cần card rời", "Blender render3D30 triệu")).creator()).isFalse();
-        assertThat(ChatService.needs(List.of("RAM lên32GB, giữ ngân sách", "Dùng Illustrator20 triệu")).creator()).isTrue();
+        assertThat(ChatService.needs(List.of("Chỉ học online Word, không cần dedicated GPU", "Blender render3D30 million VND")).creator()).isFalse();
+        assertThat(ChatService.needs(List.of("RAM lên32GB, giữ ngân sách", "Dùng Illustrator20 million VND")).creator()).isTrue();
     }
 
     @Test
     void giaiThichThietKeKhongThanhVanPhongHoacHuaFps() {
         var gpu=new Line("gpu_240","gpu","Card",1,null,null,5_000_000L,5_000_000L,null,"https://a/gpu","RTX 3050 6GB","A");
         var card=new ChatResponse.BuildCard(List.of(gpu),true,List.of(),List.of(),null,20_000_000L,null,"balanced",1);
-        assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 triệu")),card))
-                .contains("card rời", "tùy phần mềm và dự án").doesNotContain("FPS","nhu cầu học và văn phòng");
+        assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 million VND")),card))
+                .contains("dedicated GPU", "depend on the software and project").doesNotContain("FPS","study and office work");
         var cpu=new Line("cpu_std","cpu","CPU",1,null,null,4_000_000L,4_000_000L,null,"https://a/cpu","Intel Core i5 12400","A");
         var noGpu=new ChatResponse.BuildCard(List.of(cpu),true,List.of(),List.of(),null,20_000_000L,null,"balanced",1);
-        assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 triệu không cần card rời")),noGpu))
-                .contains("Theo yêu cầu", "GPU tích hợp", "phần mềm và driver").doesNotContain("nhu cầu học và văn phòng");
+        assertThat(ChatService.adviceExplanation(ChatService.needs(List.of("Photoshop20 million VND không cần dedicated GPU")),noGpu))
+                .contains("As requested", "integrated graphics", "software and driver").doesNotContain("study and office work");
     }
 
     @Test
@@ -2885,7 +2885,7 @@ class ChatServiceTests {
                 """),answer("Dùng iGPU đủ mọi thiết kế."));
         var res=service.reply(new ChatRequest(List.of(new Message("user","PC Illustrator20 triệu")),null,null,"advice"));
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("thiếu card đồ họa rời theo nhu cầu").doesNotContain("đủ mọi thiết kế");
+        assertThat(res.reply()).contains("a required dedicated GPU is missing").doesNotContain("đủ mọi thiết kế");
     }
 
     @Test
@@ -2937,17 +2937,17 @@ class ChatServiceTests {
         var result = unknownGpuBudgetResponse("Stable Diffusion local, 20 triệu, NVIDIA tối thiểu 16GB VRAM");
         assertThat(result.build()).isNotNull();
         assertThat(result.build().items().getFirst().productName()).contains("RTX 4060 Ti").contains("16GB");
-        assertThat(result.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("chưa có benchmark").doesNotContain("hiệu năng GPU thấp hơn"));
+        assertThat(result.build().recommendations()).anySatisfy(i -> assertThat(i.message()).contains("no comparative benchmark").doesNotContain("GPU performance is lower"));
     }
 
     @Test
     void aiKhoaModelThiKhongDoiCardDuChuaCoTrongBangHang() {
-        assertThat(unknownGpuBudgetResponse("Stable Diffusion, 20 triệu, bắt buộc đúng RTX 4080 SUPER 16GB, không đổi model").build()).isNull();
+        assertThat(unknownGpuBudgetResponse("Stable Diffusion, 20 million VND, bắt buộc đúng RTX 4080 SUPER 16GB, không đổi model").build()).isNull();
     }
 
     @Test
     void gameKhongTuDoanXepHangCuaChipChuaBiet() {
-        assertThat(unknownGpuBudgetResponse("Chơi game 20 triệu, NVIDIA ít nhất 16GB VRAM").build()).isNull();
+        assertThat(unknownGpuBudgetResponse("Chơi game 20 million VND, NVIDIA ít nhất 16GB VRAM").build()).isNull();
     }
 
     private ChatResponse unknownGpuBudgetResponse(String question) {
@@ -2979,7 +2979,7 @@ class ChatServiceTests {
 
     @Test
     void cardNvidiaGhiRo8GbThiKhongHaXuong6Gb() {
-        assertThat(nvidiaBudgetResponse("chơi game 7 triệu, cần card NVIDA 8GB").build()).isNull();
+        assertThat(nvidiaBudgetResponse("chơi game 7 million VND, cần card NVIDA 8GB").build()).isNull();
     }
 
     @Test
@@ -3018,7 +3018,7 @@ class ChatServiceTests {
 
     @Test
     void doiNenTangKhongDuocTuDoiCpuNguoiDungDaChiDinh() {
-        assertThat(mixedSocketResponse("chơi game 32 triệu, phải dùng CPU AMD Ryzen 5 5600X").build()).isNull();
+        assertThat(mixedSocketResponse("chơi game 32 million VND, phải dùng CPU AMD Ryzen 5 5600X").build()).isNull();
     }
 
     private ChatResponse mixedSocketResponse(String text) {
@@ -3096,7 +3096,7 @@ class ChatServiceTests {
 
     @Test
     void nhanRaNganSachTrongCauNguoiDung() {
-        assertThat(ChatService.hasBudget("ngân sách khoảng 40 triệu")).isTrue();
+        assertThat(ChatService.hasBudget("ngân sách khoảng 40 million VND")).isTrue();
         assertThat(ChatService.hasBudget("có 25tr, thích máy có kính")).isTrue();
         assertThat(ChatService.hasBudget("tầm 12.000.000 đồng")).isTrue();
         assertThat(ChatService.hasBudget("mình học thiết kế, cần máy êm")).isFalse();
@@ -3121,7 +3121,7 @@ class ChatServiceTests {
             assertThat(res.build()).isNull();
             verify(client,org.mockito.Mockito.times(1)).complete(any());
         }
-        assertThat(ChatService.workloadQuestion("Bạn sẽ dùng máy chủ yếu làm gì: học / văn phòng, chơi game, đồ họa hay AI?")).isFalse();
+        assertThat(ChatService.workloadQuestion("Bạn sẽ What is your main use: học / văn phòng, chơi game, đồ họa hay AI?")).isFalse();
     }
 
     @Test
@@ -3148,7 +3148,7 @@ class ChatServiceTests {
         var res=service.reply(new ChatRequest(List.of(new Message("user","Thiết kế20 triệu"),
                 new Message("assistant","Bạn làm2D hay3D/render?"),new Message("user","2D")),null,null,"advice"));
         assertThat(res.reply()).isEqualTo("Mình dùng thông tin bạn vừa bổ sung.");
-        assertThat(messages(1).toString()).contains("làm luôn ba phương án");
+        assertThat(messages(1).toString()).contains("produce the three options now");
     }
 
     @Test
@@ -3156,7 +3156,7 @@ class ChatServiceTests {
         reply(answer("Bạn chơi game nhẹ hay game nặng?"),answer("Mình sẽ nêu giả định."));
         var res=service.reply(new ChatRequest(List.of(new Message("user","PC chơi game25 triệu, tư vấn luôn, không hỏi thêm")),null,null,"advice"));
         assertThat(res.reply()).isEqualTo("Mình sẽ nêu giả định.");
-        assertThat(messages(1).toString()).contains("làm luôn ba phương án");
+        assertThat(messages(1).toString()).contains("produce the three options now");
     }
 
     @Test

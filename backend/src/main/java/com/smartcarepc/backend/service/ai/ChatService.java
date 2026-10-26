@@ -241,7 +241,7 @@ public class ChatService {
             chạy trên khe đời cũ nhưng chậm hơn (WARNING).
 
             Cách trả lời:
-            - Trả lời bằng ngôn ngữ người dùng đang viết (thường là tiếng Việt). Giọng thân thiện, xưng "mình", gọi "bạn".
+            - Respond only in English, even when the user writes in another language. Use a friendly, concise tone.
             - Ngắn gọn, thường 2–4 câu và không quá 80 từ, trừ khi người dùng xin giải thích kỹ. Không dùng bảng, không dùng tiêu đề.
             - Câu hỏi kiến thức hoặc giải thích linh kiện: chỉ 1–3 câu, đúng số câu người dùng yêu cầu nếu có.
             Không tự hỏi thêm ngân sách hoặc nhu cầu khi người dùng chỉ hỏi kiến thức, không yêu cầu chọn cấu hình.
@@ -263,7 +263,7 @@ public class ChatService {
             5. Danh mục của app chỉ là bộ mẫu nhỏ. Nếu nhu cầu vượt quá danh mục thì nói rõ điều đó.
             - Danh mục đầy đủ đã có ở cuối lời dặn này, dùng luôn, chỉ gọi list_components khi cần xem lại.
             - Khoảng số (giá, ngân sách) viết bằng dấu gạch nối thường, vd "20,9 - 28,9 triệu", không dùng gạch dài.
-            - Gọi linh kiện bằng tên tiếng Việt trong danh mục, không đọc mã code cho người dùng.
+            - Use English component names from the catalogue. Do not read internal component codes to the user.
             - Tên hãng hay mẫu sản phẩm chỉ nêu khi lấy từ kết quả search_products; còn lại nói theo thông số (vd "RAM 16 GB DDR4").
             - Giá lấy từ cửa hàng là giá lúc tìm, có thể đổi; giá không có sản phẩm là ước tính. Nói rõ điều này. \
             Không bịa thông số mà danh mục để trống rồi nói như thông tin chắc chắn.
@@ -280,58 +280,58 @@ public class ChatService {
 
     private static final List<Map<String, Object>> TOOLS = List.of(
             tool("list_components",
-                    "Danh mục linh kiện của app kèm thông số. Lọc theo loại hoặc bỏ trống để lấy tất cả. "
-                            + "Loại: case, motherboard, cpu, cooler, ram, gpu, ssd, psu, fans, tools.",
+                    "App component catalogue with specifications. Filter by category or leave blank for all components. "
+                            + "Categories: case, motherboard, cpu, cooler, ram, gpu, ssd, psu, fans, tools.",
                     Map.of("type", "object",
-                            "properties", Map.of("category", Map.of("type", "string", "description", "Mã loại linh kiện")))),
+                            "properties", Map.of("category", Map.of("type", "string", "description", "Component category code")))),
             tool("get_build",
-                    "Xem toàn bộ linh kiện của một máy có sẵn trong app, theo mã máy.",
+                    "Get all components in a preset PC build using its build code.",
                     Map.of("type", "object",
-                            "properties", Map.of("code", Map.of("type", "string", "description", "Mã máy, vd standard_tower")),
+                            "properties", Map.of("code", Map.of("type", "string", "description", "Build code, for example standard_tower")),
                             "required", List.of("code"))),
             tool("check_build",
-                    "Kiểm tra các linh kiện có lắp chung được không. Trả về errors (không lắp được) "
-                            + "và warnings (lắp được nhưng nên xem lại). Cần đủ vỏ, bo mạch, CPU, nguồn, RAM, SSD.",
+                    "Check component compatibility. Returns errors for incompatible parts "
+                            + "and warnings for details to review. Include a case, motherboard, CPU, PSU, RAM and SSD.",
                     Map.of("type", "object",
                             "properties", Map.of("items", Map.of("type", "array",
                                     "items", Map.of("type", "object",
                                             "properties", Map.of(
-                                                    "code", Map.of("type", "string", "description", "Mã linh kiện"),
+                                                    "code", Map.of("type", "string", "description", "Component code"),
                                                     "quantity", Map.of("type", "integer", "minimum", 1)),
                                             "required", List.of("code")))),
                             "required", List.of("items"))),
             tool("propose_build",
-                    "Chốt cấu hình đề xuất cho người dùng (gọi một lần, sau khi check_build không còn lỗi). "
-                            + "App vẽ bảng chi tiết từ dữ liệu này. Trả về kết quả kiểm tra tương thích.",
+                    "Submit a recommended build for the user. "
+                            + "The app renders component details and returns compatibility results.",
                     Map.of("type", "object",
                             "properties", Map.of(
                                     "tier", Map.of("type", "string", "enum", List.of("cheap", "balanced", "quality"),
-                                            "description", "Phương án: cheap = Rẻ, balanced = Phù hợp cho bạn, quality = Chất lượng"),
+                                            "description", "Tier: cheap = Budget, balanced = Best fit, quality = Upgraded"),
                                     "summary", Map.of("type", "string",
-                                            "description", "Một câu tóm tắt nhu cầu đã hiểu, vd 'Học online và làm văn phòng, máy nhỏ gọn'"),
-                                    "budget_vnd", Map.of("type", "integer", "description", "Ngân sách người dùng nói, đơn vị đồng; bỏ trống nếu chưa biết"),
+                                            "description", "One English sentence summarising the user's requirements, for example: A compact PC for online classes and office work"),
+                                    "budget_vnd", Map.of("type", "integer", "description", "The user's budget in VND; omit if unknown"),
                                     "items", Map.of("type", "array",
                                             "items", Map.of("type", "object",
                                                     "properties", Map.of(
-                                                            "code", Map.of("type", "string", "description", "Mã linh kiện trong danh mục"),
+                                                            "code", Map.of("type", "string", "description", "Component code from the catalogue"),
                                                             "quantity", Map.of("type", "integer", "minimum", 1),
-                                                            "spec", Map.of("type", "string", "description", "Thông số nên mua, tối đa 8 chữ"),
+                                                            "spec", Map.of("type", "string", "description", "Specifications to buy, in English, at most 8 words"),
                                                             "reason", Map.of("type", "string", "description",
-                                                                    "Vì sao chọn, tối đa 12 chữ; tier cheap / quality bỏ trống nếu giống balanced"),
+                                                                    "Reason for choosing, in English, at most 12 words; omit for cheap/quality if unchanged from balanced"),
                                                             "price_min_vnd", Map.of("type", "integer"),
                                                             "price_max_vnd", Map.of("type", "integer"),
-                                                            "product_id", Map.of("type", "string", "description", "id kết quả search_products đã chọn, vd s3-2"),
-                                                            "buy_qty", Map.of("type", "integer", "minimum", 1, "description", "Số sản phẩm cần mua, mặc định = quantity")),
+                                                            "product_id", Map.of("type", "string", "description", "Selected search_products result ID, for example s3-2"),
+                                                            "buy_qty", Map.of("type", "integer", "minimum", 1, "description", "Number of products to purchase; defaults to quantity")),
                                                     "required", List.of("code")))),
                             "required", List.of("summary", "items"))),
             tool("search_products",
-                    "Tìm sản phẩm thật đang bán ở cửa hàng máy tính Việt Nam (đọc thẳng web cửa hàng). Trả về tối đa 8 món: "
-                            + "id, title, shop, price_vnd, in_stock và warranty_months nếu biết. Dùng id trong propose_build. "
-                            + "Ưu tiên món in_stock = true.",
+                    "Find products sold by Vietnamese PC stores by reading their websites. Returns up to 8 products: "
+                            + "id, title, shop, price_vnd, in_stock and warranty_months when known. Use the ID in propose_build. "
+                            + "Prefer products with in_stock = true.",
                     Map.of("type", "object",
                             "properties", Map.of("query", Map.of("type", "string",
-                                    "description", "Từ khoá NGẮN 2-5 chữ, MỘT loại / model mỗi lần (không dùng 'hoặc'), "
-                                            + "vd 'RTX 3050 8GB', 'SSD NVMe 512GB', 'tản nhiệt khí CPU'. Không thêm 'giá rẻ', số đo hay socket")),
+                                    "description", "Use a SHORT query of 2–5 words for ONE category or model, without alternatives. "
+                                            + "Examples: RTX 3050 8GB, SSD NVMe 512GB, CPU air cooler. Do not add cheap, dimensions or socket details.")),
                             "required", List.of("query"))));
 
     private final LlmClient client;
@@ -441,20 +441,23 @@ public class ChatService {
         progress.accept(STAGE_READ);
         List<Map<String, Object>> messages = new ArrayList<>();
         String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
-                : "\nNgười dùng đang làm theo hướng dẫn lắp, hiện ở: " + request.guideStep().strip() + ".\n";
+                : "\nThe user is following this assembly guide context: " + request.guideStep().strip() + ".\n";
         String intro = "advice".equals(request.mode()) ? ADVICE : ASSEMBLY;
         if (!search.enabled()) {
-            intro += "\nLƯU Ý: tìm kiếm sản phẩm đang tắt. Bỏ qua bước tìm hàng thật, để trống phần sản phẩm, dùng giá ước tính "
-                    + "và không nêu tên hãng hay mẫu sản phẩm.\n";
+            intro += "\nNOTE: product search is disabled. Skip real product lookup, leave product fields empty, use estimated prices "
+                    + "and do not name specific brands or models.\n";
         }
-        messages.add(Map.of("role", "system", "content", intro + "\n" + RULES + "\n" + context(request.buildCode()) + step));
+        messages.add(Map.of("role", "system", "content", intro + "\n" + RULES + "\n" + context(request.buildCode()) + step
+                + "\nLANGUAGE REQUIREMENT: All user-visible answers, summaries, specifications and reasons must be in English. "
+                + "Use 1–3 short sentences for explanations. Keep brand names and exact model identifiers intact. "
+                + "Prices and budgets are in VND; write decimal numbers using a decimal point.\n"));
         for (var m : request.messages()) {
             // Lời chào mở đầu của khung chat là tin "assistant" đứng đầu: bỏ để hội thoại bắt đầu bằng người dùng
             if (messages.size() == 1 && m.role().equals("assistant")) continue;
             messages.add(Map.of("role", m.role(), "content", m.content()));
         }
         if (messages.size() == 1 || !messages.getLast().get("role").equals("user")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tin cuối cùng phải là câu hỏi của người dùng");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The final message must be a user question");
         }
 
         var userTexts = "advice".equals(request.mode()) ? adviceUserTexts(request.messages()) : request.messages().reversed().stream()
@@ -462,7 +465,7 @@ public class ChatService {
         Turn turn = new Turn("advice".equals(request.mode()), amounts(userTexts), ramLayout(userTexts), needs(userTexts));
         turn.requestedGpu = requestedGpu(userTexts);
         turn.wantsTools = userTexts.stream().filter(Objects::nonNull)
-                .anyMatch(t -> t.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(đồ nghề|dụng cụ|tua vít|tool.?kit).*"));
+                .anyMatch(t -> t.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(đồ nghề|dụng cụ|tua vít|tool.?kit|screwdriver|assembly tools).*"));
         turn.noDiscreteGpu = noDiscreteGpu(userTexts);
         turn.preferCheap = prefersCheapest(userTexts);
         turn.cpuLocked = userTexts.stream().anyMatch(t -> CPU_MODEL.matcher(t.toLowerCase(java.util.Locale.ROOT)).find()
@@ -476,22 +479,22 @@ public class ChatService {
                 && initial.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(\\bpc\\b|\\bbuild\\b|máy tính|mua máy|cần máy|bộ máy|dựng máy|lắp máy|chọn máy).*" );
         if (newPurchase) {
             String uses = initial.toLowerCase(java.util.Locale.ROOT).replaceAll("không\\s+(?:chơi\\s+)?game", " ");
-            boolean purpose = creatorUse(initial) || uses.matches("(?s).*(học|bài tập|văn phòng|word|excel|game|chơi|valorant|lmht|cs2|online|lướt web|xem phim|"
+            boolean purpose = creatorUse(initial) || uses.matches("(?s).*(study|student|office|accounting|gaming|design|programming|học|bài tập|văn phòng|word|excel|game|chơi|valorant|lmht|cs2|online|lướt web|xem phim|"
                     + "kế toán|deep learning|machine learning|render|video|đồ họa|đồ hoạ|thiết kế|photoshop|premiere|blender|cad|"
                     + "stable diffusion|\\bllm\\b|\\bcuda\\b|pytorch|tensorflow|teams|zoom|google meet|powerpoint|giáo án|bài giảng|bảng tính|luận văn|tra cứu web|"
                     + "lập trình|code|server|máy chủ|nas|thu âm|âm nhạc|bán hàng|camera).*") || initial.matches("(?s).*\\bAI\\b.*");
             boolean budget = hasBudget(initial);
             if (!purpose || !budget) return new ChatResponse(!purpose && !budget
-                    ? "Bạn sẽ dùng máy chủ yếu làm việc gì và ngân sách khoảng bao nhiêu?"
-                    : !purpose ? "Bạn sẽ dùng máy chủ yếu làm gì: học / văn phòng, chơi game, đồ họa hay AI?"
-                    : "Ngân sách bạn dành cho bộ máy khoảng bao nhiêu, chỉ thùng máy hay gồm cả màn hình?");
+                    ? "What will you mainly use the PC for, and what is your budget?"
+                    : !purpose ? "What is your main use: study or office work, gaming, creative work, or AI?"
+                    : "What is your budget in VND, and should it cover the PC only or also a monitor?");
         }
         if (turn.advice && turn.needs != null && turn.needs.cuda() && turn.needs.gpuVendor() != null
                 && !"nvidia".equals(turn.needs.gpuVendor())) {
-            return new ChatResponse("Bạn đã chốt card " + turn.needs.gpuVendor().toUpperCase(java.util.Locale.ROOT)
-                    + " cho máy AI. Hiện bộ tư vấn chỉ kiểm chứng luồng học sâu NVIDIA/CUDA; chưa kiểm chứng framework và hệ điều hành "
-                    + "của bạn với hãng card này, nên mình chưa chốt cấu hình mua hàng. Cần xác nhận phần mềm AI và danh sách GPU được "
-                    + "phần mềm đó hỗ trợ trước.");
+            return new ChatResponse("You requested an " + turn.needs.gpuVendor().toUpperCase(java.util.Locale.ROOT)
+                    + " GPU for AI. This assistant currently verifies NVIDIA/CUDA deep-learning builds. Your framework and operating system "
+                    + "have not been verified with this GPU vendor, so I cannot recommend a purchase yet. Confirm which GPUs your AI software "
+                    + "supports first.");
         }
         // Chưa có khoá tìm kiếm: bỏ hẳn công cụ search_products để trợ lý không thử đi thử lại mất nhiều lượt
         var tools = search.enabled() ? TOOLS
@@ -534,7 +537,7 @@ public class ChatService {
                 res = Io.await(Io.async(() -> client.complete(body)), java.time.Duration.ofSeconds(40), null);
                 if (res == null) {
                     if (!turn.tiers.isEmpty() || turn.last != null) return respond(BUILDS_READY, turn);
-                    throw new AiUnavailableException(HttpStatus.GATEWAY_TIMEOUT, "Nguồn tư vấn đang phản hồi chậm. Bạn thử lại nhé.");
+                    throw new AiUnavailableException(HttpStatus.GATEWAY_TIMEOUT, "The advice service is responding slowly. Please try again.");
                 }
             } catch (AiUnavailableException e) {
                 // AI lỗi ở vòng viết câu trả lời nhưng các phương án đã dựng xong: vẫn gửi phương án, không bỏ phí
@@ -563,7 +566,7 @@ public class ChatService {
                 boolean askedBefore = request.messages().stream().anyMatch(m -> "assistant".equals(m.role()) && workloadQuestion(m.content())
                         && (workloadTopics(m.content()) & workloadTopics(draft)) == workloadTopics(draft));
                 boolean proceed = lastUser.toLowerCase(java.util.Locale.ROOT)
-                        .matches("(?s).*(tư vấn luôn|làm luôn|tự chọn|không hỏi thêm|chưa biết|không biết).*");
+                        .matches("(?s).*(go ahead|proceed|recommend now|choose for me|not sure|tư vấn luôn|làm luôn|tự chọn|không hỏi thêm|chưa biết|không biết).*");
                 // Câu hỏi workload không phải lỗi thiếu thẻ; ngân sách nhắc lại trong câu hỏi không thành báo giá.
                 if (turn.advice && !whyOnly && turn.last == null && turn.tiers.isEmpty() && workloadQuestion && !askedBefore && !proceed && !workloadKnown) {
                     return new ChatResponse(clean(draft));
@@ -574,8 +577,8 @@ public class ChatService {
                     nudged = true;
                     log.info("Chat vòng {}: AI hỏi lại dù đã có ngân sách, nhắc làm luôn", round + 1);
                     messages.add(Map.of("role", "assistant", "content", String.valueOf(message.getOrDefault("content", ""))));
-                    messages.add(Map.of("role", "user", "content", "Mình đã nói ngân sách và mục đích rồi. Bạn cứ giả định "
-                            + "mức phổ biến cho chi tiết còn thiếu (nói rõ giả định) và làm luôn ba phương án nhé."));
+                    messages.add(Map.of("role", "user", "content", "I have already provided my budget and intended use. Assume common requirements for "
+                            + "any missing details, state those assumptions briefly and produce the three options now."));
                     continue;
                 }
                 // Câu hỏi tiếp (vd "đổi sang card AMD") mà trợ lý viết luôn các phương án kèm giá, không gọi propose_build
@@ -583,15 +586,15 @@ public class ChatService {
                 // trợ lý được hỏi lại. Nhắc một lần
                 // Câu hỏi tiếp yêu cầu đổi cấu hình (ca thật n9: "đổi sang card AMD", trợ lý viết "ba phương án đều dùng card
                 // này" mà không dựng thẻ, không ghi nhãn tier)
-                boolean changeAsk = CHANGE_ASK.matcher(lastUser).find() && (MONEY_MENTION.matcher(draft).find() || draft.toLowerCase().contains("phương án"));
+                boolean changeAsk = CHANGE_ASK.matcher(lastUser).find() && (MONEY_MENTION.matcher(draft).find() || draft.toLowerCase().contains("option"));
                 if (turn.advice && !whyOnly && !toolNudged && turn.tiers.isEmpty() && !turn.userAmounts.isEmpty() && proposeRounds < proposeLimit
                         && (TIER_MENTION.matcher(draft).find() && MONEY_MENTION.matcher(draft).find() || changeAsk)) {
                     toolNudged = true;
                     log.info("Chat vòng {}: AI viết phương án kèm giá mà chưa gọi propose_build, nhắc gọi công cụ", round + 1);
                     messages.add(Map.of("role", "assistant", "content", draft));
-                    messages.add(Map.of("role", "user", "content", "Bạn chưa dựng phương án nào bằng công cụ. Dùng ngân sách mình đã nói "
-                            + "trong hội thoại, áp dụng yêu cầu mới nhất của mình, gọi search_products nếu cần rồi gọi propose_build cho "
-                            + "từng phương án trước khi trả lời. Đừng tự ghi giá hay tổng tiền khi chưa có kết quả từ công cụ."));
+                    messages.add(Map.of("role", "user", "content", "No build has been submitted through the tools. Use the budget already given "
+                            + "in the conversation and my latest requirements. Call search_products if needed, then propose_build for "
+                            + "each option before responding. Do not invent prices or totals without tool results."));
                     continue;
                 }
                 // Ba phương án sai thứ tự (thường sau khi app đổi vỏ / hạ giá, Chất lượng thành bằng Phù hợp): nhắc một lần,
@@ -621,11 +624,11 @@ public class ChatService {
                         && (MONEY.matcher(finalReply).find() || DONG_MENTION.matcher(finalReply).find())) {
                     // Chưa có báo giá/cấu hình từ công cụ: không biến ước lượng của LLM thành giá thị trường.
                     Long userBudget = budgetOf(turn.userAmounts, null);
-                    finalReply = (turn.needs == null ? "Ngân sách bạn đã nêu: " + millions(userBudget) + "."
+                    finalReply = (turn.needs == null ? "Your stated budget: " + millions(userBudget) + "."
                             : adviceIntro(turn.needs, userBudget)) + "\n\n"
-                            + (turn.requestedGpu == null ? "" : "Bạn yêu cầu đúng card " + chipQuery(turn.requestedGpu).substring(4) + ".\n\n")
-                            + "Mình chưa có cấu hình và giá bán đã xác minh đáp ứng yêu cầu này, nên chưa thể chốt phương án mua. "
-                            + "Cần kiểm tra trang bán còn hàng và tổng tiền linh kiện trước khi đề xuất ngân sách khác.";
+                            + (turn.requestedGpu == null ? "" : "You requested the exact GPU " + chipQuery(turn.requestedGpu).substring(4) + ".\n\n")
+                            + "I do not yet have a verified build and price that meet these requirements, so I cannot recommend a purchase. "
+                            + "In-stock product pages and the total component cost must be checked before suggesting a different budget.";
                 }
                 var done = respond(finalReply, turn);
                 log.info("Chat: dựng thẻ (đổi link cửa hàng) {} ms", (System.nanoTime() - tc) / 1_000_000);
@@ -648,11 +651,11 @@ public class ChatService {
                         var fn = (Map<String, Object>) call.get("function");
                         if (proposeClosed && !turn.tiers.isEmpty()) {
                             return CompletableFuture.completedFuture(json.writeValueAsString(Map.of("error",
-                                    "Đã chốt đủ phương án. Không gọi công cụ nữa, viết câu trả lời cho người dùng.")));
+                                    "The options are finalised. Stop calling tools and write the user-facing answer in English.")));
                         }
                         if (searchClosed && "search_products".equals(fn.get("name"))) {
                             return CompletableFuture.completedFuture(json.writeValueAsString(Map.of("error",
-                                    "Đã hết lượt tìm. Chốt bằng propose_build với kết quả đã có; món chưa ưng thì app tự đổi.")));
+                                    "The search limit has been reached. Use propose_build with existing results; the app can replace unsuitable products.")));
                         }
                         return Io.async(() -> "propose_build".equals(fn.get("name"))
                                 ? Io.within(TIER_BUDGET, () -> runTool(fn, turn)) : runTool(fn, turn));
@@ -662,7 +665,7 @@ public class ChatService {
             for (int i = 0; i < calls.size(); i++) {
                 messages.add(Map.of("role", "tool", "tool_call_id", String.valueOf(calls.get(i).get("id")),
                         "content", Io.await(results.get(i), ANSWER_BUDGET,
-                                "{\"error\":\"Đã hết thời gian tra cứu. Chỉ dùng kết quả đã kiểm tra.\"}")));
+                                "{\"error\":\"Lookup deadline reached. Use only checked results.\"}")));
             }
             progress.accept(!turn.tiers.isEmpty() ? STAGE_WRITE : names.contains("search_products") ? STAGE_PICK : STAGE_READ);
             log.info("Chat vòng {}: AI {} ms, {} công cụ {} chạy {} ms", round + 1, aiMs, calls.size(),
@@ -686,7 +689,7 @@ public class ChatService {
         }
         // Hết số vòng: có phương án rồi thì vẫn gửi (kèm câu dẫn), chưa có gì mới bảo người dùng hỏi cụ thể hơn
         return respond(turn.tiers.isEmpty() && turn.last == null
-                ? "Câu này mình phải tra cứu nhiều quá. Bạn hỏi cụ thể hơn một chút nhé." : BUILDS_READY, turn);
+                ? "This request needs more detail to narrow the search. Please be more specific." : BUILDS_READY, turn);
     }
 
     /** Thứ tự hiện ba phương án trong bảng so sánh */
@@ -754,17 +757,17 @@ public class ChatService {
             boolean same = signature(a.picks()).equals(signature(b.picks()));
             boolean wrong = "quality".equals(t) ? ta < tb + TIER_GAP || !qualityImproves(b, a) : ta > tb - TIER_GAP;
             if (same || wrong) {
-                log.warn("Phương án {} {} Phù hợp ({} / {}), không hiện", t, same ? "trùng cấu hình" : "sai thứ tự với", ta, tb);
+                log.warn("Phương án {} {} Phù hợp ({} / {}), không hiện", t, same ? "duplicates the build of" : "has an incorrect order relative to", ta, tb);
                 chosen.remove(t);
                 duplicate.add(t);
-                outOfOrder.put(t, same ? "trùng cấu hình với Phù hợp trong mức tiền này, nên app chỉ hiện Phù hợp."
-                        : "quality".equals(t) ? "chưa tìm được cấu hình nâng cấp rõ ràng hơn Phù hợp trong mức tiền này, nên app không hiển thị."
-                        : "với giá thị trường hiện tại, cấu hình rẻ nhất đủ nhu cầu app dựng được là " + millions(ta) + ", gần bằng Phù hợp ("
-                        + millions(tb) + "), không rẻ hơn rõ rệt. Vì vậy app chỉ đưa hai phương án Phù hợp và Chất lượng.");
+                outOfOrder.put(t, same ? "duplicates Best fit at this price, so only Best fit is shown."
+                        : "quality".equals(t) ? "does not offer a clear upgrade over Best fit within this limit, so it is not shown."
+                        : "at current prices, the lowest-cost suitable build found is " + millions(ta) + ", close to Best fit ("
+                        + millions(tb) + "), with no clear saving. Only Best fit and Upgraded are shown.");
             }
         }
         if (!outOfOrder.isEmpty()) {
-            unavailableNotes.addAll(outOfOrder.entrySet().stream().map(e -> "Phương án " + TIER_NAME.get(e.getKey()) + " " + e.getValue()).toList());
+            unavailableNotes.addAll(outOfOrder.entrySet().stream().map(e -> "Option " + TIER_NAME.get(e.getKey()) + " " + e.getValue()).toList());
         }
         if (!missing.isEmpty()) {
             Long budget = turn.tiers.get(missing.getFirst()).budgetVnd();
@@ -772,7 +775,7 @@ public class ChatService {
             // thiếu tiền (vd Chất lượng 50tr bị ẩn trong khi Phù hợp 30tr hiện)
             Long minShown = chosen.values().stream().map(List::getFirst).filter(x -> !x.picks().isEmpty())
                     .map(x -> total(x.request(), x.details(), x.picks())).min(Long::compare).orElse(null);
-            unavailableNotes.addAll(missing.stream().map(t -> "Phương án " + TIER_NAME.get(t) + ": " + notShownReason(turn.tiers.get(t), t, budget, minShown)).toList());
+            unavailableNotes.addAll(missing.stream().map(t -> "Option " + TIER_NAME.get(t) + ": " + notShownReason(turn.tiers.get(t), t, budget, minShown)).toList());
         }
         // Trợ lý chỉ viết thông số / lý do cho món khác balanced (trả lời nhanh hơn): điền phần trống từ tier khác có
         // ĐÚNG sản phẩm đó (cùng mã nhưng khác hàng thì không mượn chữ, vd balanced "2x8GB" cho dòng mua 1 thanh)
@@ -793,7 +796,7 @@ public class ChatService {
             Map<String, ProductSearch.Product> picks = new LinkedHashMap<>();
             chosen.values().forEach(list -> list.forEach(c -> c.picks().values().forEach(p -> picks.putIfAbsent(p.url(), p))));
             long w0 = System.nanoTime();
-            // Optional comparisons must not hold up the primary answer.
+            // Optional comparisons start only after every primary build is final; do not hold up the answer.
             search.warmCompare(picks.values(), 0);
             log.info("Chat: so giá phụ (warmCompare) {} ms", (System.nanoTime() - w0) / 1_000_000);
         }
@@ -817,8 +820,8 @@ public class ChatService {
         }
         else if (!unavailableNotes.isEmpty()) reply += "\n\n" + String.join("\n", unavailableNotes);
         if (turn.advice && options.isEmpty() && !turn.tiers.isEmpty()) {
-            reply = (turn.requestedGpu == null ? "" : "Bạn yêu cầu đúng card " + chipQuery(turn.requestedGpu).substring(4) + ".\n\n")
-                    + "Mình chưa chốt được cấu hình đủ điều kiện để đề xuất.\n\n"
+            reply = (turn.requestedGpu == null ? "" : "You requested the exact GPU " + chipQuery(turn.requestedGpu).substring(4) + ".\n\n")
+                    + "I could not finalise an eligible build recommendation.\n\n"
                     + String.join("\n", unavailableNotes);
         }
         BuildCard build = !options.isEmpty() ? recommendedCard(options, turn.preferCheap, cudaValue)
@@ -1106,11 +1109,11 @@ public class ChatService {
         var casePick = trial.picks().get("case_compact_tower");
         boolean glassOk = !needs.glass() || casePick != null && glass(casePick.title());
         boolean hasGpu = trial.request().items().stream().anyMatch(i -> "gpu".equals(categoryOf(i.code())));
-        notes.add("Chuyển sang vỏ nhỏ gọn (bo Micro-ATX" + (hasGpu ? ", tản khí, card 2 quạt" : "") + ") để vừa ngân sách"
-                + (glassOk ? "" : "; vỏ này không ghi rõ có mặt kính, muốn kính thì hỏi cửa hàng hoặc chọn phương án khác"));
+        notes.add("Switched to a compact case (Micro-ATX motherboard" + (hasGpu ? ", air cooler, dual-fan GPU" : "") + ") to fit the budget"
+                + (glassOk ? "" : "; this case title does not confirm a glass panel. Ask the store or choose another option if you want glass"));
         if (!glassOk && casePick != null) {
             trial.details().computeIfAbsent("case_compact_tower", k -> new LinkedHashMap<>()).put("downgrade_note",
-                    "Vỏ nhỏ gọn này không ghi rõ có mặt kính trên tên sản phẩm. Bạn thích kính thì hỏi cửa hàng, hoặc chọn phương án có vỏ kính.");
+                    "This compact case's product title does not confirm a glass panel. Ask the store or choose a confirmed glass-panel case.");
         }
         return trial;
     }
@@ -1166,7 +1169,7 @@ public class ChatService {
         if ("DDR5".equals(memoryType)) trial = toDdr4(trial, cap, changes);
         trial = normalized(withPagePrices(trial), Map.of());
         if (!showable(trial, cap)) return c;
-        String note = "Không tìm được bo Mini-ITX còn hàng cho nền cũ; chuyển CPU/bo sang Intel LGA1700 DDR4, giữ vỏ Mini-ITX và dung lượng. Hiệu năng CPU có thể khác.";
+        String note = "No in-stock Mini-ITX motherboard was found for the original platform. Switched the CPU and board to Intel LGA1700 DDR4 while keeping the Mini-ITX case and memory capacity. CPU performance may differ.";
         trial.details().get(cpu.code()).put("downgrade_note", note);
         notes.add(note);
         notes.addAll(changes);
@@ -1236,7 +1239,7 @@ public class ChatService {
                 .toList();
         var found = bestLinked(list, null, 6);
         if (found == null) {
-            log.info("Hạ CPU \"{}\" cho máy {}: {} món cùng socket {}, không món nào có link mua", now.title(), game ? "game" : "học / văn phòng",
+            log.info("Hạ CPU \"{}\" cho máy {}: {} món cùng socket {}, không món nào có link mua", now.title(), game ? "game" : "study / office work",
                     list.size(), socket);
             return c;
         }
@@ -1248,10 +1251,10 @@ public class ChatService {
         links.put(code, CompletableFuture.completedFuture(found.url()));
         var d = details.computeIfAbsent(code, k -> new LinkedHashMap<>());
         d.put("spec", cpuModel(found.title()));
-        d.put("downgrade_note", "CPU " + cpuModel(found.title()) + (creatorFallback ? " cùng socket, đã có card rời nên không cần đồ họa tích hợp; chọn bản rẻ hơn để vừa ngân sách. Hiệu năng CPU có thể khác."
-                : game ? " đủ chơi game Full HD phổ thông cùng card rời (game nặng CPU sẽ"
-                + " thấp FPS hơn); rẻ hơn để vừa ngân sách." : " đủ cho học, Word, Excel, học online; rẻ hơn để vừa ngân sách."));
-        String note = "CPU " + cpuModel(now.title()) + " -> " + cpuModel(found.title()) + " (rẻ hơn " + (now.priceVnd() - found.priceVnd()) + " đồng)";
+        d.put("downgrade_note", "CPU " + cpuModel(found.title()) + (creatorFallback ? " with the same socket. The dedicated GPU makes integrated graphics unnecessary; this cheaper CPU fits the budget. CPU performance may differ."
+                : game ? " suits mainstream Full HD gaming with a dedicated GPU; CPU-heavy games may "
+                + "run at lower frame rates. This lowers the cost to fit your budget." : " suits study, Word, Excel and online classes, at a lower cost to fit your budget."));
+        String note = "CPU " + cpuModel(now.title()) + " -> " + cpuModel(found.title()) + " (saving " + (now.priceVnd() - found.priceVnd()) + " VND)";
         log.info("Vượt trần: hạ {}", note);
         notes.add(note);
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
@@ -1282,7 +1285,7 @@ public class ChatService {
                 .filter(p -> fitsWith(c.picks(), cpu.code(), p, productIssues(c.picks()).size())).filter(distinctUrl())
                 .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd)).toList();
         var found = bestLinked(candidates, null, 6);
-        log.info("Sửa CPU/bo khác socket {} -> {}: {} CPU phù hợp, chọn {}", before, socket, candidates.size(), found == null ? "không có link" : found.title());
+        log.info("Sửa CPU/bo khác socket {} -> {}: {} CPU phù hợp, chọn {}", before, socket, candidates.size(), found == null ? "no purchase link" : found.title());
         if (found == null || !verified(found)) return c;
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
         Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
@@ -1293,7 +1296,7 @@ public class ChatService {
         var d = details.computeIfAbsent(cpu.code(), key -> new LinkedHashMap<>());
         d.put("spec", cpuModel(found.title()));
         d.remove("reason");
-        String note = "Đã đổi CPU " + cpuModel(old.title()) + " sang " + cpuModel(found.title()) + " để khớp socket " + socket + " của bo mạch đã chọn.";
+        String note = "Changed the CPU to " + cpuModel(old.title()) + " to " + cpuModel(found.title()) + " to match socket " + socket + " on the selected motherboard.";
         d.put("downgrade_note", note);
         notes.add(note);
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
@@ -1374,14 +1377,18 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern NO_DISCRETE_GPU = java.util.regex.Pattern.compile(
-            "(?:không\\s+(?:cần|dùng|mua|gắn)|bỏ|gỡ|tháo)[^.!?]{0,16}(?:card\\s+(?:đồ\\s+h[oọ][aạ]\\s+)?rời|gpu|vga)",
+            "(?:no(?:\\s+need\\s+for)?|without|do not (?:need|want)|don't (?:need|want)|skip|remove)\\s+(?:(?:a|any|the)\\s+)?(?:(?:dedicated|discrete)\\s+)?(?:gpu|graphics card)"
+                    + "|(?:only\\s+integrated graphics|integrated graphics\\s+only)"
+                    + "|(?:không\\s+(?:cần|dùng|mua|gắn)|bỏ|gỡ|tháo)[^.!?]{0,16}(?:card\\s+(?:đồ\\s+h[oọ][aạ]\\s+)?rời|gpu|vga)",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     static boolean noDiscreteGpu(List<String> newestFirst) {
         for (String raw : newestFirst) {
             if (raw == null) continue;
+            if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(?:do not|don't)\\s+(?:remove|skip)[^.!?]{0,24}(?:gpu|graphics card).*")) return false;
             if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*không\\s+(?:(?:cần|muốn)\\s+)?(?:bỏ|gỡ|tháo)[^.!?]{0,16}(?:card\\s+(?:đồ họa\\s+)?rời|gpu|vga).*")) return false;
             if (NO_DISCRETE_GPU.matcher(raw).find()) return true;
+            if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(?:need|want|add|use|require)\\s+(?:a\\s+)?(?:dedicated|discrete)\\s+(?:gpu|graphics card).*")) return false;
             if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(phải có|cần|dùng|mua|gắn|thêm)\\s+(?:card\\s+(?:đồ họa\\s+)?rời|gpu|vga).*")) return false;
             if (gpuVendor(List.of(raw)) != null || GPU_CHIP.matcher(raw.toLowerCase(java.util.Locale.ROOT)).find()) return false;
             if (creatorUse(raw)) return false;
@@ -1393,21 +1400,22 @@ public class ChatService {
     static boolean workloadQuestion(String text) {
         return text != null && text.length() <= 600 && text.contains("?")
                 && !text.toLowerCase(java.util.Locale.ROOT).contains("bạn sẽ dùng máy chủ yếu làm")
+                && !text.toLowerCase(java.util.Locale.ROOT).contains("what is your main use")
                 && !TIER_MENTION.matcher(text).find() && workloadTopics(text) != 0;
     }
 
     private static int workloadTopics(String text) {
         String t = text.toLowerCase(java.util.Locale.ROOT);
-        int topics = t.matches("(?s).*(2\\s*d|3\\s*d|render|phần mềm|ứng dụng|thiết kế|photoshop|illustrator|video).*") ? 1 : 0;
-        if (t.matches("(?s).*(game|trò chơi|esport|fps).*") ) topics |= 2;
-        if (topics == 0 && t.matches("(?s).*(độ phân giải|full hd|2k|4k).*") ) topics = 3;
+        int topics = t.matches("(?s).*(2\\s*d|3\\s*d|render|software|design|phần mềm|ứng dụng|thiết kế|photoshop|illustrator|video).*") ? 1 : 0;
+        if (t.matches("(?s).*(game|gaming|trò chơi|esport|fps).*") ) topics |= 2;
+        if (topics == 0 && t.matches("(?s).*(resolution|độ phân giải|full hd|2k|4k).*") ) topics = 3;
         return topics;
     }
 
     static int knownWorkloadTopics(List<String> userTexts) {
         String text = String.join(" ", userTexts).toLowerCase(java.util.Locale.ROOT);
         int topics = text.matches("(?s).*(2\\s*d\\b|3\\s*d\\b|render|photoshop|illustrator|lightroom|premiere|after effects|davinci|blender|sketchup|3ds max|cinema 4d).*") ? 1 : 0;
-        if (text.matches("(?s).*(game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) topics |= 2;
+        if (text.matches("(?s).*(light gaming|casual gaming|demanding gaming|heavy gaming|game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) topics |= 2;
         return topics;
     }
 
@@ -1423,10 +1431,10 @@ public class ChatService {
             String prefix = "";
             if (workloadQuestion(previousAssistant)) {
                 int topics = workloadTopics(previousAssistant);
-                if ((topics & 1) != 0 && answer.matches("(?s).*(3\\s*d|render|cả hai|cả 2).*") ) prefix += "Thiết kế đồ họa 3D/render. ";
-                else if ((topics & 1) != 0 && answer.matches("(?s).*2\\s*d.*")) prefix += "Thiết kế đồ họa 2D. ";
-                if ((topics & 2) != 0 && answer.matches("(?s).*(nặng|aaa|cả hai|cả 2).*") ) prefix += "Chơi game nặng AAA. ";
-                else if ((topics & 2) != 0 && answer.matches("(?s).*(nhẹ|esport).*")) prefix += "Chơi game nhẹ. ";
+                if ((topics & 1) != 0 && answer.matches("(?s).*(3\\s*d|render|both|cả hai|cả 2).*") ) prefix += "3D design and rendering. ";
+                else if ((topics & 1) != 0 && answer.matches("(?s).*2\\s*d.*")) prefix += "2D graphic design. ";
+                if ((topics & 2) != 0 && answer.matches("(?s).*(demanding|heavy|aaa|both|nặng|cả hai|cả 2).*") ) prefix += "Demanding AAA gaming. ";
+                else if ((topics & 2) != 0 && answer.matches("(?s).*(light|casual|nhẹ|esport).*")) prefix += "Light gaming. ";
             }
             out.add(prefix + raw);
             previousAssistant = null;
@@ -1436,6 +1444,7 @@ public class ChatService {
 
     private static String creatorText(String raw) {
         return raw.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("(?:no|not|do not|don't)\\s+(?:do\\s+)?(?:graphic design|design work|video editing|render(?:ing)?|3d|2d|blender)", " ")
                 .replaceAll("không\\s*(?:(?:làm|dựng|dùng|cần|có)\\s*)?(?:thiết kế(?:\\s+đồ\\s+h[oọ][aạ])?|render(?:\\s*3d)?|3d|2d|blender)(?:\\s+nữa)?", " ")
                 .replaceAll("(card|vga|gpu|chip|nhân)\\s+đồ\\s+h[oọ][aạ]|đồ\\s+h[oọ][aạ]\\s+(tích hợp|rời|onboard)", " ")
                 .replaceAll("(?:game|chơi)[^.!?]{0,20}đồ\\s+h[oọ][aạ]\\s+(cao|đẹp|nặng)", " ");
@@ -1444,22 +1453,22 @@ public class ChatService {
     /** Nhu cầu sáng tạo, tránh nhận tên linh kiện hoặc "game đồ họa cao" thành làm thiết kế. */
     private static boolean creatorUse(String raw) {
         String t = creatorText(raw);
-        return t.matches("(?s).*(dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|illustrator|lightroom|premiere|"
+        return t.matches("(?s).*(video editing|graphic design|design work|content creation|dựng video|edit video|render|đồ họa|đồ hoạ|thiết kế|photoshop|illustrator|lightroom|premiere|"
                 + "after effects|davinci|blender|sketchup|3ds max|cinema 4d).*");
     }
 
     /** Người dùng nói rõ máy mini / ITX / SFF (không phải "nhỏ gọn": đó là vỏ Micro-ATX) */
     private static final java.util.regex.Pattern MINI_ITX = java.util.regex.Pattern.compile(
-            "\\bitx\\b|\\bmini\\b|\\bsff\\b|siêu nhỏ|rất nhỏ", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\bitx\\b|\\bmini\\b|\\bsff\\b|very small|tiny case|siêu nhỏ|rất nhỏ", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private static final java.util.regex.Pattern RAM_ASKED = java.util.regex.Pattern.compile(
-            "\\bram\\s*(?:(?:lên|xuống|thành|còn|tối thiểu|ít nhất|là)\\s*)?(\\d+)\\s*gb|(\\d+)\\s*gb\\s*ram\\b",
+            "\\bram\\s*(?:(?:at least|minimum|to|of|lên|xuống|thành|còn|tối thiểu|ít nhất|là)\\s*)?(\\d+)\\s*gb|(\\d+)\\s*gb\\s*ram\\b",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern SSD_ASKED = java.util.regex.Pattern.compile(
-            "(?:ssd|ổ cứng|ổ)\\s*(?:(?:lên|xuống|thành|còn|tối thiểu|ít nhất|là)\\s*)?(\\d+)\\s*(gb|tb)",
+            "(?:ssd|storage|drive|ổ cứng|ổ)\\s*(?:(?:at least|minimum|to|of|lên|xuống|thành|còn|tối thiểu|ít nhất|là)\\s*)?(\\d+)\\s*(gb|tb)",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern SSD_BEFORE = java.util.regex.Pattern.compile(
-            "(\\d+)\\s*(gb|tb)\\s*(?:ssd|ổ cứng)",
+            "(\\d+)\\s*(gb|tb)\\s*(?:ssd|storage|drive|ổ cứng)",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern GPU_VRAM_ASKED = java.util.regex.Pattern.compile(
             "(?:card|gpu|vga|vram|rtx|gtx|radeon|rx|arc)(?:(?!\\b(?:ram|ssd|cpu)\\b)[^.!?]){0,35}\\b(6|8|10|12|16|20|24)\\s*g(?:b)?\\b|"
@@ -1504,22 +1513,22 @@ public class ChatService {
         for (String raw : userTexts) {
             if (raw == null) continue;
             if (creatorUse(raw)) { creator = true; creatorText = creatorText(raw); break; }
-            if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(chỉ|đổi sang|chuyển sang).*(học online|văn phòng|word|excel).*")) break;
+            if (raw.toLowerCase(java.util.Locale.ROOT).matches("(?s).*(only|switch to|chỉ|đổi sang|chuyển sang).*(study|office|học online|văn phòng|word|excel).*")) break;
         }
-        String gameUses = all.replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
-        boolean game = gameUses.matches(".*(game|chơi|stream).*");
+        String gameUses = all.replaceAll("(?:no|not|do not|don't)\\s+(?:play\\s+)?(?:games?|gaming|livestream|stream)", " ").replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
+        boolean game = gameUses.matches(".*(game|gaming|chơi|stream).*");
         for (String raw : userTexts) {
             if (raw == null) continue;
             String t = raw.toLowerCase(java.util.Locale.ROOT);
-            String positive = t.replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
-            if (positive.matches("(?s).*(game|chơi|stream).*")) { game = true; break; }
+            String positive = t.replaceAll("(?:no|not|do not|don't)\\s+(?:play\\s+)?(?:games?|gaming|livestream|stream)", " ").replaceAll("không\\s+(?:chơi\\s+)?(?:game|livestream|stream)(?:\\s+nữa)?", " ");
+            if (positive.matches("(?s).*(game|gaming|chơi|stream).*")) { game = true; break; }
             if (!positive.equals(t)) { game = false; break; }
         }
         // Câu trả lời mới về nặng/nhẹ ghi đè mức cũ, còn tin chỉ đổi RAM/hãng không làm mất tên game đã nói.
         for (String raw : userTexts) {
             if (raw == null) continue;
             String t = raw.toLowerCase(java.util.Locale.ROOT);
-            if (t.matches("(?s).*(game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) {
+            if (t.matches("(?s).*(light gaming|casual gaming|demanding gaming|heavy gaming|game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) {
                 gameUses = t; break;
             }
         }
@@ -1530,14 +1539,15 @@ public class ChatService {
                 || userTexts.stream().filter(Objects::nonNull).anyMatch(t -> t.matches("(?s).*\\bAI\\b.*"));
         boolean noGpu = noDiscreteGpu(userTexts);
         String latest = userTexts.isEmpty() || userTexts.getFirst() == null ? "" : userTexts.getFirst().toLowerCase(java.util.Locale.ROOT);
-        if (noGpu && latest.matches("(?s).*chỉ.*(học online|văn phòng|word|excel).*")) { game = false; ai = false; creator = false; }
+        if (noGpu && latest.matches("(?s).*(only|chỉ).*(study|office|học online|văn phòng|word|excel).*")) { game = false; ai = false; creator = false; }
         boolean heavy = creator || game || ai;
-        boolean light = all.matches(".*(học|văn phòng|word|excel|online|lướt web|xem phim|kế toán|teams|zoom|google meet|powerpoint|"
+        boolean light = all.matches(".*(study|student|school|office|accounting|web browsing|học|văn phòng|word|excel|online|lướt web|xem phim|kế toán|teams|zoom|google meet|powerpoint|"
                 + "giáo án|bài giảng|bảng tính|luận văn|tra cứu web|trình duyệt|bán hàng|hóa đơn|hoá đơn).*");
         boolean mini = false;
         for (String raw : userTexts) {
             if (raw == null) continue;
             String t = raw.toLowerCase(java.util.Locale.ROOT);
+            if (t.matches("(?s).*(?:no|not|do not want|don't want)[^.!?]{0,20}(mini|itx|sff).*")) break;
             if (t.matches("(?s).*không\\s+(cần|muốn|dùng)[^.!?]{0,20}(mini|itx|sff).*")) break;
             if (MINI_ITX.matcher(t).find()) { mini = true; break; }
         }
@@ -1562,8 +1572,8 @@ public class ChatService {
         // Game nhẹ / esports (Valorant, LMHT, CS2...): card 6GB đủ (ca thật itx 25tr: mức 8GB giữ RX 7600 7,8 triệu, máy Mini
         // ITX rẻ nhất 25,2 - 25,5 triệu vượt trần Phù hợp; RTX 3050 6GB rẻ hơn 2 - 3 triệu)
         // Có nhắc game nặng (AAA, đồ họa cao...) thì giữ sàn 8GB dù có tên game nhẹ (nhu cầu hỗn hợp)
-        boolean lightGame = gameUses.matches(".*(game nhẹ|chơi nhẹ|game online nhẹ|valorant|liên minh|lmht|league of legends|cs2|csgo|fifa|"
-                + "fo4|esport|game esports).*") && !gameUses.matches(".*(game nặng|aaa|đồ họa cao|cấu hình cao|cyberpunk|gta|elden|black myth|"
+        boolean lightGame = gameUses.matches(".*(light gaming|casual gaming|game nhẹ|chơi nhẹ|game online nhẹ|valorant|liên minh|lmht|league of legends|cs2|csgo|fifa|"
+                + "fo4|esport|game esports).*") && !gameUses.matches(".*(demanding gaming|heavy gaming|game nặng|aaa|đồ họa cao|cấu hình cao|cyberpunk|gta|elden|black myth|"
                 + "wukong|2k|4k|144hz|240hz|max setting|ultra).*");
         return new Needs(ram != null ? ram : heavy ? 16 : 8, ssd != null ? ssd : heavy ? 512 : 256,
                 noGpu ? null : requestedVram != null ? Integer.valueOf(Math.max(requestedVram, ai ? 12 : 0))
@@ -1591,7 +1601,7 @@ public class ChatService {
             details.remove(i.code());
         });
         log.info("Vượt trần: bỏ tản rời {}, dùng quạt kèm CPU \"{}\"", drop.stream().map(BuildCheckRequest.Item::code).toList(), cpu);
-        notes.add("Bỏ tản nhiệt mua thêm, dùng quạt tản đi kèm CPU (bản Box)");
+        notes.add("Removed the separate cooler; use the cooler included with the boxed CPU");
         return new Checked(new BuildCheckRequest(c.request().items().stream().filter(i -> !drop.contains(i)).toList()), c.result(),
                 details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
@@ -1648,14 +1658,14 @@ public class ChatService {
                     String ddr = "ram".equals(category) ? ProductRules.read("ram", now.title()).ramType() : null;
                     bestSpec = "ram".equals(category) ? target + "GB" + (ddr == null ? "" : " " + ddr) : "SSD " + label(target);
                     bestNote = ("ram".equals(category) ? "RAM " + have + "GB -> " + target + "GB" : "SSD " + label(have) + " -> " + label(target))
-                            + " (" + best.title() + ", rẻ hơn " + save + " đồng)";
+                            + " (" + best.title() + ", saving " + save + " VND)";
                 }
             }
             if (best == null) break;
             var d = details.computeIfAbsent(bestCode, k -> new LinkedHashMap<>());
             d.put("spec", bestSpec);
             d.remove("buy_qty");
-            d.put("downgrade_note", "Đã hạ xuống " + bestSpec + " để vừa ngân sách, vẫn đủ nhu cầu của bạn; sau này nâng cấp thêm được.");
+            d.put("downgrade_note", "Reduced to " + bestSpec + " to fit the budget while meeting your requirements; it can be upgraded later.");
             picks.put(bestCode, best);
             links.put(bestCode, CompletableFuture.completedFuture(best.url()));
             log.info("Vượt trần {}: hạ thông số {}", cap, bestNote);
@@ -1916,7 +1926,7 @@ public class ChatService {
         nd.remove("buy_qty");
         nd.remove("downgrade_note");
         nd.remove("reason");
-        log.info("Nâng {} ({}, {} đồng)", note, found.title(), found.priceVnd());
+        log.info("Upgrade {} ({}, {} VND)", note, found.title(), found.priceVnd());
         notes.add(note);
         var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
         return cap == null || total(out.request(), out.details(), out.picks()) <= cap ? out : null;
@@ -1992,7 +2002,7 @@ public class ChatService {
         var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
         long before = total(c.request(), c.details(), c.picks()), after = total(out.request(), out.details(), out.picks());
         if (after >= before) return c;
-        String note = "Nền DDR5 -> DDR4 (" + newBoard.title() + ", " + newRam.title() + ", rẻ hơn " + (before - after) + " đồng)";
+        String note = "DDR5 to DDR4 platform (" + newBoard.title() + ", " + newRam.title() + ", saving " + (before - after) + " VND)";
         log.info("Vượt trần {}: {}", cap, note);
         notes.add(note);
         return out;
@@ -2021,7 +2031,7 @@ public class ChatService {
         trial = normalized(withPagePrices(trial), Map.of());
         if (changes.isEmpty() || !productIssues(trial.picks()).isEmpty() || !requirementIssues(trial).isEmpty()
                 || total(trial.request(), trial.details(), trial.picks()) >= total(c.request(), c.details(), c.picks())) return c;
-        String note = "Đổi đồng thời CPU, bo và RAM từ AM5/DDR5 sang Intel LGA1700/DDR4 để giảm chi phí; giữ dung lượng RAM và GPU đã yêu cầu. Hiệu năng CPU có thể khác.";
+        String note = "Changed the CPU, motherboard and RAM from AM5/DDR5 to Intel LGA1700/DDR4 to reduce cost, keeping your requested RAM capacity and GPU. CPU performance may differ.";
         trial.details().get(cpu.code()).put("downgrade_note", note);
         trial.details().get(cpu.code()).remove("reason");
         notes.add(note);
@@ -2113,7 +2123,7 @@ public class ChatService {
         var gd = details.computeIfAbsent(item.code(), k -> new LinkedHashMap<>());
         gd.put("spec", coreQuery("gpu", found.title()));
         gd.remove("reason");
-        String note = "Đổi card sang " + found.title() + " (" + vram(found.title()) + "GB VRAM) để đúng hãng, model và dung lượng yêu cầu.";
+        String note = "Changed the GPU to " + found.title() + " (" + vram(found.title()) + "GB VRAM) to match the requested vendor, model and memory capacity.";
         log.info("Dưới mức nhu cầu: nâng {}", note);
         notes.add(note);
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
@@ -2164,7 +2174,7 @@ public class ChatService {
                         c.budgetVnd(), c.picks(), c.links(), c.siblings())), Map.of());
                 if (cap != null && total(trial.request(), trial.details(), trial.picks()) > cap) break;
                 c = trial;
-                notes.add("Bổ sung đủ " + sticks + " thanh RAM để đạt " + sticks * stickGb + "GB theo yêu cầu; kiểm lại số khe và giá bộ kit.");
+                notes.add("Added " + sticks + " RAM modules to reach " + sticks * stickGb + "GB as requested; confirm the slot count and kit price.");
                 break;
             }
         }
@@ -2221,7 +2231,7 @@ public class ChatService {
         picks.put(board.code(), found);
         links.put(board.code(), CompletableFuture.completedFuture(found.url()));
         details.computeIfAbsent(board.code(), k -> new LinkedHashMap<>()).put("spec", coreQuery("motherboard", found.title()));
-        String note = "Bo " + has + " -> bo " + want + " cho khớp RAM (" + found.title() + ")";
+        String note = "Motherboard " + has + " -> motherboard " + want + " to match the RAM (" + found.title() + ")";
         log.info("Sửa lệch DDR: {}", note);
         notes.add(note);
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
@@ -2240,18 +2250,18 @@ public class ChatService {
         if (q != null && showable(q, tierCap(q.budgetVnd(), "quality"))) {
             long tq = total(q.request(), q.details(), q.picks());
             if (tq < tb + TIER_GAP || signature(q.picks()).equals(signature(b.picks())) || !qualityImproves(b, q)) {
-                asks.add("Phương án Chất lượng (" + millions(tq) + ") không tốt hơn Phù hợp (" + millions(tb) + "): gọi lại propose_build "
-                        + "tier \"quality\" với linh kiện TỐT HƠN Phù hợp ở ít nhất một món quan trọng (card mạnh hơn, CPU mạnh hơn, RAM / SSD "
-                        + "lớn hơn hoặc nguồn tốt hơn), dùng phần tiền còn dư tới mức tối đa " + millions(tierCap(q.budgetVnd(), "quality"))
-                        + ", đủ mọi món.");
+                asks.add("The Upgraded option (" + millions(tq) + ") does not improve on Best fit (" + millions(tb) + "): call propose_build again "
+                        + "with tier quality and improve at least one key component over Best fit: GPU, CPU, RAM, SSD "
+                        + "or PSU. Use the remaining allowance up to " + millions(tierCap(q.budgetVnd(), "quality"))
+                        + " and include every required component.");
             }
         }
         var c = turn.tiers.get("cheap");
         if (c != null && showable(c, tierCap(c.budgetVnd(), "cheap"))) {
             long tc = total(c.request(), c.details(), c.picks());
             if (tc > tb - TIER_GAP || signature(c.picks()).equals(signature(b.picks()))) {
-                asks.add("Phương án Rẻ (" + millions(tc) + ") không rẻ hơn Phù hợp (" + millions(tb) + ") rõ rệt: gọi lại propose_build "
-                        + "tier \"cheap\" với thông số thấp hơn Phù hợp (card / CPU / RAM / SSD thấp hơn một bậc nhưng vẫn đủ nhu cầu), đủ mọi món.");
+                asks.add("The Budget option (" + millions(tc) + ") is not clearly cheaper than Best fit (" + millions(tb) + "): call propose_build again "
+                        + "with tier cheap, reducing a specification while still meeting the requirements and including every component.");
             }
         }
         return asks.isEmpty() ? null : String.join(" ", asks);
@@ -2345,8 +2355,8 @@ public class ChatService {
         picks.put(board.code(), found);
         links.put(board.code(), CompletableFuture.completedFuture(found.url()));
         details.computeIfAbsent(board.code(), key -> new LinkedHashMap<>()).remove("reason");
-        notes.add("Đã đổi bo mạch sang " + found.title() + " có " + ProductRules.memorySlots(found.title())
-                + " khe RAM để lắp đủ " + sticks + " thanh; bo trước chỉ có " + slots + " khe.");
+        notes.add("Changed the motherboard to " + found.title() + " with " + ProductRules.memorySlots(found.title())
+                + " RAM slots to fit " + sticks + " modules; the previous board had only " + slots + " khe.");
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
@@ -2355,29 +2365,29 @@ public class ChatService {
         var boardName = productTitles(c.picks()).get("motherboard");
         Integer slots = ProductRules.memorySlots(boardName);
         int sticks = c.request().items().stream().filter(i -> "ram".equals(categoryOf(i.code()))).mapToInt(BuildCheckRequest.Item::qty).sum();
-        if (slots != null && sticks > slots) issues.add("bo mạch chỉ có " + slots + " khe nhưng đang chọn " + sticks + " thanh RAM");
+        if (slots != null && sticks > slots) issues.add("the board has only " + slots + " slots but the build selects " + sticks + " RAM modules");
         boolean hasGpu = c.picks().keySet().stream().anyMatch(code -> "gpu".equals(categoryOf(code)));
         for (var i : c.request().items()) {
             var d = c.details().getOrDefault(i.code(), Map.of());
             var p = c.picks().get(i.code());
-            if (Boolean.TRUE.equals(d.get("need_gpu")) && !hasGpu) issues.add("thiếu card đồ họa rời theo nhu cầu");
-            if (Boolean.TRUE.equals(d.get("no_gpu")) && hasGpu) issues.add("người dùng yêu cầu không dùng card rời");
+            if (Boolean.TRUE.equals(d.get("need_gpu")) && !hasGpu) issues.add("a required dedicated GPU is missing");
+            if (Boolean.TRUE.equals(d.get("no_gpu")) && hasGpu) issues.add("the user requested no dedicated GPU");
             if (p == null || p.title() == null) continue;
             String kind = categoryOf(i.code());
-            if (Boolean.TRUE.equals(d.get("performance_cpu")) && entryCpu(p.title())) issues.add("CPU phổ thông quá thấp cho nhu cầu game / GPU đã chọn");
+            if (Boolean.TRUE.equals(d.get("performance_cpu")) && entryCpu(p.title())) issues.add("the entry-level CPU is below the requirement for the selected gaming workload or GPU");
             if ("gpu".equals(kind)) {
-                if (!cudaOk(c.details(), i.code(), p)) issues.add("card không đúng hãng hoặc model đã yêu cầu");
+                if (!cudaOk(c.details(), i.code(), p)) issues.add("the GPU does not match the requested vendor or model");
                 if (d.get("vram_min") instanceof Number min && (vram(p.title()) == null || vram(p.title()) < min.intValue())) {
-                    issues.add("card chưa đủ " + min.intValue() + "GB VRAM");
+                    issues.add("the GPU has less than " + min.intValue() + "GB VRAM");
                 }
             }
             if (d.get("capacity_min") instanceof Number min) {
                 Integer capacity = amount(kind, p.title());
                 if (capacity != null && "ram".equals(kind)) capacity = capacity * i.qty() / Objects.requireNonNullElse(kitSticks(p.title()), 1);
-                if (capacity == null || capacity < min.intValue() * 0.95) issues.add(partName(i.code()) + " chưa đủ " + min.intValue() + "GB");
+                if (capacity == null || capacity < min.intValue() * 0.95) issues.add(partName(i.code()) + " is below " + min.intValue() + "GB");
             }
             if ("ram".equals(kind) && d.get("user_ddr") != null && !d.get("user_ddr").equals(ProductRules.read("ram", p.title()).ramType())) {
-                issues.add("RAM không đúng loại " + d.get("user_ddr") + " đã yêu cầu");
+                issues.add("RAM does not use the requested type " + d.get("user_ddr") + " requested");
             }
         }
         return issues;
@@ -2400,7 +2410,7 @@ public class ChatService {
     private String notShownReason(Checked c, String tier, Long budget, Long minShown) {
         Long cap = budget == null ? null : tierCap(budget, tier);
         if (c != null && !requirementIssues(c).isEmpty()) {
-            return "chưa đáp ứng yêu cầu: " + String.join(", ", requirementIssues(c)) + ", nên app không hiển thị.";
+            return "requirements not met: " + String.join(", ", requirementIssues(c)) + ", so it is not shown.";
         }
         if (c != null && !c.picks().isEmpty()) {
             long t = total(c.request(), c.details(), c.picks());
@@ -2410,8 +2420,8 @@ public class ChatService {
             // Rẻ: cấu hình rẻ nhất vẫn vượt trần Rẻ (90% ngân sách) mà Phù hợp hiện được -> giá thị trường đã ở mức sàn, chỉ
             // đưa hai phương án (người dùng chọn 22/10/2026), giải thích bằng số thật
             if ("cheap".equals(tier) && minShown != null && shortOfMoney && noBuy.isEmpty() && fits && cap != null && t > cap) {
-                return "với giá tìm được, cấu hình đã thử cho phương án Rẻ là " + millions(t) + ", vượt mức tối đa "
-                        + millions(cap) + " (90% ngân sách). App chưa tìm được bản Rẻ đủ yêu cầu dưới mức này, nên không hiển thị phương án Rẻ.";
+                return "at the prices found, the attempted Budget build costs " + millions(t) + ", above the limit of "
+                        + millions(cap) + " (90% of your budget). No suitable Budget build was found below this limit, so that option is not shown.";
             }
             if (shortOfMoney && noBuy.isEmpty() && fits && productIssues(c.picks()).isEmpty() && cap != null && t > cap) {
                 // Ngân sách cần để phương án này vừa mức tối đa (Rẻ = 90% ngân sách, Chất lượng = ngân sách + 3 triệu)
@@ -2420,17 +2430,17 @@ public class ChatService {
                     case "quality" -> t - QUALITY_OVER;
                     default -> t;
                 };
-                return "với giá hiện tại, cấu hình đã thử cho phương án này (có link mua, lắp chung được) là " + millions(t)
-                        + ", vượt mức tối đa " + millions(cap) + " của phương án này. Ngân sách hiện tại chưa đủ cho phương án này; "
-                        + "nới lên khoảng " + millions(need) + " thì app hiện được.";
+                return "at current prices, the attempted compatible build with purchase links costs " + millions(t)
+                        + ", above the limit of " + millions(cap) + " for this option. Your current budget is insufficient; "
+                        + "raising it to around " + millions(need) + " would allow this option to be shown.";
             }
             if (!noBuy.isEmpty()) {
-                return "chưa tìm được link mua còn hàng cho " + noBuy.stream().map(this::partName).distinct().collect(Collectors.joining(", "))
-                        + (cap == null ? "" : " trong mức tối đa " + millions(cap)) + ", nên app không hiển thị.";
+                return "no in-stock purchase link was found for " + noBuy.stream().map(this::partName).distinct().collect(Collectors.joining(", "))
+                        + (cap == null ? "" : " within the limit of " + millions(cap)) + ", so it is not shown.";
             }
         }
-        return "chưa tìm được cấu hình lắp chung được, có link mua" + (cap == null ? "" : " trong mức tối đa " + millions(cap))
-                + ", nên app không hiển thị.";
+        return "no compatible build with purchase links was found" + (cap == null ? "" : " within the limit of " + millions(cap))
+                + ", so it is not shown.";
     }
 
     /** Đã có dữ liệu cửa hàng cho link mà không xác nhận còn hàng (null / false): MVP chưa mua được */
@@ -2457,16 +2467,16 @@ public class ChatService {
     }
 
     /** Các bước báo cho người dùng trong lúc chờ (trang tư vấn mất cả phút) */
-    static final String STAGE_READ = "Đang đọc nhu cầu của bạn…";
-    static final String STAGE_SEARCH = "Đang tìm giá ở các cửa hàng…";
-    static final String STAGE_PICK = "Đang chọn linh kiện cho ba phương án Rẻ, Phù hợp, Chất lượng…";
-    static final String STAGE_CHECK = "Đang kiểm tra các linh kiện lắp chung được không…";
-    static final String STAGE_WRITE = "Đã có phương án, đang viết lời giải thích…";
-    static final String STAGE_LINKS = "Sắp xong, đang so giá cùng sản phẩm ở các cửa hàng khác…";
+    static final String STAGE_READ = "Understanding your requirements…";
+    static final String STAGE_SEARCH = "Checking store prices…";
+    static final String STAGE_PICK = "Selecting components for Budget, Best fit and Upgraded…";
+    static final String STAGE_CHECK = "Checking component compatibility…";
+    static final String STAGE_WRITE = "Your options are ready; writing a short explanation…";
+    static final String STAGE_LINKS = "Comparing the same products across stores…";
 
     /** Câu dẫn khi AI lỗi ở vòng cuối nhưng phương án đã có */
-    static final String BUILDS_READY = "Mình đã chọn xong các phương án bên dưới. Bạn bấm vào từng option để xem chi tiết "
-            + "linh kiện, giá và link mua nhé. Phần giải thích chi tiết đang tạm lỗi, bạn có thể hỏi thêm ở ô bên dưới.";
+    static final String BUILDS_READY = "Your available options are shown below. Select an option to view "
+            + "components, prices and purchase links. The detailed explanation is temporarily unavailable; you can ask a follow-up below.";
 
     /** Hàng không nên đưa người mới tham khảo */
     private static final java.util.regex.Pattern JUNK =
@@ -2549,21 +2559,21 @@ public class ChatService {
     static String safeReason(String category, int quantity, String reason) {
         if (reason == null) return null;
         String lower = reason.toLowerCase(java.util.Locale.ROOT);
-        if (lower.matches("(?s).*(bảo hành|\\d+\\s*(nhân|cores?|khe|quạt)|mát|êm|bền|mượt|rẻ nhất|mạnh nhất|tốt nhất|lâu dài|fps).*")) return null;
-        if ("case".equals(category) && lower.contains("quạt")) return null;
+        if (lower.matches("(?s).*(warranty|bảo hành|\\d+\\s*(nhân|cores?|khe|slots?|quạt|fans?)|cooler|quiet|durable|smooth|cheapest|fastest|best|mát|êm|bền|mượt|rẻ nhất|mạnh nhất|tốt nhất|lâu dài|fps).*")) return null;
+        if ("case".equals(category) && (lower.contains("quạt") || lower.contains("fans"))) return null;
         if (!"ram".equals(category)) return reason;
-        if (quantity == 1 && (lower.contains("2 thanh") || lower.contains("hai thanh") || lower.contains("dual channel")
+        if (quantity == 1 && (lower.contains("two modules") || lower.contains("2 modules") || lower.contains("two sticks") || lower.contains("2 sticks") || lower.contains("2 thanh") || lower.contains("hai thanh") || lower.contains("dual channel")
                 || lower.contains("2 kênh") || lower.contains("hai kênh") || lower.contains("kênh đôi"))) return null;
-        if (quantity == 2 && (lower.contains("1 thanh") || lower.contains("một thanh"))) return null;
+        if (quantity == 2 && (lower.contains("one module") || lower.contains("1 module") || lower.contains("one stick") || lower.contains("1 stick") || lower.contains("1 thanh") || lower.contains("một thanh"))) return null;
         return reason;
     }
 
     private static final java.util.regex.Pattern TIER_MENTION = java.util.regex.Pattern.compile(
-            "\\*\\*\\s*(Rẻ|Phù hợp|Chất lượng)|(Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|(?:phương án|bản)\\s+[\"“]?(rẻ|phù hợp|chất lượng)",
+            "\\*\\*\\s*(Budget|Best fit|Upgraded|Rẻ|Phù hợp|Chất lượng)|(Budget|Best fit|Upgraded|Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|(?:option|build|phương án|bản)\\s+[\"“]?(budget|best fit|upgraded|rẻ|phù hợp|chất lượng)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
     /** Người dùng nhờ tra cứu / kiểm tra lại (vd "kiểm tra lại cửa hàng còn hàng giúp tôi"): vẫn cho dùng công cụ */
     private static final java.util.regex.Pattern LOOKUP_ASK = java.util.regex.Pattern.compile(
-            "kiểm tra|tìm (lại|thêm|giúp)|xem lại|tra lại|check|xác minh", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "look up|search|verify|recheck|kiểm tra|tìm (lại|thêm|giúp)|xem lại|tra lại|check|xác minh", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /** Người dùng hỏi lý do ("sao không có...", "vì sao", "tại sao", "why") */
     private static final java.util.regex.Pattern WHY_ASK = java.util.regex.Pattern.compile(
@@ -2571,9 +2581,9 @@ public class ChatService {
 
     /** Người dùng yêu cầu đổi cấu hình đã có (đổi / thay / chuyển / nâng / hạ / bỏ / thêm món, làm lại phương án) */
     private static final java.util.regex.Pattern CHANGE_ASK = java.util.regex.Pattern.compile(
-            "\\b(đổi|thay|chuyển|nâng|hạ|bỏ|thêm|chọn lại|làm lại|dựng lại)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\b(change|replace|swap|switch|upgrade|downgrade|remove|add|rebuild|đổi|thay|chuyển|nâng|hạ|bỏ|thêm|chọn lại|làm lại|dựng lại)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern MONEY_MENTION = java.util.regex.Pattern.compile(
-            "\\d+(?:[.,]\\d+)?\\s*(triệu|tr\\b)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\d+(?:[.,]\\d+)?\\s*(million|m\\b|triệu|tr\\b)", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern DONG_MENTION = java.util.regex.Pattern.compile(
             "\\d[\\d.,]*\\s*(?:đ(?:ồng)?|vnd)(?!\\p{L})", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
@@ -2599,12 +2609,12 @@ public class ChatService {
         for (String block : reply.split("\\n\\s*\\n")) {
             // Bỏ cả đoạn mô tả tier cũ, không để lại danh sách linh kiện sau khi chỉ xoá tiêu đề.
             boolean stale = TIER_MENTION.matcher(block).find() || block.toLowerCase(java.util.Locale.ROOT)
-                    .matches("(?s).*(bảo hành|\\d+\\s*khe\\s*(ram|m\\.2|ssd)).*");
+                    .matches("(?s).*(warranty|bảo hành|\\d+\\s*(?:slots?|khe)\\s*(ram|m\\.2|ssd)).*");
             if (!stale) paragraphs.add(block);
             else {
                 String first = block.lines().findFirst().orElse("");
                 if (!TIER_MENTION.matcher(first).find() && first.toLowerCase(java.util.Locale.ROOT)
-                        .matches(".*(mình hiểu|bạn cần|nhu cầu|bạn muốn).*")) paragraphs.add(first);
+                        .matches(".*(i understand|you need|requirements|you want|mình hiểu|bạn cần|nhu cầu|bạn muốn).*")) paragraphs.add(first);
             }
         }
         reply = String.join("\n\n", paragraphs);
@@ -2617,13 +2627,13 @@ public class ChatService {
         }));
         List<String> kept = new ArrayList<>();
         for (String line : reply.split("\n")) {
-            if (line.strip().matches("(?i)(bạn (có )?muốn|mình có thể).*\\?")) continue;
+            if (line.strip().matches("(?i)(would you like|do you want|i can|bạn (có )?muốn|mình có thể).*\\?")) continue;
             String lower = line.toLowerCase(java.util.Locale.ROOT);
-            if (cards.size() != 3 && (lower.contains("ba phương án") || lower.contains("cả ba"))) continue;
+            if (cards.size() != 3 && (lower.contains("three options") || lower.contains("all three"))) continue;
             var amountsInLine = MONEY_MENTION.matcher(line).results()
                     .map(m -> Math.round(Double.parseDouble(m.group().replaceAll("[^0-9.,]", "").replace(',', '.')) * 1_000_000))
                     .toList();
-            boolean budgetSummary = (lower.contains("bạn cần") || lower.contains("bạn muốn") || lower.contains("mình hiểu") || lower.contains("nhu cầu"))
+            boolean budgetSummary = (lower.contains("you need") || lower.contains("you want") || lower.contains("i understand") || lower.contains("requirements"))
                     && !amountsInLine.isEmpty()
                     && amountsInLine.stream().allMatch(a -> cards.stream().anyMatch(c -> a.equals(c.budgetVnd())));
             boolean stray = TIER_MENTION.matcher(line).find() || MONEY_MENTION.matcher(line).find() && !budgetSummary
@@ -2635,33 +2645,33 @@ public class ChatService {
             if (!stray) kept.add(line);
         }
         String prose = String.join("\n", kept).replaceAll("\n{3,}", "\n\n").strip();
-        if (prose.isEmpty()) prose = "Mình đã chọn các phương án dưới đây theo nhu cầu của bạn.";
+        if (prose.isEmpty()) prose = "I selected the options below to meet your requirements.";
         var main = recommendedCard(cards, preferCheap, cudaValue);
         StringBuilder sb = new StringBuilder(prose).append("\n\n");
         if ("cheap".equals(main.tier()) && cards.stream().anyMatch(c -> "balanced".equals(c.tier()))) {
             var balanced = cards.stream().filter(c -> "balanced".equals(c.tier())).findFirst().orElseThrow();
             boolean gpuSaving = cudaValue && !preferCheap && recommendedCard(cards) != main;
             sb.append(gpuSaving
-                    ? "Với tác vụ AI trên GPU, mình ưu tiên bản Rẻ: giữ cùng chip GPU và VRAM, không giảm tổng RAM/SSD, tiết kiệm "
+                    ? "For GPU-based AI work, I recommend Budget: it keeps the GPU chip and VRAM, without reducing total RAM or SSD capacity, saving "
                     : recommendedCard(cards) == main
-                    ? "Mình ưu tiên bản Rẻ: cùng model CPU, chip GPU và dung lượng RAM với Phù hợp, tiết kiệm "
-                    : "Mình ưu tiên bản Rẻ vì bạn muốn tiết kiệm nhất: bản này đã đủ yêu cầu và rẻ hơn Phù hợp ")
+                    ? "I recommend Budget: it keeps the CPU model, GPU chip and RAM capacity of Best fit, saving "
+                    : "I recommend Budget because you prioritised savings: it meets the requirements and costs less than Best fit by ")
                     .append(millions(cardTotal(balanced) - cardTotal(main))).append(". ")
-                    .append(gpuSaving ? "CPU, nền RAM và bảo hành từng món có thể khác; xem chi tiết từng thẻ. Chưa có benchmark để khẳng định bản đắt hơn chạy mô hình nhanh hơn.\n\n"
-                            : "Các linh kiện khác được liệt kê ở từng thẻ.\n\n");
+                    .append(gpuSaving ? "CPU, memory platform and warranty can differ; review each card. There is no benchmark to show that the more expensive build runs your models faster.\n\n"
+                            : "The other components are listed in each card.\n\n");
         }
         for (var c : cards) {
             long sum = c.items().stream().mapToLong(l -> l.priceMaxVnd() != null ? l.priceMaxVnd() : l.priceMinVnd() != null ? l.priceMinVnd() : 0).sum();
             sb.append("- **").append(TIER_NAME.getOrDefault(c.tier(), c.tier())).append(": ")
-                    .append(String.format(java.util.Locale.ROOT, "%.2f", sum / 1e6).replace('.', ',')).append(" triệu**");
+                    .append(String.format(java.util.Locale.ROOT, "%.2f", sum / 1e6)).append(" million VND**");
             boolean overBudget = c.budgetVnd() != null && sum > c.budgetVnd();
-            if (overBudget) sb.append(" - tham khảo, vượt ngân sách ").append(millions(sum - c.budgetVnd()));
-            if (c == main && !overBudget) sb.append(" - gợi ý chính");
+            if (overBudget) sb.append(" - reference option, over budget by ").append(millions(sum - c.budgetVnd()));
+            if (c == main && !overBudget) sb.append(" - recommended");
             sb.append("\n");
         }
         long unchecked = cards.stream().flatMap(c -> c.items().stream()).filter(l -> !Boolean.TRUE.equals(l.priceChecked())).count();
-        if (unchecked > 0) sb.append("\nCó giá tham khảo chưa xác minh trên trang bán; hãy kiểm tra lại giá và tồn kho trước khi đặt.\n");
-        sb.append("\nChọn một phương án để xem linh kiện và hướng dẫn lắp.");
+        if (unchecked > 0) sb.append("\nSome reference prices have not been verified on product pages. Confirm prices and stock before ordering.\n");
+        sb.append("\nSelect an option to view its components, prices, purchase links and assembly guide.");
         if (!notes.isEmpty()) sb.append("\n\n").append(String.join("\n", notes));
         return sb.toString();
     }
@@ -2672,11 +2682,11 @@ public class ChatService {
         var names = TIER_NAME.values().stream().filter(n -> asked.contains(n.toLowerCase(java.util.Locale.ROOT))).toList();
         for (var m : messages.reversed()) {
             if (!"assistant".equals(m.role())) continue;
-            var notes = m.content().lines().filter(l -> l.startsWith("Phương án ") && l.toLowerCase(java.util.Locale.ROOT).contains("app"))
-                    .filter(l -> names.isEmpty() || names.stream().anyMatch(n -> l.startsWith("Phương án " + n)))
+            var notes = m.content().lines().filter(l -> l.startsWith("Option "))
+                    .filter(l -> names.isEmpty() || names.stream().anyMatch(n -> l.startsWith("Option " + n)))
                     .toList();
-            if (!notes.isEmpty()) return "Theo kết quả tìm ở lượt trước:\n\n" + String.join("\n\n", notes)
-                    + "\n\nCác số trên là kết quả đã tìm được lúc đó; cần tra cứu lại nếu muốn cập nhật giá và hàng.";
+            if (!notes.isEmpty()) return "Based on the previous search:\n\n" + String.join("\n\n", notes)
+                    + "\n\nThese figures reflect that search. Search again to refresh prices and stock.";
         }
         return null;
     }
@@ -2690,12 +2700,12 @@ public class ChatService {
         Integer sticks = "ram".equals(line.category()) ? kitSticks(line.productName()) : null;
         if (sticks != null && sticks > 1) {
             return line.quantity() % sticks == 0
-                    ? " (mua " + line.quantity() / sticks + " bộ, " + line.quantity() + " thanh)"
-                    : " (" + line.quantity() + " thanh; cần xác nhận số bộ)";
+                    ? " (buy " + line.quantity() / sticks + " kits, " + line.quantity() + " modules)"
+                    : " (" + line.quantity() + " modules; confirm the kit count)";
         }
         if ("fans".equals(line.category())) {
             int perPack = fanPackSize(line.productName());
-            return " (mua " + (line.quantity() + perPack - 1) / perPack + (perPack > 1 ? " bộ, " : " chiếc, ") + line.quantity() + " quạt sử dụng)";
+            return " (buy " + (line.quantity() + perPack - 1) / perPack + (perPack > 1 ? " kits, " : " items, ") + line.quantity() + " fans used)";
         }
         return " x" + line.quantity();
     }
@@ -2761,41 +2771,41 @@ public class ChatService {
         for (String raw : newestFirst) {
             if (raw == null) continue;
             String t = raw.toLowerCase(java.util.Locale.ROOT);
+            if (t.matches("(?s).*(?:do not|don't|not)\\s+(?:(?:need|want|require)\\s+)?(?:the\\s+)?(?:cheapest|most affordable).*")) return false;
             if (t.matches("(?s).*không\\s+(cần|phải)\\s+(?:chọn\\s+)?(?:bản\\s+)?(rẻ nhất|tiết kiệm nhất).*")) return false;
-            if (t.matches("(?s).*(rẻ nhất|tiết kiệm nhất|càng rẻ càng tốt).*")) return true;
+            if (t.matches("(?s).*(cheapest|most affordable|as cheap as possible|rẻ nhất|tiết kiệm nhất|càng rẻ càng tốt).*")) return true;
         }
         return false;
     }
 
     static String adviceIntro(Needs needs, Long budget) {
-        String purpose = needs.cuda() ? "máy để chạy tác vụ AI" : needs.creator()
-                ? needs.game() ? "máy chơi game và thiết kế đồ họa / dựng nội dung" : "máy thiết kế đồ họa / dựng nội dung" : needs.office() ? "máy học tập / văn phòng"
-                : needs.vramMin() != null ? "máy chơi game" : "máy để bàn";
-        String money = budget == null ? "" : ", ngân sách " + java.math.BigDecimal.valueOf(budget, 6).stripTrailingZeros()
-                .toPlainString().replace('.', ',') + " triệu";
+        String purpose = needs.cuda() ? "a PC for AI workloads" : needs.creator()
+                ? needs.game() ? "a PC for gaming and creative work" : "a PC for design and content creation" : needs.office() ? "a PC for study and office work"
+                : needs.vramMin() != null ? "a gaming PC" : "a desktop PC";
+        String money = budget == null ? "" : ", with a budget of " + java.math.BigDecimal.valueOf(budget, 6).stripTrailingZeros()
+                .toPlainString() + " million VND";
         String vendor = needs.office() && needs.vramMin() == null ? null : needs.allowedVendor();
-        return "Bạn cần " + purpose + (needs.miniItx() ? " kiểu Mini-ITX" : "") + money
+        return "You need " + purpose + (needs.miniItx() ? " in a Mini-ITX case" : "") + money
                 + (vendor == null ? "" : ", card " + ("intel".equals(vendor) ? "Intel Arc" : vendor.toUpperCase(java.util.Locale.ROOT))) + ".";
     }
 
     /** Chỉ giải thích bằng thông số của thẻ được chọn; lời AI tự đoán BIOS, số khe và tuổi thọ không thành dữ kiện. */
     static String adviceExplanation(Needs needs, BuildCard card) {
         var gpu = card.items().stream().filter(l -> "gpu".equals(l.category())).findFirst().orElse(null);
-        String text = needs.cuda() && gpu != null
-                ? "Ưu tiên GPU NVIDIA " + vram(gpu.productName()) + "GB VRAM cho CUDA; khả năng chạy model tùy phần mềm và bộ nhớ."
-                : needs.creator() && gpu != null ? "Ưu tiên card rời cho tác vụ đồ họa; hiệu quả tùy phần mềm và dự án."
-                : gpu != null ? "Ưu tiên card rời cho game; FPS tùy độ phân giải và thiết lập."
-                : needs.creator() ? "Theo yêu cầu, dùng GPU tích hợp; cần kiểm tra phần mềm và driver hỗ trợ."
-                : "Dùng đồ họa tích hợp để tiết kiệm cho học tập và văn phòng.";
-        return text;
+        return needs.cuda() && gpu != null
+                ? "Prioritise an NVIDIA GPU with " + vram(gpu.productName()) + "GB VRAM for CUDA; model support depends on software and memory."
+                : needs.creator() && gpu != null ? "Prioritise a dedicated GPU for creative work; results depend on the software and project."
+                : gpu != null ? "Prioritise a dedicated GPU for gaming; FPS depends on resolution and settings."
+                : needs.creator() ? "As requested, use integrated graphics; check software and driver support."
+                : "Use integrated graphics to save on study and office work.";
     }
 
     /** Tên phương án hiện cho người dùng */
-    private static final Map<String, String> TIER_NAME = Map.of("cheap", "Rẻ", "balanced", "Phù hợp", "quality", "Chất lượng");
+    private static final Map<String, String> TIER_NAME = Map.of("cheap", "Budget", "balanced", "Best fit", "quality", "Upgraded");
 
     /** 43000000 -> "43 triệu", 10800000 -> "10,8 triệu" */
     static String millions(long vnd) {
-        return java.math.BigDecimal.valueOf(vnd, 6).stripTrailingZeros().toPlainString().replace('.', ',') + " triệu";
+        return java.math.BigDecimal.valueOf(vnd, 6).stripTrailingZeros().toPlainString() + " million VND";
     }
 
     /** Điền spec / reason còn trống của từng món từ tier khác có cùng món (khoá "mã|tên sản phẩm") */
@@ -2841,8 +2851,8 @@ public class ChatService {
         if (!Boolean.TRUE.equals(ProductRules.hasIgpu(cpu))) return r;
         var errors = r.errors().stream().filter(i -> !i.rule().equals("required.gpu")).toList();
         var warnings = new ArrayList<>(r.warnings());
-        warnings.add(new Issue("cpu.igpu", "Không có card rời: máy dùng đồ họa tích hợp của CPU \"" + cpu
-                + "\". Đủ cho học, văn phòng, xem phim; chơi game nặng thì cần thêm card."));
+        warnings.add(new Issue("cpu.igpu", "No dedicated GPU: the build uses integrated graphics in the CPU \"" + cpu
+                + "\". Suitable for study, office work and media; demanding games may need a dedicated GPU."));
         return new CompatibilityResponse(errors.isEmpty(), errors, warnings);
     }
 
@@ -2861,9 +2871,9 @@ public class ChatService {
             }
         });
         if (!hasGpu) return "";
-        return " CPU \"" + cpu + "\" không có đồ họa tích hợp nên phải mua card rời. Nếu người dùng không chơi game hay làm "
-                + "đồ họa nặng (học, văn phòng, xem phim): tìm CPU cùng đời CÓ đồ họa tích hợp (vd \"Core i3 12100\", "
-                + "\"Core i5 12400\" không đuôi F, Ryzen 5 5600G / 8600G), bỏ dòng card đồ họa, rồi gọi lại propose_build.";
+        return " CPU \"" + cpu + "\" has no integrated graphics and needs a dedicated GPU. For study, office or media use without demanding "
+                + "graphics, find a same-generation CPU WITH integrated graphics, such as Core i3 12100, "
+                + "Core i5 12400 without F, Ryzen 5 5600G or 8600G. Remove the dedicated GPU and call propose_build again.";
     }
 
     /** Loại linh kiện trong danh mục -> loại PriceEngine.kind nhận ra từ tên sản phẩm */
@@ -3345,7 +3355,7 @@ public class ChatService {
                     .sorted(Comparator.comparing((ProductSearch.Product s) -> save.applyAsLong(s) < need)
                             .thenComparingLong(s -> save.applyAsLong(s) >= need ? save.applyAsLong(s) : -save.applyAsLong(s)))
                     .limit(4)
-                    .map(s -> ids.get(s) + ": " + s.title() + " (" + s.priceVnd() + ", rẻ hơn " + save.applyAsLong(s) + ")")
+                    .map(s -> ids.get(s) + ": " + s.title() + " (" + s.priceVnd() + ", saving " + save.applyAsLong(s) + ")")
                     .toList();
             if (!list.isEmpty()) out.put(code, list);
         });
@@ -3384,7 +3394,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern USER_STICKS = java.util.regex.Pattern.compile(
-            "(\\d)\\s*x\\s*(\\d+)\\s*gb|(\\d)\\s*thanh(?:\\s*ram)?\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*[,(]?\\s*(\\d)\\s*thanh",
+            "(\\d)\\s*x\\s*(\\d+)\\s*gb|(\\d)\\s*(?:thanh|sticks?|modules?)(?:\\s*(?:of|ram))?\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*[,(]?\\s*(\\d)\\s*(?:thanh|sticks?|modules?)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
@@ -3463,8 +3473,9 @@ public class ChatService {
                 int perPack = fanPackSize(p.title());
                 int packs = Math.max(1, (i.qty() + perPack - 1) / perPack);
                 d.put("buy_qty", packs);
-                d.put("spec", i.qty() + " quạt sử dụng, mua " + packs + (perPack > 1 ? " bộ (" + perPack + " quạt/bộ)" : " quạt")
-                        + (packs * perPack > i.qty() ? ", dư " + (packs * perPack - i.qty()) + " quạt" : ""));
+                d.put("spec", i.qty() + (i.qty() == 1 ? " fan used, buy " : " fans used, buy ") + packs
+                        + (perPack > 1 ? (packs == 1 ? " pack (" : " packs (") + perPack + " fans per pack)" : packs == 1 ? " fan" : " fans")
+                        + (packs * perPack > i.qty() ? ", spare " + (packs * perPack - i.qty()) + " fans" : ""));
                 items.add(i);
                 continue;
             }
@@ -3488,7 +3499,7 @@ public class ChatService {
                 d.put("buy_qty", packs);
                 String ddr = ProductRules.read("ram", p.title()).ramType();
                 if (stickGb != null) d.put("spec", sticks + "x" + stickGb + "GB" + (ddr == null ? "" : " " + ddr)
-                        + (perPack > 1 ? (packs > 1 ? ", " + packs + " bộ kit" : ", bộ kit") : ""));
+                        + (perPack > 1 ? (packs > 1 ? ", " + packs + " RAM kits" : ", kit") : ""));
                 items.add(new BuildCheckRequest.Item(i.code(), sticks));
                 continue;
             }
@@ -3641,7 +3652,7 @@ public class ChatService {
         String tier = TIERS.contains(String.valueOf(input.get("tier"))) ? String.valueOf(input.get("tier")) : "balanced";
         Object raw = input.getOrDefault("items", List.of());
         if (!(raw instanceof List<?> rows) || rows.stream().anyMatch(row -> !(row instanceof Map<?, ?>))) {
-            throw new IllegalArgumentException("items phải là mảng các object linh kiện có code, không phải chuỗi. Gửi lại propose_build đúng schema.");
+            throw new IllegalArgumentException("items must be an array of component objects with a code, not strings. Resubmit propose_build using the correct schema.");
         }
         var items = new ArrayList<Map<String, Object>>((List<Map<String, Object>>) raw);
         var before = turn.lastItems.get(tier);
@@ -4287,7 +4298,7 @@ public class ChatService {
             var found = bestLinked(list, null, 8);
             log.info("Thử chip {} cho dòng {} (thay {}): {} kết quả, {} qua lọc (VRAM >= {}, giá <= {}), loại {}, {}", other, code, chip, pool.size(),
                     list.size(), floor, maxPrice == Long.MAX_VALUE ? "-" : maxPrice, otherChips.isEmpty() ? rejected : rejected + " " + otherChips,
-                    found == null ? "không có link" : rank(found.url()) == 3 ? "có link còn hàng" : "link chưa rõ còn hàng");
+                    found == null ? "no purchase link" : rank(found.url()) == 3 ? "có link còn hàng" : "link chưa rõ còn hàng");
             if (found != null && rank(found.url()) == 3) return found;
         }
         if (tried == 0) log.info("Dòng {}: không có chip nào để thử thay {} (hãng {}, nguồn đủ) trong {}", code, chip, vendor == null ? "bất kỳ" : vendor, chips);
@@ -4370,13 +4381,13 @@ public class ChatService {
         boolean relaxedVram = vram(best.title()) < floor;
         if (relaxedVram) d.put("vram_min", 6);
         d.put("downgrade_note", relaxedVram
-                ? "Card " + chipQuery(gpuChip(best.title())).substring(4) + " chỉ có 6GB VRAM, dưới mức khuyến nghị 8GB cho game; game nặng có thể cần giảm thiết lập để vừa ngân sách."
-                : "Đã đổi từ " + chipQuery(chip).substring(4) + " sang " + chipQuery(gpuChip(best.title())).substring(4)
-                        + (GPU_RANK.containsKey(chip) ? "; hiệu năng GPU thấp hơn, giữ " : "; giữ ")
-                        + vram(best.title()) + "GB VRAM và giảm chi phí để vừa ngân sách."
-                        + (GPU_RANK.containsKey(chip) ? "" : " Hiệu năng AI có thể khác; chưa có benchmark đối chiếu hai card."));
+                ? "Card " + chipQuery(gpuChip(best.title())).substring(4) + " has only 6GB VRAM, below the 8GB gaming target. Demanding games may need lower settings to stay within budget."
+                : "Changed from " + chipQuery(chip).substring(4) + " to " + chipQuery(gpuChip(best.title())).substring(4)
+                        + (GPU_RANK.containsKey(chip) ? "; GPU performance is lower, keeping " : "; keeping ")
+                        + vram(best.title()) + "GB VRAM and reducing cost to fit the budget."
+                        + (GPU_RANK.containsKey(chip) ? "" : " AI performance may differ; no comparative benchmark is available."));
         String note = "Card " + chipQuery(chip).substring(4) + " -> " + chipQuery(gpuChip(best.title())).substring(4) + " (" + best.title()
-                + ", rẻ hơn " + (was - best.priceVnd()) + " đồng)" + (relaxedVram ? "; 6GB VRAM dưới mức khuyến nghị 8GB cho game" : "");
+                + ", saving " + (was - best.priceVnd()) + " VND)" + (relaxedVram ? "; 6GB VRAM is below the 8GB gaming target" : "");
         log.info("Vượt trần {}: hạ card {}", cap, note);
         notes.add(note);
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
@@ -4496,7 +4507,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern BUDGET = java.util.regex.Pattern.compile(
-            "\\d+([.,]\\d+)?\\s*(triệu|tr\\b|củ|m\\b)|\\d{1,3}([.,]\\d{3}){2,}", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\d+([.,]\\d+)?\\s*(million|triệu|tr\\b|củ|m\\b)|\\d{1,3}([.,]\\d{3}){2,}", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /** Câu của người dùng có nói ngân sách (vd "12 triệu", "25tr", "40.000.000") */
     static boolean hasBudget(String text) {
@@ -4504,9 +4515,9 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern MONEY = java.util.regex.Pattern.compile(
-            "(\\d+(?:[.,]\\d+)?)\\s*(?:triệu|tr\\b|củ|m\\b)|(\\d{1,3}(?:[.,]\\d{3}){2,})", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d+(?:[.,]\\d+)?)\\s*(?:million|triệu|tr\\b|củ|m\\b)|(\\d{1,3}(?:[.,]\\d{3}){2,})", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern BUDGET_WORD = java.util.regex.Pattern.compile(
-            "(ngân sách|budget|tầm|khoảng|dưới|tối đa|trong|mức|có)\\s*:?\\s*$", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(budget(?: of)?|around|about|under|maximum|up to|have|ngân sách|tầm|khoảng|dưới|tối đa|trong|mức|có)\\s*:?\\s*$", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
      * Các khoản tiền có thể là ngân sách trong lời người dùng (tin mới nhất trước). Trong một tin: số đứng sau "ngân
@@ -4739,8 +4750,8 @@ public class ChatService {
                             else if (passed.size() < 6) passed.add(c.title());
                             // Chẩn đoán "vượt trần": món thay đúng cỡ mẫu 3D mà bị loại vì tiền (ghi tiền thêm / phần dư / giá dòng cũ)
                             if ("vượt trần".equals(why) && overSamples.size() < 3 && fitsCode(code, c.title()))
-                                overSamples.add(c.title() + " " + c.priceVnd() + " (thêm " + extra.applyAsLong(c) + " / dư " + room
-                                        + ", dòng cũ " + was[1] + ", sl " + qty + ")");
+                                overSamples.add(c.title() + " " + c.priceVnd() + " (add " + extra.applyAsLong(c) + " / spare " + room
+                                        + ", previous item " + was[1] + ", sl " + qty + ")");
                         });
                     }
                     best = bestLinked(fit.apply(raw), null, 8);
@@ -4902,22 +4913,22 @@ public class ChatService {
     /** Danh mục linh kiện, máy người dùng đang xem và danh sách máy có sẵn, gắn vào cuối system prompt */
     private String context(String buildCode) {
         // Đưa sẵn danh mục (khoảng 25 món) để trợ lý khỏi mất một lượt gọi list_components, trả lời nhanh hơn
-        StringBuilder sb = new StringBuilder("Danh mục linh kiện của app (JSON):\n")
+        StringBuilder sb = new StringBuilder("App component catalogue (JSON):\n")
                 .append(json.writeValueAsString(componentService.findAll(null).stream().map(ChatService::brief).toList()))
-                .append("\n\nCác máy có sẵn trong app (mã: tên, mô tả):\n");
+                .append("\n\nAvailable preset builds (code: name, description):\n");
         pcBuildService.findPresets().forEach(b ->
                 sb.append("- ").append(b.code()).append(": ").append(b.name()).append(", ").append(b.tagline()).append('\n'));
         String fixed = modelMatch.presetParts();
-        if (!fixed.isEmpty()) sb.append("\nMón đi kèm từng vỏ (mô hình 3D và hướng dẫn lắp dựng theo đúng các món này):\n").append(fixed);
+        if (!fixed.isEmpty()) sb.append("\nComponents matched to each case's 3D model and assembly guide:\n").append(fixed);
         if (buildCode != null && !buildCode.isBlank()) {
             try {
                 PcBuildResponse b = pcBuildService.findByCode(buildCode);
-                sb.append("\nNgười dùng đang xem máy \"").append(b.name()).append("\" (mã ").append(b.code())
-                        .append(") trên màn hình 3D. Linh kiện: ")
+                sb.append("\nThe user is viewing \"").append(b.name()).append("\" (code ").append(b.code())
+                        .append(") in the 3D viewer. Components: ")
                         .append(b.items().stream()
                                 .map(i -> i.quantity() + " × " + i.component().name() + " [" + i.component().code() + "]")
                                 .collect(Collectors.joining(", ")))
-                        .append(".\nKhi người dùng nói \"máy này\" là nói về máy đó.\n");
+                        .append(".\nReferences to this PC mean this build.\n");
             } catch (ResourceNotFoundException ignored) {
                 // Máy chưa có trong DB: trả lời chung, không kèm ngữ cảnh
             }
@@ -5098,7 +5109,7 @@ public class ChatService {
                     if (turn.advice && search.enabled()) {
                         var before = checked.request();
                         checked = finalizeTier(checked, tier, capNow, aiTitles, turn.needs, downgrades);
-                        // Compare other stores only after the primary builds are final.
+                        // Compare other stores in respond(), after primary searches and tier repairs have finished.
                         if (!checked.request().equals(before)) {
                             var r = withoutFalseGpuError(matched(compatibilityService.check(checked.request()), checked.request(), turn), checked.picks());
                             checked = new Checked(checked.request(), r, checked.details(), checked.summary(), checked.budgetVnd(),
@@ -5139,21 +5150,21 @@ public class ChatService {
                     if (!productWarnings.isEmpty()) saved.put("product_warnings", productWarnings);
                     if (!fitSwaps.isEmpty()) {
                         saved.put("budget_swaps", fitSwaps);
-                        saved.put("budget_note", "App đã đổi các món trong budget_swaps sang hàng cùng thông số rẻ hơn để vừa ngân "
-                                + "sách; tổng ở trên đã tính giá mới. Nhắc tới món đó thì dùng đúng tên và giá mới.");
+                        saved.put("budget_note", "The app replaced items in budget_swaps with cheaper products of the same specifications to fit the "
+                                + "budget. The total already uses the new prices. Refer only to the updated names and prices.");
                     }
                     if (!cheapSwaps.isEmpty()) {
                         saved.put("cheap_swaps", cheapSwaps);
-                        saved.put("cheap_note", "App đã đổi các món trong cheap_swaps sang hàng rẻ hơn cùng thông số; tổng ở trên "
-                                + "đã tính giá mới. Nhắc tới món đó thì dùng đúng tên và giá mới.");
+                        saved.put("cheap_note", "The app replaced items in cheap_swaps with cheaper products of the same specifications. The total "
+                                + "already uses the new prices. Refer only to the updated names and prices.");
                     }
                     saved.put("total_min_vnd", totalMin);
                     saved.put("total_max_vnd", totalMax);
                     if (!downgrades.isEmpty()) {
                         saved.put("downgrades", downgrades);
-                        saved.put("downgrade_note", "Để vừa mức tối đa, app đã hạ thông số trong downgrades (vẫn đủ nhu cầu tối thiểu). "
-                                + "Nói rõ đánh đổi trong câu trả lời, vd RAM 8GB đủ cho Word, Excel, học online; mở nhiều tab hay chơi "
-                                + "game thì nên nâng lên 16GB sau.");
+                        saved.put("downgrade_note", "To fit the limit, the app reduced specifications listed in downgrades while retaining minimum requirements. "
+                                + "Explain the trade-off briefly: for example, 8GB RAM suits Word, Excel and online classes, while many tabs or "
+                                + "games may benefit from a later upgrade to 16GB.");
                     }
                     // Bản cuối app sẽ hiện (sau khi đổi link, đọc giá trên trang): trợ lý tả đúng các món này
                     if (turn.advice && search.enabled()) {
@@ -5174,10 +5185,10 @@ public class ChatService {
                         }
                         saved.put("final_items", finalItems);
                     }
-                    saved.put("note", !result.compatible() ? "Cấu hình còn lỗi: đổi linh kiện rồi gọi lại propose_build."
-                            : !productErrors.isEmpty() ? "Sản phẩm thật đã chọn lắp không được với nhau (xem product_errors): chọn lại "
-                                    + "sản phẩm cho đúng socket / loại RAM rồi gọi lại propose_build với cùng tier."
-                            : "Đã lưu đề xuất, app sẽ vẽ bảng chi tiết.");
+                    saved.put("note", !result.compatible() ? "This build still has compatibility errors. Change the components and call propose_build again."
+                            : !productErrors.isEmpty() ? "The selected real products are incompatible; see product_errors. Select matching "
+                                    + "socket and RAM types, then resubmit propose_build with the same tier."
+                            : "The recommendation was saved; the app will render the details.");
                     // Phương án vượt trần của nó (Rẻ, Phù hợp: ngân sách; Chất lượng: +15%): báo để trợ lý chọn lại. Thẻ vượt
                     // trần không được gửi cho người dùng (respond)
                     Long cap = tierCap(checked.budgetVnd(), tier);
@@ -5186,16 +5197,16 @@ public class ChatService {
                     // trả lời chỉ giới thiệu phương án hiện được (ca thật v9: trợ lý tả phương án đã bị ẩn vì dòng thiếu link)
                     if (turn.advice && search.enabled() && !showable(checked, cap)) {
                         List<String> why = new ArrayList<>();
-                        if (cap != null && totalMax > cap) why.add("vượt mức tối đa " + cap + " đồng");
+                        if (cap != null && totalMax > cap) why.add("exceeds the limit of " + cap + " VND");
                         var missing = missingBuy(checked);
-                        if (!missing.isEmpty()) why.add("các dòng chưa có hàng mua được (thiếu link hoặc hết hàng): " + missing);
-                        if (!result.compatible() || !productErrors.isEmpty()) why.add("linh kiện chưa lắp chung được");
+                        if (!missing.isEmpty()) why.add("items without an available purchase link or stock: " + missing);
+                        if (!result.compatible() || !productErrors.isEmpty()) why.add("the components are not compatible");
                         why.addAll(requirementIssues(checked));
                         saved.put("not_shown", why);
-                        saved.put("note", "Phương án \"" + tier + "\" hiện CHƯA hiển thị được cho người dùng (xem not_shown). Còn lượt thì "
-                                + "gọi lại propose_build cùng tier, chọn món khác (product_id khác, hoặc để trống để app tự tìm) cho các "
-                                + "dòng trong not_shown. Hết lượt thì trong câu trả lời KHÔNG giới thiệu phương án này, chỉ nói ngắn "
-                                + "là chưa tìm được hàng mua được.");
+                        saved.put("note", "Option \"" + tier + "\" cannot currently be shown to the user; see not_shown. If calls remain, "
+                                + "resubmit propose_build for the same tier with different product IDs, or omit IDs for automatic lookup, for "
+                                + "the items in not_shown. If no calls remain, do NOT recommend this option. Explain briefly "
+                                + "that no purchasable build was found.");
                         log.info("propose_build {}: chưa hiện được: {}", tier, why);
                     }
                     if (turn.advice && cap != null && totalMax > cap
@@ -5203,21 +5214,21 @@ public class ChatService {
                         // Đã nhắc đủ số lần mà vẫn vượt: phương án này không được hiện (luật cứng, respond); trợ lý phải nói
                         // thật là chưa tìm được, không giới thiệu cấu hình vượt trần
                         log.info("propose_build {}: vẫn vượt trần ({} > {}) sau {} lần nhắc, sẽ không hiện", tier, totalMax, cap, MAX_OVER_WARNINGS);
-                        saved.put("over_budget_final", "Vẫn vượt mức tối đa " + cap + " đồng nên app sẽ KHÔNG hiển thị phương án \""
-                                + tier + "\". Không gọi lại propose_build cho tier này. Trong câu trả lời nói rõ chưa tìm được phương án "
-                                + TIER_NAME.get(tier) + " có link mua trong mức " + millions(cap) + "; không giới thiệu cấu hình này.");
+                        saved.put("over_budget_final", "Still exceeds the limit of " + cap + " VND, so the app will NOT show option \""
+                                + tier + "\". Do not call propose_build again for this tier. Explain that no build "
+                                + TIER_NAME.get(tier) + " with purchase links was found within " + millions(cap) + "; do not recommend this build.");
                     } else if (turn.advice && cap != null && totalMax > cap) {
                         log.info("propose_build {}: tổng {} vượt trần {}, trợ lý phải chọn lại. Từng món: {}", tier, totalMax, cap,
                                 req.items().stream().map(i -> i.code() + " x" + i.qty() + " = "
                                         + price(details.getOrDefault(i.code(), Map.of()), picks.get(i.code()), i.qty())[1]
-                                        + (picks.get(i.code()) == null ? " (ước tính)" : " " + picks.get(i.code()).title())).toList());
+                                        + (picks.get(i.code()) == null ? " (estimated)" : " " + picks.get(i.code()).title())).toList());
                         saved.put("cheaper_options", cheaperOptions(req, details, picks, siblings, turn, totalMax - cap));
-                        saved.put("over_budget", "Tổng " + totalMax + " đồng vượt mức tối đa " + cap + " đồng của tier \"" + tier
-                                + "\" khoảng " + (totalMax - cap) + " đồng. Hạ thông số vài món đắt nhất (vd card, CPU, SSD thấp hơn "
-                                + "một bậc) bằng các sản phẩm đã tìm và đã xác minh giá trong cheaper_options (dùng đúng product_id), rồi gọi lại "
-                                + "propose_build với cùng tier và ĐỦ mọi món."
-                                + ("cheap".equals(tier) ? " Món đi kèm vỏ đắt (tản nước, card 3 quạt) thì đổi sang vỏ khác rẻ hơn, "
-                                        + "kể cả khi phải bỏ mặt kính, và nói rõ điều đó với người dùng." : "")
+                        saved.put("over_budget", "Total " + totalMax + " VND exceeds the limit of " + cap + " VND for tier \"" + tier
+                                + "\" by around " + (totalMax - cap) + " VND. Reduce a few expensive specifications, for example GPU, CPU or SSD, "
+                                + "using verified cheaper_options and their exact product IDs. Call "
+                                + "propose_build again with the same tier and ALL required components."
+                                + ("cheap".equals(tier) ? " If this case's matching components are too expensive, choose a cheaper case, "
+                                        + "even if that removes the glass panel, and tell the user about the trade-off." : "")
                                 + igpuHint(picks, req));
                     }
                     if (!auto.isEmpty()) {
@@ -5228,14 +5239,14 @@ public class ChatService {
                             m.put("price_vnd", e.getValue().priceVnd());
                             return m;
                         }).toList());
-                        saved.put("auto_note", "App đã tự gắn sản phẩm thật cho các món trong auto_filled. Tổng ở trên đã tính giá "
-                                + "của chúng. Đừng nói là chưa tìm được hàng; nếu nhắc tới món đó thì dùng đúng tên và giá này.");
+                        saved.put("auto_note", "The app automatically attached real products to the items in auto_filled. Their prices are already "
+                                + "included. Do not claim products are missing; use the supplied names and prices.");
                     }
                     yield saved;
                 }
                 case "search_products" -> {
                     if (!search.enabled()) {
-                        yield Map.of("error", "Chưa bật tìm kiếm sản phẩm. Dùng giá ước tính và để trống phần sản phẩm.");
+                        yield Map.of("error", "Product search is disabled. Use estimated prices and leave product fields empty.");
                     }
                     var found = search.search(String.valueOf(input.get("query")));
                     int n = turn.searches.incrementAndGet();
@@ -5265,12 +5276,12 @@ public class ChatService {
                     }
                     yield rows;
                 }
-                default -> throw new IllegalArgumentException("Không có công cụ " + name);
+                default -> throw new IllegalArgumentException("Unknown tool: " + name);
             };
             return json.writeValueAsString(out);
         } catch (RuntimeException e) {
             log.warn("Công cụ {} lỗi", function.get("name"), e);
-            return "Lỗi: " + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName());
+            return "Error: " + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName());
         }
     }
 
@@ -5349,14 +5360,14 @@ public class ChatService {
         lines.stream().filter(l -> "ram".equals(l.category())).findFirst().ifPresent(l -> {
             var d = c.details().getOrDefault(l.code(), Map.of());
             if (d.get("layout_differs") != null) {
-                warnings.add(new Issue("RAM_LAYOUT", "Bạn muốn RAM " + d.get("layout_differs") + " nhưng bộ đang chọn là " + l.spec()
-                        + ": cùng dung lượng, khác số thanh. Muốn đúng " + d.get("layout_differs") + " thì hỏi cửa hàng đổi giúp."));
+                warnings.add(new Issue("RAM_LAYOUT", "You requested RAM " + d.get("layout_differs") + " but the selected kit is " + l.spec()
+                        + ": the total capacity matches, but the module count differs. For exactly " + d.get("layout_differs") + ", ask the store for a matching kit."));
             } else if (l.quantity() == 1) {
-                tips.add(new Issue("RAM_DUAL_CHANNEL", "Bộ này là 1 thanh RAM. 2 thanh nhỏ hơn cùng dung lượng (vd 2x8GB thay 1x16GB) "
-                        + "chạy kênh đôi, nhanh hơn một chút khi chơi game; 1 thanh thì sau này dễ lắp thêm thanh thứ hai."));
+                tips.add(new Issue("RAM_DUAL_CHANNEL", "This kit has one RAM module. Two smaller modules with the same total capacity, for example 2x8GB instead of 1x16GB, "
+                        + "support dual-channel memory; one module leaves room to add another later."));
             } else if (l.quantity() == 2) {
-                tips.add(new Issue("RAM_DUAL_CHANNEL", "Bộ này là 2 thanh RAM, chạy kênh đôi. 1 thanh dung lượng gấp đôi cũng dùng "
-                        + "được, chậm hơn chút khi chơi game nhưng chừa khe để nâng cấp."));
+                tips.add(new Issue("RAM_DUAL_CHANNEL", "This kit has two RAM modules for dual-channel memory. One module with twice the capacity also works, "
+                        + "but may reduce gaming performance while leaving a slot free for an upgrade."));
             }
         });
         c.details().forEach((code, d) -> {
@@ -5364,8 +5375,8 @@ public class ChatService {
         });
         // Máy mẫu 3D vẽ card 3 quạt (280 mm) mà card mua là loại 2 quạt: lắp cùng chỗ, chỉ ngắn hơn hình
         if (advice) lines.stream().filter(l -> "gpu_280".equals(l.code()) && Integer.valueOf(2).equals(gpuFans(l.productName()))).findFirst()
-                .ifPresent(l -> tips.add(new Issue("MODEL_GPU_SHORTER", "Hình 3D vẽ card 3 quạt; card bạn mua là loại 2 quạt, ngắn hơn, "
-                        + "lắp vào đúng khe và vị trí như hướng dẫn.")));
+                .ifPresent(l -> tips.add(new Issue("MODEL_GPU_SHORTER", "The 3D sample shows a triple-fan GPU. Your dual-fan card is shorter but "
+                        + "uses the same PCIe slot and mounting position shown in the guide.")));
         boolean productOk = findings.stream().noneMatch(f -> f.severity() == ProductRules.Severity.ERROR);
         // Trạng thái phương án do code tính (docs/pc-build-verifier): AI không tự cho qua gate nào
         var verdict = advice ? BuildVerifier.verify(lines, errors, warnings, unknowns, tierCap(c.budgetVnd(), tier)) : null;
@@ -5526,6 +5537,6 @@ public class ChatService {
     /** Bỏ phần suy nghĩ <think>...</think> mà vài model suy luận để lẫn trong câu trả lời */
     private static String clean(Object content) {
         String t = content == null ? "" : content.toString().replaceAll("(?s)<think>.*?</think>", "").strip();
-        return t.isEmpty() ? "Xin lỗi, mình chưa trả lời được câu này. Bạn thử hỏi theo cách khác nhé." : t;
+        return t.isEmpty() ? "I could not answer this question. Please try rephrasing it." : t;
     }
 }

@@ -2,25 +2,25 @@ export type PartId = 'case' | 'motherboard' | 'cpu' | 'cooler' | 'ram' | 'gpu' |
 
 // Mô tả viết cho người không rành công nghệ.
 export const PARTS: Record<PartId, { name: string; about: string }> = {
-  case: { name: 'Vỏ máy (case)', about: 'Giữ và bảo vệ mọi linh kiện bên trong, có chỗ gắn quạt để lấy gió.' },
+  case: { name: "PC case", about: "Holds and protects the components, with fan mounts for cooling." },
   motherboard: {
-    name: 'Bo mạch chủ',
-    about: 'Tấm mạch lớn nối mọi linh kiện với nhau. Mỗi linh kiện có một khe cắm riêng trên tấm này.',
+    name: "Motherboard",
+    about: "The main circuit board connects all the components. Each type has its own socket or slot.",
   },
-  cpu: { name: 'CPU (bộ xử lý)', about: 'Bộ não của máy. Nằm ngay dưới tản nhiệt.' },
-  cooler: { name: 'Tản nhiệt CPU', about: 'Hút nhiệt từ CPU ra ngoài để máy không bị quá nóng.' },
-  ram: { name: 'RAM', about: 'Bộ nhớ tạm. Càng nhiều thì mở được càng nhiều chương trình cùng lúc.' },
-  gpu: { name: 'Card đồ họa (GPU)', about: 'Xử lý hình ảnh. Cần cho chơi game, dựng phim và làm 3D.' },
-  ssd: { name: 'Ổ SSD', about: 'Nơi lưu hệ điều hành, phần mềm và dữ liệu của bạn.' },
-  psu: { name: 'Nguồn (PSU)', about: 'Lấy điện từ ổ cắm rồi chia cho từng linh kiện.' },
-  fans: { name: 'Quạt case', about: 'Đưa gió mát vào và đẩy gió nóng ra khỏi thùng máy.' },
+  cpu: { name: "CPU (processor)", about: "Processes instructions and sits beneath the CPU cooler." },
+  cooler: { name: "CPU cooler", about: "Removes heat from the CPU to prevent overheating." },
+  ram: { name: 'RAM', about: "Temporary working memory. More RAM lets you run more programs at once." },
+  gpu: { name: "Graphics card (GPU)", about: "Handles graphics for gaming, video editing and 3D work." },
+  ssd: { name: "SSD", about: "Stores your operating system, programs and files." },
+  psu: { name: "Power supply (PSU)", about: "Converts mains electricity into power for the components." },
+  fans: { name: "Case fans", about: "Bring cool air into the case and push warm air out." },
   tools: {
-    name: 'Đồ nghề lắp máy',
-    about: 'Những thứ cần cầm trên tay khi tự lắp: tua vít, dây chống tĩnh điện, keo tản nhiệt, hộp vít, dây rút, kìm cắt và dây điện. Bấm "Tách rời linh kiện" để thấy cả bộ bày trên thảm cạnh máy.',
+    name: "Assembly tools",
+    about: "Tools for assembly: a screwdriver, anti-static strap, thermal paste, screw organiser, cable ties, cutters and power cable. Select Explode view to see them beside the PC.",
   },
   cables: {
-    name: 'Dây cáp',
+    name: "Cables",
     about:
-      'Dây nguồn đen to đưa điện tới bo mạch (24 pin), CPU (8 pin) và card đồ họa (PCIe). Dây quạt nhỏ cắm vào các cổng FAN trên bo. Bó dây nhiều màu từ nút nguồn cắm vào cổng F_PANEL ở góc dưới bên phải, dây xanh dẹt là USB mặt trước.',
+      "Thick power cables feed the motherboard (24-pin), CPU (8-pin) and GPU (PCIe). Fan cables use FAN headers. Case button leads connect to F_PANEL; the blue cable connects front USB.",
   },
 }

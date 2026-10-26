@@ -5,7 +5,7 @@
 export type QualityLevel = 'high' | 'medium' | 'low'
 export type QualityPref = 'auto' | QualityLevel
 
-export const QUALITY_LABEL: Record<QualityLevel, string> = { high: 'Cao', medium: 'Vừa', low: 'Nhẹ' }
+export const QUALITY_LABEL: Record<QualityLevel, string> = { high: 'High', medium: "Medium", low: "Low" }
 
 export interface QualitySettings {
   /** Giới hạn tỉ lệ điểm ảnh: màn Retina vẽ gấp 4 lần điểm ảnh ở mức 2 */

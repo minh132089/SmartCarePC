@@ -68,7 +68,7 @@ public class ChatJobs {
 
     public JobView get(String id) {
         var job = jobs.get(id);
-        if (job == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy câu hỏi này (có thể đã quá lâu), bạn gửi lại nhé.");
+        if (job == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "This question was not found or has expired. Please submit it again.");
         return job.view();
     }
 
@@ -80,8 +80,8 @@ public class ChatJobs {
             job.error = e instanceof ResponseStatusException r && r.getReason() != null ? r.getReason() : e.getMessage();
             job.status = Status.error;
         } catch (RuntimeException | Error e) {
-            log.error("Câu hỏi {} lỗi", job.id, e);
-            job.error = "Trợ lý gặp lỗi khi trả lời, bạn thử lại nhé.";
+            log.error("Question {} failed", job.id, e);
+            job.error = "The assistant encountered an error. Please try again.";
             job.status = Status.error;
             if (e instanceof Error fatal) throw fatal;
         }

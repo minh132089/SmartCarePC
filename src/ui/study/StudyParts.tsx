@@ -38,7 +38,7 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
           <h2 id={titleId} className="min-w-0 flex-1 text-[17px] font-semibold text-ink">
             {title}
           </h2>
-          <IconButton label="Đóng" onClick={onClose} icon={<X size={16} aria-hidden />} />
+          <IconButton label="Close" onClick={onClose} icon={<X size={16} aria-hidden />} />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</footer>

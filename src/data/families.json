@@ -1,5 +1,5 @@
 {
- "_note": "Bố trí 6 họ case (design/families/00_families_spec.md). mm, trục app: x lưng→trước, y đáy→nóc, z hông kín→hông mở. body = [W(z), H(y), D(x)]. Dùng chung cho tools/build_families.py và app.",
+ "_note": "Layouts for six case families (design/families/00_families_spec.md). Dimensions in mm; app axes: x rear to front, y bottom to top, z closed side to open side. body = [W(z), H(y), D(x)]. Shared by tools/build_families.py and the app.",
  "standard_tower": {
   "body": [
    230,
@@ -315,8 +315,8 @@
     ]
    ]
   },
-  "label": "Tower tiêu chuẩn",
-  "tagline": "Dáng tháp vừa, mặt lưới thoáng, dễ lắp và dễ nâng cấp.",
+  "label": "Standard tower",
+  "tagline": "A mid-sized tower with a ventilated mesh front, easy assembly and room to upgrade.",
   "cooler": {
    "kind": "tower_air_155"
   },
@@ -645,8 +645,8 @@
     ]
    ]
   },
-  "label": "Tower nhỏ gọn",
-  "tagline": "Thấp và gọn hơn, hai hông kín, vẫn giữ dáng PC quen thuộc.",
+  "label": "Compact tower",
+  "tagline": "A shorter, compact tower with solid side panels and a familiar PC layout.",
   "cooler": {
    "kind": "tower_air_155"
   },
@@ -1027,8 +1027,8 @@
     ]
    ]
   },
-  "label": "Tower lớn",
-  "tagline": "Tháp cao và sâu, bốn quạt trước, két nước 360 trên nóc, nhiều chỗ mở rộng.",
+  "label": "Full tower",
+  "tagline": "A tall, deep tower with four front fans, a 360 mm top radiator and room to expand.",
   "cooler": {
    "kind": "aio_360"
   },
@@ -1307,8 +1307,8 @@
     120
    ]
   ],
-  "label": "Showcase / Bể cá",
-  "tagline": "Kính trước và hông, hai khoang, nhiều quạt đèn để trưng bày.",
+  "label": "Dual-chamber showcase",
+  "tagline": "Front and side glass panels, two chambers and illuminated fans to show off your build.",
   "cooler": {
    "kind": "aio_240"
   },
@@ -1555,7 +1555,7 @@
    ]
   },
   "label": "Mini / SFF",
-  "tagline": "Hộp nhôm rất nhỏ: card đồ họa nằm sau lưng bo, nối bằng cáp riser.",
+  "tagline": "A tiny aluminium case with the GPU behind the motherboard, connected by a riser cable.",
   "cooler": {
    "kind": "low_profile_47"
   },
@@ -1724,7 +1724,7 @@
    ]
   },
   "label": "Slim / Console",
-  "tagline": "Thân mỏng đứng trên đế: bo ở tầng dưới, card đồ họa ở tầng trên.",
+  "tagline": "A slim upright case with the motherboard below and the graphics card above.",
   "cooler": {
    "kind": "low_profile_47"
   },

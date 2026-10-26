@@ -183,33 +183,33 @@ public final class ProductRules {
                 || gpuName.matches(".*\\bsparkle\\b.*\\bb580\\b.*\\btitan\\b.*");
         if (titan && caseName.contains("silverstone") && caseName.matches(".*\\bsg13(?:b(?:-q)?|wb)?\\b.*")) {
             out.add(new Finding("GPU_CASE_LENGTH", Severity.ERROR, List.of("gpu", "case"),
-                    "SPARKLE B580 TITAN OC dài 315mm; hướng dẫn SilverStone SG13 giới hạn card khoảng 267mm: không lắp vừa.",
-                    "Chọn card ngắn hơn đúng giới hạn của vỏ, hoặc đổi vỏ và kiểm lại kích thước."));
+                    "The SPARKLE B580 TITAN OC is 315 mm long, while the SilverStone SG13 supports around 267 mm. It does not fit.",
+                    "Choose a shorter card within the case limit, or change the case and recheck the dimensions."));
         }
 
         // ERROR (mục 2, 3)
         if (cpu.socket() != null && board.socket() != null && !cpu.socket().equals(board.socket())) {
             out.add(new Finding("CPU_SOCKET", Severity.ERROR, List.of("cpu", "motherboard"),
-                    "CPU \"" + cpuName + "\" dùng socket " + cpu.socket() + " nhưng bo mạch \"" + boardName + "\" là socket "
-                            + board.socket() + ": không lắp được.",
-                    "Chọn bo mạch đúng socket " + cpu.socket() + "."));
+                    "CPU \"" + cpuName + "\" uses socket " + cpu.socket() + " but motherboard \"" + boardName + "\" uses "
+                            + board.socket() + ": they are incompatible.",
+                    "Choose a motherboard with socket " + cpu.socket() + "."));
         }
         if (board.ramType() != null && ram.ramType() != null && !board.ramType().equals(ram.ramType())) {
             out.add(new Finding("RAM_DDR_TYPE", Severity.ERROR, List.of("motherboard", "ram"),
-                    "Bo mạch dùng " + board.ramType() + " nhưng RAM là " + ram.ramType() + ": RAM không cắm được vào bo.",
-                    "Chọn RAM " + board.ramType() + " hoặc bo mạch bản " + ram.ramType() + "."));
+                    "The motherboard uses " + board.ramType() + " but the RAM is " + ram.ramType() + ": the RAM does not fit.",
+                    "Choose RAM " + board.ramType() + " or a motherboard version for " + ram.ramType() + "."));
         }
         if (cpu.ramType() != null) {
             String other = board.ramType() != null ? board.ramType() : ram.ramType();
             if (other != null && !other.equals(cpu.ramType())) {
                 out.add(new Finding("CPU_DDR_SUPPORT", Severity.ERROR, List.of("cpu", board.ramType() != null ? "motherboard" : "ram"),
-                        "CPU socket " + cpu.socket() + " chỉ chạy " + cpu.ramType() + " nhưng cấu hình đang dùng " + other + ".",
-                        "Đổi bo mạch và RAM sang " + cpu.ramType() + "."));
+                        "CPU socket " + cpu.socket() + " supports only " + cpu.ramType() + " but this build uses " + other + ".",
+                        "Change the motherboard and RAM to " + cpu.ramType() + "."));
             }
         }
         if (ram.laptopRam()) {
             out.add(new Finding("RAM_FORM_FACTOR", Severity.ERROR, List.of("ram"),
-                    "\"" + titles.get("ram") + "\" là RAM laptop (SO-DIMM), không lắp vào máy bàn.", "Chọn RAM máy bàn (DIMM)."));
+                    "\"" + titles.get("ram") + "\" is laptop SO-DIMM memory and does not fit a desktop DIMM slot.", "Choose desktop DIMM RAM."));
         }
 
         // WARNING (mục 2): bo ra đời trước CPU thường cần BIOS mới; ép xung CPU K cần bo Z
@@ -220,36 +220,36 @@ public final class ProductRules {
                     || AM5_600.contains(board.chipset()) && Set.of("ryzen9").contains(cpu.family());
             if (oldBios) {
                 out.add(new Finding("CPU_BIOS_UPDATE", Severity.WARNING, List.of("cpu", "motherboard"),
-                        "Bo " + board.chipset().toUpperCase() + " ra đời trước CPU này, có thể cần BIOS mới thì mới nhận CPU.",
-                        "Hỏi cửa hàng bo đã cập nhật BIOS chưa, hoặc chọn bo có BIOS Flashback."));
+                        "Motherboard " + board.chipset().toUpperCase() + " predates this CPU and may need a BIOS update to support it.",
+                        "Ask whether the store has updated the BIOS, or choose a board with BIOS Flashback."));
             }
             if (cpu.unlocked() && board.chipset().startsWith("b") || cpu.unlocked() && board.chipset().startsWith("h")) {
                 out.add(new Finding("CPU_OC_CHIPSET", Severity.WARNING, List.of("cpu", "motherboard"),
-                        "CPU đuôi K mở khoá ép xung nhưng bo " + board.chipset().toUpperCase() + " không ép xung hệ số nhân được.",
-                        "Không định ép xung thì không sao; muốn ép xung thì chọn bo chipset Z."));
+                        "The unlocked K-series CPU supports overclocking, but the motherboard " + board.chipset().toUpperCase() + " does not support multiplier overclocking.",
+                        "This is fine without overclocking; choose a Z-series chipset if you intend to overclock."));
             }
         }
 
         // UNKNOWN (mục 10, 11): app không có danh sách hỗ trợ của hãng, không tự kết luận là tương thích
         if (sameSocket) {
             out.add(new Finding("CPU_SUPPORT_LIST", Severity.UNKNOWN, List.of("cpu", "motherboard"),
-                    "Chưa đối chiếu CPU Support List và BIOS tối thiểu của đúng mã bo mạch.",
-                    "Tra trang hỗ trợ CPU của hãng bo mạch theo đúng mã trước khi mua."));
+                    "The exact motherboard's CPU Support List and minimum BIOS version have not been verified.",
+                    "Check the manufacturer's CPU support page for the exact motherboard model before buying."));
         }
         if (cpu.socket() != null && titles.get("cooler") != null) {
             out.add(new Finding("COOLER_MOUNT", Severity.UNKNOWN, List.of("cooler", "cpu"),
-                    "Chưa xác minh tản nhiệt có bộ gá cho socket " + cpu.socket() + " (gá Intel và AMD khác nhau).",
-                    "Xem trang thông số của tản có ghi " + cpu.socket() + "."));
+                    "The cooler mounting kit has not been verified for socket " + cpu.socket() + "; Intel and AMD mounting hardware differs.",
+                    "Check the cooler specification page for support for " + cpu.socket() + "."));
         }
         if (titles.get("gpu") != null && titles.get("case") != null) {
             out.add(new Finding("GPU_CLEARANCE", Severity.UNKNOWN, List.of("gpu", "case"),
-                    "Chưa đối chiếu chiều dài, bề rộng và độ dày của đúng mã card với khoảng trống GPU trong vỏ.",
-                    "Xác nhận kích thước và chỗ cho đầu cáp nguồn với cửa hàng; số quạt trên card chưa đủ chứng minh lắp vừa."));
+                    "The exact GPU dimensions have not been checked against the case's GPU clearance.",
+                    "Confirm dimensions and power-cable clearance with the store. Fan count alone does not prove the card fits."));
         }
         if (titles.get("fans") != null && titles.get("case") != null) {
             out.add(new Finding("FAN_MOUNTS", Severity.UNKNOWN, List.of("fans", "case"),
-                    "Chưa đối chiếu số vị trí gắn quạt còn trống của đúng mã vỏ.",
-                    "Đếm cả quạt đã đi kèm vỏ và quạt lắp thêm trước khi mua; không lắp nhiều hơn số vị trí vỏ hỗ trợ."));
+                    "The exact case's remaining fan mounting positions have not been verified.",
+                    "Count included and additional fans before buying; do not exceed the case's supported mounts."));
         }
         return out;
     }

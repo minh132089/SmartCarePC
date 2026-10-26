@@ -227,11 +227,11 @@ function sweep(statics: Mesh[], moving: Mesh[], d: Vector3, samples = SAMPLES): 
   box.union(box.clone().translate(d)).expandByScalar(0.02)
   const back = dir.clone().negate()
   for (const p of samplePoints(statics, samples * 30, (p) => box.containsPoint(p)).slice(0, samples)) {
-    test(p, back, moving, (o) => `ngược: ${name(o)}`)
+    test(p, back, moving, (o) => `reverse: ${name(o)}`)
   }
   sides.forEach((side, mat) => (mat.side = side))
   const soft = [...seatPass.values()].reduce((a, b) => a + b.n, 0)
-  if (soft > rays * SEAT_SHARE) seatPass.forEach((v, k) => bad.set(`${k} (đoạn cắm)`, v))
+  if (soft > rays * SEAT_SHARE) seatPass.forEach((v, k) => bad.set(`${k} (insertion segment)`, v))
   if (!bad.size) return null
   const worst = [...bad.entries()].sort((a, b) => b[1].n - a[1].n)
   const total = worst.reduce((a, [, b]) => a + b.n, 0)

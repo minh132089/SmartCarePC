@@ -25,10 +25,10 @@ export function AssemblySteps() {
 
   let text: string | null = null
   if (exploded && step > 0) {
-    text = step === STEPS ? 'Đã tháo xong. Bấm "Lắp lại" để lắp theo đúng thứ tự.' : `Tháo bước ${step}/${STEPS}: ${ASSEMBLY[STEPS - step].remove}`
+    text = step === STEPS ? "Disassembly complete. Select Reassemble to put the parts back in order." : `Remove step ${step}/${STEPS}: ${ASSEMBLY[STEPS - step].remove}`
   } else if (!exploded && step < STEPS) {
     const n = STEPS - step // bước vừa lắp vào
-    text = `Lắp bước ${n}/${STEPS}: ${ASSEMBLY[n - 1].install}`
+    text = `Install step ${n}/${STEPS}: ${ASSEMBLY[n - 1].install}`
   }
   // Bước lắp cuối cùng (dây cáp) vẫn hiện thêm một lúc rồi mới ẩn
   const [hold, setHold] = useState(false)

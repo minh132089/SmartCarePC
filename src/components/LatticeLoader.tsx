@@ -143,7 +143,7 @@ const LatticeLoader: React.FC<LatticeLoaderProps> = ({
   const markRef = useRef<'done' | 'error'>('done');
   const mark = status === 'working' ? markRef.current : status;
   markRef.current = mark;
-  const [announce, setAnnounce] = useState(`${label}, đang thực hiện`);
+  const [announce, setAnnounce] = useState(`${label}, in progress`);
 
   const paint = (ds: number) => {
     dsRef.current = ds;
@@ -163,7 +163,7 @@ const LatticeLoader: React.FC<LatticeLoaderProps> = ({
   }, [status, elapsed]);
 
   useEffect(() => {
-    if (status === 'working') setAnnounce(`${label}, đang thực hiện`);
+    if (status === 'working') setAnnounce(`${label}, in progress`);
     else setAnnounce(`${status === 'done' ? doneLabel : errorLabel}${showTimer ? ` ${spoken(dsRef.current)}` : ''}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, label, doneLabel, errorLabel, showTimer]);

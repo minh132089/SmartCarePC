@@ -17,12 +17,23 @@ export function average(values: (number | null)[]) {
   return xs.length ? { mean: xs.reduce((a, b) => a + b, 0) / xs.length, n: xs.length } : null
 }
 
+/** English display labels for the old form presets; original feedback records stay unchanged. */
+export function occupationLabel(value: string): string {
+  const legacy: Record<string, string> = {
+    'học sinh': 'School student', 'sinh viên': 'University student',
+    'nhân viên văn phòng': 'Office worker', 'công nghệ thông tin': 'Information technology',
+    'thiết kế / sáng tạo': 'Design / creative work', 'giáo viên / giảng viên': 'Teacher / lecturer',
+    'kinh doanh / tự do': 'Business / self-employed', 'chưa đi làm': 'Not currently employed',
+  }
+  return legacy[value.trim().toLocaleLowerCase('en')] ?? value.trim()
+}
+
 export function participantOf(row: FeedbackRow) {
   const a = row.answers
   return {
     name: typeof a.participant_name === 'string' ? a.participant_name.trim() : '',
     age: typeof a.participant_age === 'number' && Number.isInteger(a.participant_age) && a.participant_age > 0 && a.participant_age <= 120 ? a.participant_age : null,
-    occupation: typeof a.participant_occupation === 'string' ? a.participant_occupation.trim() : '',
+    occupation: typeof a.participant_occupation === 'string' ? occupationLabel(a.participant_occupation) : '',
   }
 }
 
@@ -31,13 +42,13 @@ export function occupationCounts(rows: FeedbackRow[]) {
   for (const row of rows) {
     const label = participantOf(row).occupation
     if (!label) continue
-    const key = label.toLocaleLowerCase('vi').replace(/\s+/g, ' ')
+    const key = label.toLocaleLowerCase('en').replace(/\s+/g, ' ')
     const item = counts.get(key)
     if (item) item.count++
     else counts.set(key, { label, count: 1 })
   }
-  const all = [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'vi'))
-  return all.length > 5 ? [...all.slice(0, 5), { label: 'Nghề nghiệp khác', count: all.slice(5).reduce((n, r) => n + r.count, 0) }] : all
+  const all = [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'en'))
+  return all.length > 5 ? [...all.slice(0, 5), { label: "Other occupations", count: all.slice(5).reduce((n, r) => n + r.count, 0) }] : all
 }
 
 /** 14 ngày lịch kết thúc ở ngày gửi mới nhất, bao gồm cả ngày không có phản hồi. */

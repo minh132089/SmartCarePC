@@ -16,11 +16,11 @@ import jakarta.validation.constraints.Size;
  * { "buildCode": "gaming", "messages": [ { "role": "user", "content": "Máy này chơi game được không?" } ] }
  */
 public record ChatRequest(
-        @NotEmpty(message = "Chưa có tin nhắn nào") @Size(max = 30, message = "Hội thoại quá dài, hãy bắt đầu cuộc trò chuyện mới")
+        @NotEmpty(message = "No messages provided") @Size(max = 30, message = "This conversation is too long. Start a new conversation.")
         List<@Valid Message> messages,
         String buildCode,
         @Size(max = 2000) String guideStep,
-        @Pattern(regexp = "advice|assembly", message = "mode chỉ nhận advice hoặc assembly") String mode) {
+        @Pattern(regexp = "advice|assembly", message = "mode must be advice or assembly") String mode) {
 
     public ChatRequest(List<Message> messages, String buildCode) {
         this(messages, buildCode, null, null);
@@ -32,7 +32,7 @@ public record ChatRequest(
 
 
     public record Message(
-            @NotBlank @Pattern(regexp = "user|assistant", message = "role chỉ nhận user hoặc assistant") String role,
-            @NotBlank(message = "Tin nhắn trống") @Size(max = 2000, message = "Tin nhắn dài quá 2000 ký tự") String content) {
+            @NotBlank @Pattern(regexp = "user|assistant", message = "role must be user or assistant") String role,
+            @NotBlank(message = "The message is empty") @Size(max = 2000, message = "Messages must not exceed 2000 characters") String content) {
     }
 }

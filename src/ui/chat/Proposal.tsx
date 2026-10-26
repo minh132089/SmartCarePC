@@ -12,10 +12,10 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  * Loại nào không thuộc nhóm nào thì rơi vào nhóm cuối.
  */
 const GROUPS: { title: string; cats: string[] }[] = [
-  { title: 'Xử lý và bộ nhớ', cats: ['cpu', 'motherboard', 'ram', 'ssd'] },
-  { title: 'Hình ảnh', cats: ['gpu'] },
-  { title: 'Làm mát và nguồn điện', cats: ['cooler', 'psu', 'fans'] },
-  { title: 'Vỏ máy và phụ kiện', cats: ['case', 'cables', 'tools'] },
+  { title: "Processing and memory", cats: ['cpu', 'motherboard', 'ram', 'ssd'] },
+  { title: "Graphics", cats: ['gpu'] },
+  { title: "Cooling and power", cats: ['cooler', 'psu', 'fans'] },
+  { title: "Case and accessories", cats: ['case', 'cables', 'tools'] },
 ]
 
 function groupLines(items: BuildLine[]) {
@@ -35,7 +35,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
   return (
     <div>
       <h2 data-sm-item className="text-[22px] leading-[1.2] font-semibold tracking-[-0.02em] text-balance text-ink">
-        {card.summary || 'Cấu hình trợ lý đã chọn'}
+        {card.summary || "Recommended build"}
       </h2>
       <p data-sm-item className={`mt-1.5 text-[14px] font-medium ${card.compatible ? 'text-ok' : 'text-bad'}`}>{compatText(card).long}</p>
 
@@ -65,13 +65,13 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
           ))}
           {card.warnings.map((w) => (
             <li key={w.rule + w.message} className="text-warn">
-              Lưu ý: {w.message}
+              Note: {w.message}
             </li>
           ))}
         </ul>
       )}
-      {!card.verdict && <IssueGroup title="Cần xác minh trước khi mua" issues={card.unknowns} />}
-      <IssueGroup title="Gợi ý" issues={card.recommendations} />
+      {!card.verdict && <IssueGroup title="Confirm before buying" issues={card.unknowns} />}
+      <IssueGroup title="Recommended" issues={card.recommendations} />
 
       {action && (
         <div data-sm-item className="mt-6">
@@ -80,7 +80,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       )}
       {total && (
         <p className="mt-3 text-[12px] leading-snug text-ink-3">
-          Giá đọc trên web cửa hàng lúc trợ lý tìm, có thể đã đổi. Dòng ghi "chưa kiểm tra trên trang" là giá tham khảo từ Google, nên mở link xem lại. Dòng ghi "ước tính" là trợ lý ước theo thông số phổ thông. Chưa gồm màn hình, bàn phím và chuột.
+          Store prices were checked during the search and may have changed. Unverified prices are references from Google; open the store link to confirm. Estimated prices are based on general specifications. Monitor, keyboard and mouse are not included.
         </p>
       )}
     </div>
@@ -91,13 +91,13 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
 function Total({ min, max, budget }: { min: number; max: number; budget: number | null }) {
   let verdict: { text: string; tone: string } | null = null
   if (budget != null) {
-    if (max <= budget) verdict = { text: `Nằm trong ngân sách ${vnd(budget)}, còn dư ít nhất ${vnd(budget - max)}.`, tone: 'text-ok' }
-    else if (min <= budget) verdict = { text: `Ngân sách ${vnd(budget)}: có thể vượt tới ${vnd(max - budget)} nếu mua ở mức giá cao.`, tone: 'text-warn' }
-    else verdict = { text: `Vượt ngân sách ${vnd(budget)} khoảng ${vnd(min - budget)}.`, tone: 'text-bad' }
+    if (max <= budget) verdict = { text: `Within your budget of ${vnd(budget)}, with at least ${vnd(budget - max)}.`, tone: 'text-ok' }
+    else if (min <= budget) verdict = { text: `Budget ${vnd(budget)}: may exceed it by up to ${vnd(max - budget)} at the upper price estimate.`, tone: 'text-warn' }
+    else verdict = { text: `Exceeds your budget of ${vnd(budget)} by approximately ${vnd(min - budget)}.`, tone: 'text-bad' }
   }
   return (
     <div className="mt-5">
-      <p className="text-[13px] text-ink-2">Tổng ước tính</p>
+      <p className="text-[13px] text-ink-2">Estimated total</p>
       <p className="text-[30px] leading-tight font-semibold tracking-[-0.025em] text-ink tabular-nums">{vndRange(min, max)}</p>
       {verdict && <p className={`mt-1 text-[14px] leading-snug ${verdict.tone}`}>{verdict.text}</p>}
     </div>
@@ -127,7 +127,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             <div className="shrink-0 text-right">
               <p className="text-[13px] font-semibold text-ink tabular-nums">{vndRange(lo, hi)}</p>
               <p className="text-[12px] text-ink-3 tabular-nums">
-                {!line.productName ? 'ước tính' : line.priceChecked === false ? 'giá tham khảo, chưa kiểm tra trên trang' : 'giá trên web cửa hàng'}
+                {!line.productName ? "estimated" : line.priceChecked === false ? "reference price, not verified on the product page" : "store website price"}
                 {share != null && `, ${share}%`}
               </p>
             </div>
@@ -142,12 +142,12 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             rel="noreferrer noopener"
             className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13px] font-medium text-ink hover:bg-fill-hover ${focus}`}
           >
-            <span className="truncate">Xem ở {line.shop || hostOf(line.sourceUrl)}</span>
+            <span className="truncate">View at {line.shop || hostOf(line.sourceUrl)}</span>
             <ArrowSquareOut size={14} aria-hidden className="shrink-0" />
           </a>
         )}
         {/* App tự tìm sản phẩm, không bắt người dùng tự tìm: không có trang bán còn hàng thì nói rõ, không đưa trang tìm kiếm */}
-        {!line.sourceUrl && <p className="mt-2 text-[13px] text-ink-3">Chưa tìm được trang bán còn hàng cho món này.</p>}
+        {!line.sourceUrl && <p className="mt-2 text-[13px] text-ink-3">No in-stock product page has been found for this component.</p>}
         {part && (
           <>
             <button
@@ -155,7 +155,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
               aria-expanded={open}
               className={`mt-1.5 text-[13px] font-medium text-link hover:underline ${focus}`}
             >
-              {open ? 'Ẩn giải thích' : 'Linh kiện này làm gì?'}
+              {open ? "Hide explanation" : "What does this component do?"}
             </button>
             <div className="reveal" data-open={open}>
               <div>
@@ -190,12 +190,12 @@ function PartImage({ line, label }: { line: BuildLine; label: string }) {
       ) : (
         <div
           role="img"
-          aria-label={`Chưa có ảnh: ${label}`}
+          aria-label={`Image unavailable: ${label}`}
           className="grid aspect-square w-full place-items-center rounded-xl border border-dashed border-line-strong bg-canvas text-ink-3"
         >
           <div className="flex flex-col items-center gap-0.5">
             <ImageSquare size={22} aria-hidden />
-            <span className="text-[11px] font-medium">Chưa có ảnh</span>
+            <span className="text-[11px] font-medium">Image unavailable</span>
           </div>
         </div>
       )}
@@ -217,7 +217,7 @@ function VerdictBox({ verdict, issues }: { verdict: Verdict; issues: Issue[] }) 
   return (
     <div data-sm-item className="mt-4 rounded-xl bg-fill px-3.5 py-3">
       <p className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
-        Trạng thái
+        Status
         <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${info.tone}`}>{info.label}</span>
       </p>
       {verdict.blockers.length > 0 && (
@@ -229,7 +229,7 @@ function VerdictBox({ verdict, issues }: { verdict: Verdict; issues: Issue[] }) 
       )}
       {verdict.conditions.length > 0 && (
         <>
-          <p className="mt-2 text-[12.5px] font-medium text-ink-2">Việc cần làm trước khi mua</p>
+          <p className="mt-2 text-[12.5px] font-medium text-ink-2">Before you buy</p>
           <ul className="mt-1 list-disc space-y-1 pl-4 text-[13.5px] leading-[1.45] text-ink-2">
             {conditions.map((c) => (
               <li key={c.message}>{c.summary}</li>
@@ -238,7 +238,7 @@ function VerdictBox({ verdict, issues }: { verdict: Verdict; issues: Issue[] }) 
           {shortened && (
             <details className="mt-2 text-[12.5px] leading-[1.45] text-ink-2">
               <summary className={`w-fit cursor-pointer rounded-sm font-medium text-link ${focus}`}>
-                {vietnamese ? 'Xem chi tiết' : 'View details'}
+                {vietnamese ? 'View details' : 'View details'}
               </summary>
               <ul className="mt-2 list-disc space-y-2 pl-4">
                 {conditions.map((c) => <li key={c.message}>{c.message}</li>)}
@@ -268,11 +268,11 @@ function IssueGroup({ title, issues }: { title: string; issues?: Issue[] | null 
 /** Còn hàng / bảo hành / giờ kiểm tra giá của món đã chọn (engine so giá đọc từ trang cửa hàng) */
 function OfferFacts({ line }: { line: BuildLine }) {
   const facts: ReactNode[] = []
-  if (line.inStock === true) facts.push(<span key="s" className="text-ok">Còn hàng</span>)
-  if (line.inStock === false) facts.push(<span key="s" className="text-bad">Cửa hàng báo hết hàng</span>)
-  if (line.warrantyMonths) facts.push(<span key="w">Bảo hành {line.warrantyMonths % 12 === 0 ? `${line.warrantyMonths / 12} năm` : `${line.warrantyMonths} tháng`}</span>)
+  if (line.inStock === true) facts.push(<span key="s" className="text-ok">In stock</span>)
+  if (line.inStock === false) facts.push(<span key="s" className="text-bad">Reported out of stock</span>)
+  if (line.warrantyMonths) facts.push(<span key="w">Warranty {line.warrantyMonths % 12 === 0 ? `${line.warrantyMonths / 12} years` : `${line.warrantyMonths} months`}</span>)
   const at = checkedText(line.checkedAt)
-  if (at) facts.push(<span key="t">Giá kiểm tra {at}</span>)
+  if (at) facts.push(<span key="t">Price checked {at}</span>)
   const others = line.compare ?? []
   if (!facts.length && !others.length) return null
   return (
@@ -289,13 +289,13 @@ function OfferFacts({ line }: { line: BuildLine }) {
       )}
       {others.length > 0 && (
         <div className="rounded-xl bg-fill px-3 py-2">
-          <p className="text-[12px] font-medium text-ink-2">Cùng sản phẩm ở cửa hàng khác{line.quantity > 1 ? ' (giá 1 sản phẩm)' : ''}</p>
+          <p className="text-[12px] font-medium text-ink-2">Same product at other stores{line.quantity > 1 ? " (per item)" : ''}</p>
           <ul className="mt-1 space-y-0.5">
             {others.map((o) => (
               <li key={o.url} className="flex items-center justify-between gap-3 text-[13px]">
                 <a href={o.url} target="_blank" rel="noreferrer noopener" className={`min-w-0 truncate text-link hover:underline ${focus}`}>
                   {o.shop}
-                  {o.inStock === false && <span className="text-ink-3"> (hết hàng)</span>}
+                  {o.inStock === false && <span className="text-ink-3"> (out of stock)</span>}
                 </a>
                 <span className="shrink-0 tabular-nums text-ink">{vnd(o.priceVnd)}</span>
               </li>
@@ -312,8 +312,8 @@ function checkedText(iso?: string | null) {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-  return d.toDateString() === new Date().toDateString() ? `lúc ${time}` : `lúc ${time} ngày ${d.getDate()}/${d.getMonth() + 1}`
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return d.toDateString() === new Date().toDateString() ? `at ${time}` : `at ${time} on ${d.getDate()}/${d.getMonth() + 1}`
 }
 
 

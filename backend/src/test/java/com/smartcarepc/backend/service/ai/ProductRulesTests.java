@@ -33,7 +33,7 @@ class ProductRulesTests {
                 .filteredOn(f -> f.severity()==ProductRules.Severity.UNKNOWN).extracting(ProductRules.Finding::ruleId)
                 .contains("GPU_CLEARANCE","FAN_MOUNTS");
         assertThat(ProductRules.issues(Map.of("gpu","SPARKLE Intel Arc B580 TITAN OC SB580T-12GOC",
-                "case","Vỏ Silverstone Sugo SG13B-Q"))).anySatisfy(issue -> assertThat(issue).contains("315mm", "267mm"));
+                "case","Vỏ Silverstone Sugo SG13B-Q"))).anySatisfy(issue -> assertThat(issue).contains("315 mm", "267 mm"));
     }
 
     @Test

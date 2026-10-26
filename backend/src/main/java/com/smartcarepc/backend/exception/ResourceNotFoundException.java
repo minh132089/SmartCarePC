@@ -4,6 +4,6 @@ package com.smartcarepc.backend.exception;
 public class ResourceNotFoundException extends RuntimeException {
 
     public ResourceNotFoundException(String what, Object key) {
-        super("Không tìm thấy " + what + ": " + key);
+        super("Not found: " + what + ": " + key);
     }
 }

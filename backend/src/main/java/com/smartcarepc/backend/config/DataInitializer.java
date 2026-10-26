@@ -62,7 +62,7 @@ public class DataInitializer implements CommandLineRunner {
     @Transactional
     public void run(String... args) {
         if (categoryRepo.count() > 0) {
-            log.info("Database đã có dữ liệu, bỏ qua bước nạp dữ liệu mẫu");
+            log.info("Database already contains data; skipping sample data import");
             return;
         }
         seedCategories();
@@ -70,24 +70,24 @@ public class DataInitializer implements CommandLineRunner {
         seedCredits();
         seedComponents();
         seedBuilds();
-        log.info("Đã nạp dữ liệu mẫu: {} loại, {} linh kiện, {} bộ máy",
+        log.info("Loaded sample data: {} categories, {} components, {} PC builds",
                 categoryRepo.count(), componentRepo.count(), buildRepo.count());
     }
 
     // ---- Loại linh kiện (src/data/parts.ts) ------------------------------
 
     private void seedCategories() {
-        category("case", "Vỏ máy (case)", "Giữ và bảo vệ mọi linh kiện bên trong, có chỗ gắn quạt để lấy gió.", false);
-        category("motherboard", "Bo mạch chủ", "Tấm mạch lớn nối mọi linh kiện với nhau. Mỗi linh kiện có một khe cắm riêng trên tấm này.", true);
-        category("cpu", "CPU (bộ xử lý)", "Bộ não của máy. Nằm ngay dưới tản nhiệt.", true);
-        category("cooler", "Tản nhiệt CPU", "Hút nhiệt từ CPU ra ngoài để máy không bị quá nóng.", true);
-        category("ram", "RAM", "Bộ nhớ tạm. Càng nhiều thì mở được càng nhiều chương trình cùng lúc.", true);
-        category("gpu", "Card đồ họa (GPU)", "Xử lý hình ảnh. Cần cho chơi game, dựng phim và làm 3D.", true);
-        category("ssd", "Ổ SSD", "Nơi lưu hệ điều hành, phần mềm và dữ liệu của bạn.", true);
-        category("psu", "Nguồn (PSU)", "Lấy điện từ ổ cắm rồi chia cho từng linh kiện.", true);
-        category("cables", "Dây cáp", "Dây nguồn đen to đưa điện tới bo mạch (24 pin), CPU (8 pin) và card đồ họa (PCIe). Dây quạt nhỏ cắm vào các cổng FAN trên bo. Bó dây nhiều màu từ nút nguồn cắm vào cổng F_PANEL ở góc dưới bên phải, dây xanh dẹt là USB mặt trước.", false);
-        category("fans", "Quạt case", "Đưa gió mát vào và đẩy gió nóng ra khỏi thùng máy.", true);
-        category("tools", "Đồ nghề lắp máy", "Những thứ cần cầm trên tay khi tự lắp: tua vít, dây chống tĩnh điện, keo tản nhiệt, hộp vít, dây rút, kìm cắt và dây điện. Bấm \"Tách rời linh kiện\" để thấy cả bộ bày trên thảm cạnh máy.", true);
+        category("case", "PC case", "Holds and protects the components, with fan mounts for cooling.", false);
+        category("motherboard", "Motherboard", "The main circuit board connects all the components. Each type has its own socket or slot.", true);
+        category("cpu", "CPU (processor)", "Processes instructions and sits beneath the CPU cooler.", true);
+        category("cooler", "CPU cooler", "Removes heat from the CPU to prevent overheating.", true);
+        category("ram", "RAM", "Temporary working memory. More RAM lets you run more programs at once.", true);
+        category("gpu", "Graphics card (GPU)", "Handles graphics for gaming, video editing and 3D work.", true);
+        category("ssd", "SSD", "Stores your operating system, programs and files.", true);
+        category("psu", "Power supply (PSU)", "Converts mains electricity into power for the components.", true);
+        category("cables", "Cables", "Thick power cables feed the motherboard (24-pin), CPU (8-pin) and GPU (PCIe). Fan cables use FAN headers. Case button leads connect to F_PANEL; the blue cable connects front USB.", false);
+        category("fans", "Case fans", "Bring cool air into the case and push warm air out.", true);
+        category("tools", "Assembly tools", "Tools for assembly: a screwdriver, anti-static strap, thermal paste, screw organiser, cable ties, cutters and power cable. Select Explode view to see them beside the PC.", true);
     }
 
     private void category(String code, String name, String about, boolean inspectable) {
@@ -100,14 +100,14 @@ public class DataInitializer implements CommandLineRunner {
 
     private void seedAssemblySteps() {
         String[][] steps = {
-                { "psu", "Lắp nguồn vào case", "Tháo nguồn" },
-                { "cpu", "Đặt CPU vào socket", "Nhấc CPU ra" },
-                { "ram", "Cắm RAM", "Rút RAM" },
-                { "ssd", "Lắp ổ SSD M.2", "Tháo ổ SSD" },
-                { "cooler", "Bôi keo, lắp tản nhiệt", "Tháo tản nhiệt" },
-                { "fans", "Bắt quạt case", "Tháo quạt case" },
-                { "gpu", "Cắm card đồ họa", "Rút card đồ họa" },
-                { "cables", "Cắm và gom dây", "Rút dây cáp" },
+                { "psu", "Install the power supply", "Remove the power supply" },
+                { "cpu", "Place the CPU in its socket", "Lift out the CPU" },
+                { "ram", "Install the RAM", "Remove the RAM" },
+                { "ssd", "Install the M.2 SSD", "Remove the SSD" },
+                { "cooler", "Apply thermal paste and install the cooler", "Remove the cooler" },
+                { "fans", "Install the case fans", "Remove the case fans" },
+                { "gpu", "Install the graphics card", "Remove the graphics card" },
+                { "cables", "Connect and organise the cables", "Disconnect the cables" },
         };
         for (int i = 0; i < steps.length; i++) {
             stepRepo.save(AssemblyStep.builder()
@@ -120,15 +120,15 @@ public class DataInitializer implements CommandLineRunner {
     private void seedCredits() {
         String[][] credits = {
                 { "Mainboard Mini-ITX", "Motherboard", "Alice Solo", "https://sketchfab.com/3d-models/motherboard-02acc04c6ac743b28d6591763afe0a50" },
-                { "Card đồ họa", "GPU", "foreverautumn97", "https://sketchfab.com/3d-models/gpu-42393304578e4f1ab0ea3c7338aeea88" },
-                { "Tản nhiệt tháp", "CPU Cooler", "Fochdog", "https://sketchfab.com/3d-models/cpu-cooler-672a0a74a98c452a862016bee99f3579" },
-                { "Nguồn", "Power Supply - Basic", "Up1x", "https://sketchfab.com/3d-models/power-supply-basic-02db33d66a784c82a6202a3ec6850498" },
+                { "Graphics card", "GPU", "foreverautumn97", "https://sketchfab.com/3d-models/gpu-42393304578e4f1ab0ea3c7338aeea88" },
+                { "Tower CPU cooler", "CPU Cooler", "Fochdog", "https://sketchfab.com/3d-models/cpu-cooler-672a0a74a98c452a862016bee99f3579" },
+                { "Power supply", "Power Supply - Basic", "Up1x", "https://sketchfab.com/3d-models/power-supply-basic-02db33d66a784c82a6202a3ec6850498" },
                 { "Mainboard ATX / Micro-ATX", "X570 Prime motherboard [HQ PBR]", "Igor.Jop", "https://sketchfab.com/models/25b3659935774b1e9d73d8954be065d8" },
-                { "Quạt", "computer fan", "Temoor", "https://sketchfab.com/models/5360bd331c5848eeb9338b4f894e78e5" },
-                { "RAM có tản nhiệt", "RAM", "foreverautumn97", "https://sketchfab.com/models/fc241b31e4e747f7b5029beeb8a23173" },
-                { "RAM thường", "Random Access Memory - RAM Stick - PC", "Diego G.", "https://sketchfab.com/models/ab2b1c25c31b44c1a757911734bdf942" },
-                { "Ổ SSD", "NVME SSD 2280", "TDD", "https://sketchfab.com/models/3d478ac74728408890c2a03363138375" },
-                { "Tản nhiệt nước AIO", "Liquid CPU Cooling", "Denzerru", "https://sketchfab.com/models/7a0014c1141a4c25bc69912075526ee5" },
+                { "Fan", "computer fan", "Temoor", "https://sketchfab.com/models/5360bd331c5848eeb9338b4f894e78e5" },
+                { "RAM with heat spreader", "RAM", "foreverautumn97", "https://sketchfab.com/models/fc241b31e4e747f7b5029beeb8a23173" },
+                { "Standard RAM", "Random Access Memory - RAM Stick - PC", "Diego G.", "https://sketchfab.com/models/ab2b1c25c31b44c1a757911734bdf942" },
+                { "SSD", "NVME SSD 2280", "TDD", "https://sketchfab.com/models/3d478ac74728408890c2a03363138375" },
+                { "AIO liquid cooler", "Liquid CPU Cooling", "Denzerru", "https://sketchfab.com/models/7a0014c1141a4c25bc69912075526ee5" },
         };
         for (String[] c : credits) {
             creditRepo.save(ModelCredit.builder().partLabel(c[0]).title(c[1]).author(c[2]).sourceUrl(c[3]).build());
@@ -139,90 +139,90 @@ public class DataInitializer implements CommandLineRunner {
 
     private void seedComponents() {
         // Vỏ máy: kích thước từ families.json, giới hạn lắp đặt từ 00_families_spec.md
-        save(PcCase.builder().category(cat.get("case")).code("case_standard_tower").name("Vỏ Tower tiêu chuẩn")
+        save(PcCase.builder().category(cat.get("case")).code("case_standard_tower").name("Standard tower case")
                 .modelUrl("/models/f_case_standard_tower.glb").imageUrl("/families/01_standard_tower.jpg")
                 .widthMm(230).heightMm(460).depthMm(430).maxFormFactor(FormFactor.ATX).sidePanel(SidePanel.GLASS)
                 .psuType(PsuType.ATX).maxGpuLengthMm(350).maxCoolerHeightMm(175).maxRadiatorMm(240)
                 .gpuMount(GpuMount.HORIZONTAL).fanSlots(3).build());
-        save(PcCase.builder().category(cat.get("case")).code("case_compact_tower").name("Vỏ Tower nhỏ gọn")
+        save(PcCase.builder().category(cat.get("case")).code("case_compact_tower").name("Compact tower case")
                 .modelUrl("/models/f_case_compact_tower.glb").imageUrl("/families/02_compact_tower.jpg")
                 .widthMm(210).heightMm(380).depthMm(370).maxFormFactor(FormFactor.MATX).sidePanel(SidePanel.SOLID)
                 .psuType(PsuType.ATX).maxGpuLengthMm(280).maxCoolerHeightMm(160)
                 .gpuMount(GpuMount.HORIZONTAL).fanSlots(3).build());
-        save(PcCase.builder().category(cat.get("case")).code("case_showcase_dual_chamber").name("Vỏ Showcase hai khoang")
+        save(PcCase.builder().category(cat.get("case")).code("case_showcase_dual_chamber").name("Dual-chamber showcase case")
                 .modelUrl("/models/f_case_showcase_dual_chamber.glb").imageUrl("/families/03_showcase_dual_chamber.jpg")
                 .widthMm(300).heightMm(450).depthMm(450).maxFormFactor(FormFactor.ATX).sidePanel(SidePanel.GLASS)
                 .psuType(PsuType.ATX).maxGpuLengthMm(330).maxCoolerHeightMm(150).maxRadiatorMm(240)
                 .gpuMount(GpuMount.VERTICAL_RISER).fanSlots(6).hasFanHub(true).build());
-        save(PcCase.builder().category(cat.get("case")).code("case_mini_sff").name("Vỏ Mini / SFF")
+        save(PcCase.builder().category(cat.get("case")).code("case_mini_sff").name("Mini / SFF case")
                 .modelUrl("/models/f_case_mini_sff.glb").imageUrl("/families/04_mini_sff.jpg")
                 .widthMm(180).heightMm(250).depthMm(350).maxFormFactor(FormFactor.ITX).sidePanel(SidePanel.MESH)
                 .psuType(PsuType.SFX).maxGpuLengthMm(260).maxCoolerHeightMm(55)
                 .gpuMount(GpuMount.SANDWICH_RISER).fanSlots(1).build());
-        save(PcCase.builder().category(cat.get("case")).code("case_full_tower").name("Vỏ Tower lớn")
+        save(PcCase.builder().category(cat.get("case")).code("case_full_tower").name("Full-tower case")
                 .modelUrl("/models/f_case_full_tower.glb").imageUrl("/families/06_full_tower.jpg")
                 .widthMm(250).heightMm(620).depthMm(550).maxFormFactor(FormFactor.ATX).sidePanel(SidePanel.GLASS)
                 .psuType(PsuType.ATX).maxGpuLengthMm(450).maxCoolerHeightMm(180).maxRadiatorMm(360)
                 .gpuMount(GpuMount.HORIZONTAL).fanSlots(5).hasFanHub(true).build());
         // Vỏ Gaming: kích thước theo src/data/builds.ts, chưa có bảng giới hạn lắp đặt
-        save(PcCase.builder().category(cat.get("case")).code("case_gaming").name("Vỏ Mid-tower mặt kính (Gaming)")
+        save(PcCase.builder().category(cat.get("case")).code("case_gaming").name("Glass-panel mid-tower case (Gaming)")
                 .modelUrl("/models/g_case.glb")
                 .widthMm(220).heightMm(470).depthMm(450).maxFormFactor(FormFactor.ATX).sidePanel(SidePanel.GLASS)
                 .psuType(PsuType.ATX).maxRadiatorMm(240).gpuMount(GpuMount.HORIZONTAL).fanSlots(4).build());
 
         // Bo mạch chủ (src/data/families.ts, boards.json). Spec dùng RAM DDR4
-        save(Motherboard.builder().category(cat.get("motherboard")).code("mb_atx").name("Bo mạch chủ ATX")
+        save(Motherboard.builder().category(cat.get("motherboard")).code("mb_atx").name("ATX motherboard")
                 .modelUrl("/models/g_motherboard.glb").formFactor(FormFactor.ATX).ramType(RamType.DDR4)
                 .ramSlots(4).pcieX16Slots(3).sysFanHeaders(4).hasArgbHeader(true).hasPumpHeader(true).build());
-        save(Motherboard.builder().category(cat.get("motherboard")).code("mb_matx").name("Bo mạch chủ Micro-ATX")
+        save(Motherboard.builder().category(cat.get("motherboard")).code("mb_matx").name("Micro-ATX motherboard")
                 .modelUrl("/models/f_motherboard_matx.glb").formFactor(FormFactor.MATX).ramType(RamType.DDR4)
                 .ramSlots(4).pcieX16Slots(2).sysFanHeaders(3).build());
-        save(Motherboard.builder().category(cat.get("motherboard")).code("mb_itx").name("Bo mạch chủ Mini-ITX")
+        save(Motherboard.builder().category(cat.get("motherboard")).code("mb_itx").name("Mini-ITX motherboard")
                 .modelUrl("/models/f_motherboard_itx.glb").formFactor(FormFactor.ITX).ramType(RamType.DDR4)
                 .ramSlots(2).pcieX16Slots(1).sysFanHeaders(2).hasUsbCHeader(true).build());
 
         save(Cpu.builder().category(cat.get("cpu")).code("cpu_std").name("CPU").modelUrl("/models/g_cpu.glb").build());
 
         // Tản nhiệt
-        save(Cooler.builder().category(cat.get("cooler")).code("tower_air_155").name("Tản khí dạng tháp")
+        save(Cooler.builder().category(cat.get("cooler")).code("tower_air_155").name("Tower air cooler")
                 .modelUrl("/models/f_tower_air_155.glb").coolerType(CoolerType.TOWER_AIR).heightMm(155).build());
-        save(Cooler.builder().category(cat.get("cooler")).code("low_profile_47").name("Tản khí thấp")
+        save(Cooler.builder().category(cat.get("cooler")).code("low_profile_47").name("Low-profile air cooler")
                 .modelUrl("/models/f_low_profile_47.glb").coolerType(CoolerType.LOW_PROFILE).heightMm(47).build());
-        save(Cooler.builder().category(cat.get("cooler")).code("aio_240").name("Tản nước 240 mm")
+        save(Cooler.builder().category(cat.get("cooler")).code("aio_240").name("240 mm liquid cooler")
                 .modelUrl("/models/g_aio_radiator.glb").coolerType(CoolerType.AIO).radiatorMm(240).fanCount(2).build());
-        save(Cooler.builder().category(cat.get("cooler")).code("aio_360").name("Tản nước 360 mm")
+        save(Cooler.builder().category(cat.get("cooler")).code("aio_360").name("360 mm liquid cooler")
                 .modelUrl("/models/f_aio_360.glb").coolerType(CoolerType.AIO).radiatorMm(360).fanCount(3).build());
 
         save(Ram.builder().category(cat.get("ram")).code("ram_ddr4").name("RAM DDR4")
                 .modelUrl("/models/g_ram.glb").ramType(RamType.DDR4).heightMm(42).build());
 
         // Card đồ họa: gpu_280 = 280 × 125 × 55 (builds.ts), gpu_240 = 240 × 120 × 45 (spec)
-        save(Gpu.builder().category(cat.get("gpu")).code("gpu_280").name("Card đồ họa 280 mm, 3 quạt")
+        save(Gpu.builder().category(cat.get("gpu")).code("gpu_280").name("280 mm graphics card, 3 fans")
                 .modelUrl("/models/g_gpu.glb").lengthMm(280).heightMm(125).thicknessMm(55).fanCount(3)
                 .powerConnector("8-pin").build());
-        save(Gpu.builder().category(cat.get("gpu")).code("gpu_240").name("Card đồ họa 240 mm, 2 quạt")
+        save(Gpu.builder().category(cat.get("gpu")).code("gpu_240").name("240 mm graphics card, 2 fans")
                 .modelUrl("/models/f_gpu_240_dual.glb").lengthMm(240).heightMm(120).thicknessMm(45).fanCount(2)
                 .powerConnector("8-pin").build());
 
-        save(Ssd.builder().category(cat.get("ssd")).code("ssd_m2_2280").name("Ổ SSD M.2 2280")
+        save(Ssd.builder().category(cat.get("ssd")).code("ssd_m2_2280").name("M.2 2280 SSD")
                 .modelUrl("/models/g_ssd.glb").interfaceType(SsdInterface.M2_NVME).formSize("2280").build());
 
-        save(Psu.builder().category(cat.get("psu")).code("psu_atx").name("Nguồn ATX")
+        save(Psu.builder().category(cat.get("psu")).code("psu_atx").name("ATX power supply")
                 .modelUrl("/models/g_psu.glb").psuType(PsuType.ATX).build());
-        save(Psu.builder().category(cat.get("psu")).code("psu_sfx").name("Nguồn SFX nhỏ gọn")
+        save(Psu.builder().category(cat.get("psu")).code("psu_sfx").name("Compact SFX power supply")
                 .modelUrl("/models/f_psu_sfx_100.glb").psuType(PsuType.SFX).build());
 
         // Quạt case
-        save(CaseFan.builder().category(cat.get("fans")).code("fan120").name("Quạt 120 mm")
+        save(CaseFan.builder().category(cat.get("fans")).code("fan120").name("120 mm fan")
                 .modelUrl("/models/f_fan120.glb").sizeMm(120).build());
-        save(CaseFan.builder().category(cat.get("fans")).code("fan140").name("Quạt 140 mm")
+        save(CaseFan.builder().category(cat.get("fans")).code("fan140").name("140 mm fan")
                 .modelUrl("/models/f_fan140.glb").sizeMm(140).build());
-        save(CaseFan.builder().category(cat.get("fans")).code("fan120_argb").name("Quạt 120 mm đèn ARGB")
+        save(CaseFan.builder().category(cat.get("fans")).code("fan120_argb").name("120 mm ARGB fan")
                 .modelUrl("/models/f_fan120_argb.glb").sizeMm(120).argb(true).build());
-        save(CaseFan.builder().category(cat.get("fans")).code("fan140_argb").name("Quạt 140 mm đèn ARGB")
+        save(CaseFan.builder().category(cat.get("fans")).code("fan140_argb").name("140 mm ARGB fan")
                 .modelUrl("/models/g_case_fan_argb.glb").sizeMm(140).argb(true).build());
 
-        save(Accessory.builder().category(cat.get("tools")).code("tool_kit").name("Bộ đồ nghề lắp máy")
+        save(Accessory.builder().category(cat.get("tools")).code("tool_kit").name("PC assembly toolkit")
                 .modelUrl("/models/t_kit.glb").build());
     }
 
@@ -233,22 +233,22 @@ public class DataInitializer implements CommandLineRunner {
     // ---- Các máy trên thanh "Chọn kiểu máy" ------------------------------
 
     private void seedBuilds() {
-        preset(1, "standard_tower", "Tower tiêu chuẩn", "Dáng tháp vừa, mặt lưới thoáng, dễ lắp và dễ nâng cấp.",
+        preset(1, "standard_tower", "Standard tower", "A mid-sized tower with a ventilated mesh front, easy assembly and room to upgrade.",
                 "/families/01_standard_tower.jpg", "case_standard_tower", "mb_atx", "tower_air_155", "gpu_280", "psu_atx",
                 Map.of("fan140", 2, "fan120", 1));
-        preset(2, "compact_tower", "Tower nhỏ gọn", "Thấp và gọn hơn, hai hông kín, vẫn giữ dáng PC quen thuộc.",
+        preset(2, "compact_tower", "Compact tower", "A shorter, compact tower with solid side panels and a familiar PC layout.",
                 "/families/02_compact_tower.jpg", "case_compact_tower", "mb_matx", "tower_air_155", "gpu_240", "psu_atx",
                 Map.of("fan120", 3));
-        preset(3, "showcase_dual_chamber", "Showcase / Bể cá", "Kính trước và hông, hai khoang, nhiều quạt đèn để trưng bày.",
+        preset(3, "showcase_dual_chamber", "Dual-chamber showcase", "Front and side glass panels, two chambers and illuminated fans to show off your build.",
                 "/families/03_showcase_dual_chamber.jpg", "case_showcase_dual_chamber", "mb_atx", "aio_240", "gpu_280", "psu_atx",
                 Map.of("fan120_argb", 6));
-        preset(4, "mini_sff", "Mini / SFF", "Hộp nhôm rất nhỏ: card đồ họa nằm sau lưng bo, nối bằng cáp riser.",
+        preset(4, "mini_sff", "Mini / SFF", "A tiny aluminium case with the GPU behind the motherboard, connected by a riser cable.",
                 "/families/04_mini_sff.jpg", "case_mini_sff", "mb_itx", "low_profile_47", "gpu_240", "psu_sfx",
                 Map.of("fan120", 1));
-        preset(5, "full_tower", "Tower lớn", "Tháp cao và sâu, bốn quạt trước, két nước 360 trên nóc, nhiều chỗ mở rộng.",
+        preset(5, "full_tower", "Full tower", "A tall, deep tower with four front fans, a 360 mm top radiator and room to expand.",
                 "/families/06_full_tower.jpg", "case_full_tower", "mb_atx", "aio_360", "gpu_280", "psu_atx",
                 Map.of("fan140", 5));
-        preset(6, "gaming", "Gaming (đầy đủ)", "Mạnh về hình ảnh, nhiều quạt, mặt kính để nhìn thấy bên trong.",
+        preset(6, "gaming", "Gaming (complete)", "Built for graphics, with plenty of cooling and a glass side panel.",
                 null, "case_gaming", "mb_atx", "aio_240", "gpu_280", "psu_atx",
                 Map.of("fan140_argb", 3, "fan120", 1));
     }

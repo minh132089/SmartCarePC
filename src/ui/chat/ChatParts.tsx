@@ -59,7 +59,7 @@ export function Thread({
         <div className="rounded-2xl bg-warn-bg px-3.5 py-3 text-[13px] leading-snug text-warn ring-1 ring-warn-line">
           {error}
           <button onClick={onRetry} className="mt-1.5 block font-semibold text-link">
-            Thử lại
+            Try again
           </button>
         </div>
       )}
@@ -81,7 +81,7 @@ function BusyBubble({ hints, stage }: { hints?: string[]; stage?: string | null 
   const hint = stage ?? hints?.[Math.min(step, hints.length - 1)]
   return (
     <div className="w-fit max-w-full px-1 py-2 text-ink-2">
-      <LatticeLoader label={hint ?? 'Đang suy nghĩ'} pattern="dots" grid={3} cellSize={5} gap={2} fontSize={13} className="max-w-full flex-wrap gap-y-2" />
+      <LatticeLoader label={hint ?? "Thinking"} pattern="dots" grid={3} cellSize={5} gap={2} fontSize={13} className="max-w-full flex-wrap gap-y-2" />
     </div>
   )
 }
@@ -95,7 +95,7 @@ function CompactCard({ card, action }: { card: BuildCard; action?: ReactNode }) 
         {compatText(card).short}
       </p>
       <p className="mt-0.5 text-[14px] text-ink">
-        {card.items.length} linh kiện{total && `, ước tính ${vndRange(total.min, total.max)}`}
+        {card.items.length} components{total && `, estimated ${vndRange(total.min, total.max)}`}
       </p>
       {action && <div className="mt-3">{action}</div>}
     </div>
@@ -123,7 +123,7 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
       </ul>
       {totalOf(card) && (
         <div className="flex items-baseline justify-between gap-3 border-t border-line px-3.5 py-2.5 text-[13px]">
-          <span className="text-ink-2">Tổng ước tính</span>
+          <span className="text-ink-2">Estimated total</span>
           <span className="font-semibold text-ink">{vndRange(totalOf(card)!.min, totalOf(card)!.max)}</span>
         </div>
       )}
@@ -136,7 +136,7 @@ export function BuildCardView({ card, action }: { card: BuildCard; action?: Reac
           ))}
           {card.warnings.map((w) => (
             <li key={w.rule + w.message} className="text-warn">
-              Lưu ý: {w.message}
+              Note: {w.message}
             </li>
           ))}
         </ul>
@@ -190,7 +190,7 @@ export function Composer({
         rows={1}
         maxLength={2000}
         placeholder={placeholder}
-        aria-label="Câu hỏi"
+        aria-label="Question"
         className={`field-sizing-content flex-1 resize-none bg-transparent leading-snug outline-none placeholder:text-ink-3 ${
           big ? 'max-h-48 min-h-10 py-[9px] text-[16px]' : 'max-h-28 min-h-[30px] py-1 text-[15px]'
         }`}
@@ -199,7 +199,7 @@ export function Composer({
       <button
         type="submit"
         disabled={!value.trim() || busy}
-        aria-label="Gửi"
+        aria-label="Send"
         className={`grid shrink-0 place-items-center rounded-full bg-accent text-white transition-[opacity,transform] duration-100 active:scale-[0.94] disabled:opacity-30 ${big ? 'size-10' : 'mb-0.5 size-8'}`}
       >
         <ArrowUp size={15} aria-hidden />

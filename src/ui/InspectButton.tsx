@@ -17,7 +17,7 @@ export function InspectButton() {
         className="swap glass pointer-events-auto flex items-center gap-2 rounded-full bg-glass py-2.5 pr-5 pl-4 text-[15px] font-medium text-ink shadow-[0_6px_24px_rgba(0,0,0,0.12)] ring-1 ring-line backdrop-blur-xl transition-transform duration-100 active:scale-[0.97]"
       >
         <MagnifyingGlass size={17} aria-hidden className="text-link" />
-        Xem cận cảnh {PARTS[selected].name}
+        Inspect {PARTS[selected].name}
       </button>
     </div>
   )
