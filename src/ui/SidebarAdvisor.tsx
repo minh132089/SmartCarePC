@@ -71,7 +71,7 @@ function generatePlans(input: AdvisorInput): Plan[] {
       whyThisWorks: `Chạy 2 kênh Dual-Channel sẽ tăng tốc đọc/ghi RAM ~15–20%. Phù hợp khi bo mạch còn slot trống.`,
       tags: ['Dual-Channel', 'Tiết kiệm', 'Không cần tháo RAM cũ'],
       scene3D: { ram: 2 },
-      searchQuery: `RAM DDR4 ${currentRam}GB 3200MHz giá rẻ Việt Nam site:memoryzone.com.vn OR site:phongvu.vn OR site:shopee.vn`,
+      searchQuery: `RAM DDR4 ${currentRam}GB 3200MHz chính hãng giá rẻ Việt Nam Memoryzone Phong Vũ Shopee`,
     }
 
     // Plan B — Tối ưu: kit đôi 2×16GB
@@ -87,7 +87,7 @@ function generatePlans(input: AdvisorInput): Plan[] {
       whyThisWorks: `Kit 2 thanh cùng hãng, cùng tần số đảm bảo Dual-Channel hoạt động ổn định nhất. Dành cho render đồ họa và chơi game nặng.`,
       tags: ['Kit đôi', 'Ổn định nhất', 'DDR4 3600 CL18'],
       scene3D: { ram: 4 },
-      searchQuery: `RAM kit 2x${targetRam / 2}GB DDR4 3600 Kingston Corsair GSkill giá Việt Nam site:memoryzone.com.vn OR site:gearvn.com`,
+      searchQuery: `Kit RAM 2 thanh ${targetRam / 2}GB DDR4 3600 Kingston Corsair GSkill giá rẻ Việt Nam`,
     }
 
     return [planA, planB]
@@ -107,7 +107,7 @@ function generatePlans(input: AdvisorInput): Plan[] {
       whyThisWorks: `Gen3 đủ nhanh cho game và lưu trữ dữ liệu (đọc ~3500 MB/s). Tiết kiệm hơn Gen4 khoảng 30–40%.`,
       tags: ['Gen3 NVMe', 'Mở rộng dung lượng', 'Giữ SSD cũ'],
       scene3D: { ssd: Math.min(currentSsd + 1, 2) },
-      searchQuery: `SSD M.2 NVMe 1TB Gen3 giá rẻ Việt Nam Kingston Samsung WD site:memoryzone.com.vn OR site:phongvu.vn`,
+      searchQuery: `SSD M.2 NVMe 1TB Gen3 Kingston Samsung WD giá rẻ Việt Nam`,
     }
 
     const planB: Plan = {
@@ -123,7 +123,7 @@ function generatePlans(input: AdvisorInput): Plan[] {
       whyThisWorks: `PCIe Gen4 cho tốc độ đọc ~7000 MB/s — giảm đáng kể thời gian load scene Blender/Premiere. Cần bo mạch hỗ trợ Gen4.`,
       tags: ['Gen4 NVMe', '7000 MB/s', 'Cho render & game AAA'],
       scene3D: { ssd: 2 },
-      searchQuery: `SSD M.2 NVMe 2TB PCIe Gen4 Samsung WD Black Crucial giá Việt Nam site:memoryzone.com.vn OR site:gearvn.com`,
+      searchQuery: `SSD M.2 NVMe 2TB PCIe Gen4 Samsung WD Black Crucial giá rẻ Việt Nam`,
     }
 
     return [planA, planB]
@@ -148,8 +148,8 @@ function generatePlans(input: AdvisorInput): Plan[] {
     tags: isBudgetTight ? ['2 Quạt', 'DLSS 3', '115W TDP', 'Full HD Ultra'] : ['16GB VRAM', '1440p Gaming', 'Render 3D'],
     scene3D: { gpu: 'gpu_240' },
     searchQuery: isBudgetTight
-      ? `RTX 4060 8GB giá rẻ ASUS MSI Gigabyte Việt Nam site:gearvn.com OR site:phongvu.vn OR site:memoryzone.com.vn`
-      : `RTX 4060 Ti 16GB giá Việt Nam ASUS MSI Palit site:gearvn.com OR site:phongvu.vn`,
+      ? `Card màn hình RTX 4060 8GB ASUS MSI Gigabyte giá rẻ Việt Nam`
+      : `Card màn hình RTX 4060 Ti 16GB ASUS MSI giá rẻ Việt Nam`,
   }
 
   const planB: Plan = {
@@ -166,7 +166,7 @@ function generatePlans(input: AdvisorInput): Plan[] {
     whyThisWorks: `DLSS 3.5 + Frame Gen. Hiệu năng render Blender Cycles nhanh hơn 4060 ~45%. 3 quạt tản nhiệt tốt hơn cho ép xung.`,
     tags: ['3 Quạt', '12GB VRAM', 'DLSS 3.5 + Frame Gen', 'Render & 1440p'],
     scene3D: { gpu: 'gpu_280' },
-    searchQuery: `RTX 4070 Super 12GB giá Việt Nam ASUS MSI site:gearvn.com OR site:phongvu.vn OR site:memoryzone.com.vn`,
+    searchQuery: `Card màn hình RTX 4070 Super 12GB ASUS MSI giá rẻ Việt Nam`,
   }
 
   return [planA, planB]

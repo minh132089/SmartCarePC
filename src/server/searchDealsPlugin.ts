@@ -1,18 +1,20 @@
 /**
- * Vite plugin: cung cấp endpoint GET /api/search-deals?q=...&max=5
- * Chạy phía server (Node.js) nên không bị CORS khi scrape.
- * Ưu tiên DuckDuckGo (chuẩn kết quả Việt Nam, MemoryZone, GearVN, Shopee),
- * fallback sang DDG Lite hoặc Bing nếu cần.
+ * Vite plugin: cung cấp endpoint GET /api/search-deals?q=...&max=4
+ * Chạy phía server (Node.js) nên không bị CORS khi tìm kiếm.
+ * Tích hợp từ dsh-free-web-search:
+ * 1. searchAnysearch (API tìm kiếm miễn phí, không cần key, không bao giờ bị captcha 202)
+ * 2. Fallback sang DuckDuckGo / Bing nếu cần.
  */
 import type { Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { searchAnysearch } from './engines/anysearch.js'
 import { searchDdgHtml, searchDdgLite } from './engines/ddg.js'
 import { searchBing } from './engines/bing.js'
 import type { Source } from './engines/common.js'
 
 export interface SearchDealsResult {
   sources: Source[]
-  provider: 'ddg' | 'ddg-lite' | 'bing'
+  provider: 'anysearch' | 'ddg' | 'ddg-lite' | 'bing'
   error?: string
 }
 
@@ -40,31 +42,41 @@ export function searchDealsPlugin(): Plugin {
           }
 
           let sources: Source[] = []
-          let provider: SearchDealsResult['provider'] = 'ddg'
+          let provider: SearchDealsResult['provider'] = 'anysearch'
 
-          // 1. Thử DuckDuckGo HTML trước
+          // 1. Thử Anysearch trước (miễn phí, nhanh, không bị anti-bot)
           try {
-            const ddgRes = await searchDdgHtml(q, max, { region: 'vn-vi' })
-            sources = ddgRes.sources
-            provider = 'ddg'
+            const anyRes = await searchAnysearch(q, max)
+            if (anyRes.sources.length > 0) {
+              sources = anyRes.sources
+              provider = 'anysearch'
+            }
           } catch {
             sources = []
           }
 
-          // 2. Nếu DDG HTML ít kết quả hoặc lỗi, thử DDG Lite
-          if (sources.length < 2) {
+          // 2. Nếu Anysearch ít kết quả, thử DDG
+          if (sources.length === 0) {
             try {
-              const liteRes = await searchDdgLite(q, max, { region: 'vn-vi' })
-              if (liteRes.sources.length > 0) {
-                sources = liteRes.sources
-                provider = 'ddg-lite'
+              const ddgRes = await searchDdgHtml(q, max, { region: 'vn-vi' })
+              if (ddgRes.sources.length > 0) {
+                sources = ddgRes.sources
+                provider = 'ddg'
               }
             } catch {
-              // Bỏ qua lỗi lite
+              try {
+                const liteRes = await searchDdgLite(q, max, { region: 'vn-vi' })
+                if (liteRes.sources.length > 0) {
+                  sources = liteRes.sources
+                  provider = 'ddg-lite'
+                }
+              } catch {
+                // Ignore
+              }
             }
           }
 
-          // 3. Nếu vẫn không có kết quả, thử Bing
+          // 3. Fallback Bing
           if (sources.length === 0) {
             try {
               const bingRes = await searchBing(q, max)
