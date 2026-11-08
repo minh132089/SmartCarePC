@@ -1,4 +1,4 @@
-export interface Source {
+﻿export interface Source {
   url: string
   title?: string
   snippet?: string
@@ -23,7 +23,7 @@ export interface SearchOptions {
 
 export const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
-export const ACCEPT_LANG = 'en-US,en;q=0.9'
+export const ACCEPT_LANG = 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7'
 
 export const TIME_RANGES = ['day', 'week', 'month', 'year'] as const
 export type TimeRangePreset = (typeof TIME_RANGES)[number]
@@ -110,13 +110,13 @@ function fromBase64Url(value: string): string | null {
 }
 
 /**
- * Bing serves no result URLs. Every href on a SERP is its own click tracker —
- * `https://www.bing.com/ck/a?…&u=a1<base64url of the target>&ntb=1` — and it
+ * Bing serves no result URLs. Every href on a SERP is its own click tracker â€”
+ * `https://www.bing.com/ck/a?â€¦&u=a1<base64url of the target>&ntb=1` â€” and it
  * arrives with HTML entities intact. Handed to a model unchanged, the citation
- * is a `bing.com/ck/a?!&amp;&amp;…` link that answers `204` and leads nowhere.
+ * is a `bing.com/ck/a?!&amp;&amp;â€¦` link that answers `204` and leads nowhere.
  *
- * So: decode the entities, then unwrap `u=a1…`. Anything unexpected degrades to
- * the entity-decoded href rather than dropping the result — a tracker link that
+ * So: decode the entities, then unwrap `u=a1â€¦`. Anything unexpected degrades to
+ * the entity-decoded href rather than dropping the result â€” a tracker link that
  * at least resolves beats no source at all.
  */
 export function extractBingUrl(href: string | undefined): string | null {

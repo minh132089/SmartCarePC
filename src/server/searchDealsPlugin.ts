@@ -1,17 +1,18 @@
-﻿/**
- * Vite plugin: cung cáº¥p endpoint GET /api/search-deals?q=...&max=5
- * Cháº¡y phÃ­a server (Node.js) nÃªn khÃ´ng bá»‹ CORS khi scrape Bing/DDG.
- * Thá»­ Bing trÆ°á»›c, fallback DDG náº¿u Bing tráº£ vá» Ã­t káº¿t quáº£ hÆ¡n 2.
+/**
+ * Vite plugin: cung cấp endpoint GET /api/search-deals?q=...&max=5
+ * Chạy phía server (Node.js) nên không bị CORS khi scrape.
+ * Ưu tiên DuckDuckGo (chuẩn kết quả Việt Nam, MemoryZone, GearVN, Shopee),
+ * fallback sang DDG Lite hoặc Bing nếu cần.
  */
 import type { Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { searchDdgHtml, searchDdgLite } from './engines/ddg.js'
 import { searchBing } from './engines/bing.js'
-import { searchDdgHtml } from './engines/ddg.js'
 import type { Source } from './engines/common.js'
 
 export interface SearchDealsResult {
   sources: Source[]
-  provider: 'bing' | 'ddg' | 'combined'
+  provider: 'ddg' | 'ddg-lite' | 'bing'
   error?: string
 }
 
@@ -22,7 +23,6 @@ export function searchDealsPlugin(): Plugin {
       server.middlewares.use(
         '/api/search-deals',
         async (req: IncomingMessage, res: ServerResponse) => {
-          // Chá»‰ nháº­n GET
           if (req.method !== 'GET') {
             res.writeHead(405, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ error: 'Method Not Allowed' }))
@@ -31,7 +31,7 @@ export function searchDealsPlugin(): Plugin {
 
           const urlObj = new URL(req.url ?? '/', 'http://localhost')
           const q = urlObj.searchParams.get('q') ?? ''
-          const max = Math.min(Number(urlObj.searchParams.get('max') ?? '5'), 10)
+          const max = Math.min(Number(urlObj.searchParams.get('max') ?? '4'), 10)
 
           if (!q.trim()) {
             res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -40,40 +40,40 @@ export function searchDealsPlugin(): Plugin {
           }
 
           let sources: Source[] = []
-          let provider: SearchDealsResult['provider'] = 'bing'
+          let provider: SearchDealsResult['provider'] = 'ddg'
 
+          // 1. Thử DuckDuckGo HTML trước
           try {
-            const bingResult = await searchBing(q, max, { bingMarket: 'vi-VN' })
-            sources = bingResult.sources
-            provider = 'bing'
-
-            // Náº¿u Bing Ã­t káº¿t quáº£, bá»• sung DDG
-            if (sources.length < 2) {
-              try {
-                const ddgResult = await searchDdgHtml(q, max, { region: 'vn-vi' })
-                // Merge, dedup by URL
-                const seen = new Set(sources.map((s) => s.url))
-                for (const s of ddgResult.sources) {
-                  if (!seen.has(s.url)) {
-                    sources.push(s)
-                    seen.add(s.url)
-                  }
-                }
-                provider = 'combined'
-              } catch {
-                // DDG fallback tháº¥t báº¡i â€” giá»¯ Bing náº¿u cÃ³
-              }
-            }
+            const ddgRes = await searchDdgHtml(q, max, { region: 'vn-vi' })
+            sources = ddgRes.sources
+            provider = 'ddg'
           } catch {
-            // Bing tháº¥t báº¡i â†’ thá»­ DDG
+            sources = []
+          }
+
+          // 2. Nếu DDG HTML ít kết quả hoặc lỗi, thử DDG Lite
+          if (sources.length < 2) {
             try {
-              const ddgResult = await searchDdgHtml(q, max, { region: 'vn-vi' })
-              sources = ddgResult.sources
-              provider = 'ddg'
-            } catch (err2) {
+              const liteRes = await searchDdgLite(q, max, { region: 'vn-vi' })
+              if (liteRes.sources.length > 0) {
+                sources = liteRes.sources
+                provider = 'ddg-lite'
+              }
+            } catch {
+              // Bỏ qua lỗi lite
+            }
+          }
+
+          // 3. Nếu vẫn không có kết quả, thử Bing
+          if (sources.length === 0) {
+            try {
+              const bingRes = await searchBing(q, max)
+              sources = bingRes.sources
+              provider = 'bing'
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
               res.writeHead(502, { 'Content-Type': 'application/json' })
-              const msg = err2 instanceof Error ? err2.message : String(err2)
-              res.end(JSON.stringify({ sources: [], provider: 'ddg', error: msg } satisfies SearchDealsResult))
+              res.end(JSON.stringify({ sources: [], provider: 'bing', error: msg } satisfies SearchDealsResult))
               return
             }
           }
@@ -84,8 +84,8 @@ export function searchDealsPlugin(): Plugin {
           }
 
           res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'public, max-age=300', // cache 5 phÃºt
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=300',
           })
           res.end(JSON.stringify(result))
         },

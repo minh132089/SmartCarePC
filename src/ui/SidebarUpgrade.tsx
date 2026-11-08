@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import {
   CheckCircle,
   WarningCircle,
@@ -62,6 +62,7 @@ export function SidebarUpgrade() {
   }, [familyId])
 
   const currentOption = UPGRADE_OPTIONS.find((o) => o.id === selectedOptionId) ?? UPGRADE_OPTIONS[0]
+
   const compatResult = checkUpgradeCompatibility(currentSpecs, currentOption)
 
   const viewPartIn3D = (partId: PartId) => {
@@ -69,7 +70,7 @@ export function SidebarUpgrade() {
     inspectPart(partId)
   }
 
-  // Tá»± Ä‘á»™ng cáº­p nháº­t mÃ´ hÃ¬nh 3D khi chá»n gÃ³i nÃ¢ng cáº¥p
+  // Tự động cập nhật mô hình 3D khi chọn gói nâng cấp
   const handleSelectUpgradeOption = (opt: UpgradeTargetOption) => {
     setSelectedOptionId(opt.id)
     if (opt.id === 'ram_add_8gb_ddr4') {
@@ -104,7 +105,7 @@ export function SidebarUpgrade() {
             viewMode === 'check' ? 'bg-surface text-ink shadow-sm font-semibold' : 'text-ink-2 hover:text-ink'
           }`}
         >
-          TÆ°Æ¡ng thÃ­ch
+          Tương thích
         </button>
         <button
           onClick={() => setViewMode('advisor')}
@@ -112,7 +113,7 @@ export function SidebarUpgrade() {
             viewMode === 'advisor' ? 'bg-surface text-ink shadow-sm font-semibold' : 'text-ink-2 hover:text-ink'
           }`}
         >
-          TÆ° váº¥n AI
+          Tư vấn AI
         </button>
         <button
           onClick={() => setViewMode('power')}
@@ -120,39 +121,39 @@ export function SidebarUpgrade() {
             viewMode === 'power' ? 'bg-surface text-ink shadow-sm font-semibold' : 'text-ink-2 hover:text-ink'
           }`}
         >
-          TÃ­nh nguá»“n
+          Tính nguồn
         </button>
       </div>
 
       {/* SUB-VIEW 1: CHECK TƯƠNG THÍCH */}
       {viewMode === 'check' && (
         <div className="space-y-3.5">
-          {/* ThÃ´ng tin mÃ¡y Ä‘ang xem */}
+          {/* Thông tin máy đang xem */}
           <div className="rounded-2xl border border-line bg-surface p-3.5 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-accent uppercase tracking-wide">MÃ¡y Ä‘ang xem trÃªn 3D</span>
-              <span className="text-[11px] text-ink-3">Vá»: max {currentSpecs.caseMaxGpuMm} mm</span>
+              <span className="text-[11px] font-semibold text-accent uppercase tracking-wide">Máy đang xem trên 3D</span>
+              <span className="text-[11px] text-ink-3">Vỏ: max {currentSpecs.caseMaxGpuMm} mm</span>
             </div>
             <p className="mt-1 text-[13px] font-bold text-ink">{currentSpecs.caseName}</p>
             <p className="text-[12px] text-ink-2">
-              Nguá»“n: {currentSpecs.psuWatt}W {currentSpecs.psuType} â€¢ Bo máº¡ch: {currentSpecs.motherboard} ({currentSpecs.ramDdr})
+              Nguồn: {currentSpecs.psuWatt}W {currentSpecs.psuType} • Bo mạch: {currentSpecs.motherboard} ({currentSpecs.ramDdr})
             </p>
           </div>
 
-          {/* Bá»˜ ÄIá»€U KHIá»‚N THAY Äá»”I 3D TRá»°C TIáº¾P */}
+          {/* BỘ ĐIỀU KHIỂN THAY ĐỔI 3D TRỰC TIẾP */}
           <div className="rounded-2xl border border-accent/30 bg-accent/5 p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-[12px] font-bold text-accent">
                 <Sparkle size={14} weight="fill" />
-                Thao tÃ¡c thay Ä‘á»•i trá»±c tiáº¿p trÃªn 3D
+                Thao tác thay đổi trực tiếp trên 3D
               </span>
-              <span className="text-[10px] text-ink-3">Cáº­p nháº­t thá»i gian thá»±c</span>
+              <span className="text-[10px] text-ink-3">Cập nhật thời gian thực</span>
             </div>
 
             {/* RAM 3D Switcher */}
             <div>
               <div className="flex items-center justify-between text-[11px] mb-1">
-                <span className="font-semibold text-ink">Sá»‘ thanh RAM trÃªn bo máº¡ch:</span>
+                <span className="font-semibold text-ink">Số thanh RAM trên bo mạch:</span>
                 <span className="font-bold text-accent">{ramSticks} thanh</span>
               </div>
               <div className="grid grid-cols-3 gap-1 text-[11px]">
@@ -182,14 +183,14 @@ export function SidebarUpgrade() {
             {/* SSD 3D Switcher */}
             <div>
               <div className="flex items-center justify-between text-[11px] mb-1">
-                <span className="font-semibold text-ink">Sá»‘ á»• SSD M.2 trÃªn bo máº¡ch:</span>
-                <span className="font-bold text-accent">{ssdCount} á»•</span>
+                <span className="font-semibold text-ink">Số ổ SSD M.2 trên bo mạch:</span>
+                <span className="font-bold text-accent">{ssdCount} ổ</span>
               </div>
               <div className="grid grid-cols-3 gap-1 text-[11px]">
                 {[
-                  { n: 0, label: '0 á»” (ThÃ¡o rá»i)' },
-                  { n: 1, label: '1 á»” (Máº·c Ä‘á»‹nh)' },
-                  { n: 2, label: '2 á»” (Láº¯p thÃªm)' },
+                  { n: 0, label: '0 Ổ (Tháo rời)' },
+                  { n: 1, label: '1 Ổ (Mặc định)' },
+                  { n: 2, label: '2 Ổ (Lắp thêm)' },
                 ].map((item) => (
                   <button
                     key={item.n}
@@ -212,9 +213,9 @@ export function SidebarUpgrade() {
             {/* GPU 3D Switcher */}
             <div>
               <div className="flex items-center justify-between text-[11px] mb-1">
-                <span className="font-semibold text-ink">Card Ä‘á»“ há»a (GPU) trong mÃ¡y:</span>
+                <span className="font-semibold text-ink">Card đồ họa (GPU) trong máy:</span>
                 <span className="font-bold text-accent">
-                  {customGpu === 'gpu_240' ? '2 quáº¡t (240mm)' : '3 quáº¡t (280mm)'}
+                  {customGpu === 'gpu_240' ? '2 quạt (240mm)' : '3 quạt (280mm)'}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-1 text-[11px]">
@@ -229,7 +230,7 @@ export function SidebarUpgrade() {
                       : 'bg-surface text-ink-2 hover:text-ink'
                   }`}
                 >
-                  2 Quáº¡t (240 mm)
+                  2 Quạt (240 mm)
                 </button>
                 <button
                   onClick={() => {
@@ -242,15 +243,15 @@ export function SidebarUpgrade() {
                       : 'bg-surface text-ink-2 hover:text-ink'
                   }`}
                 >
-                  3 Quáº¡t (280 mm)
+                  3 Quạt (280 mm)
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Chá»n linh kiá»‡n nÃ¢ng cáº¥p */}
+          {/* Chọn linh kiện nâng cấp */}
           <div>
-            <label className="text-[12px] font-semibold text-ink-2">GÃ³i nÃ¢ng cáº¥p Ä‘á» xuáº¥t (báº¥m Ä‘á»ƒ xem mÃ´ phá»ng 3D):</label>
+            <label className="text-[12px] font-semibold text-ink-2">Gói nâng cấp đề xuất (bấm để xem mô phỏng 3D):</label>
             <div className="mt-1.5 space-y-1.5">
               {UPGRADE_OPTIONS.map((opt) => {
                 const active = opt.id === selectedOptionId
@@ -280,7 +281,7 @@ export function SidebarUpgrade() {
             </div>
           </div>
 
-          {/* Káº¿t quáº£ kiá»ƒm tra tÆ°Æ¡ng thÃ­ch */}
+          {/* Kết quả kiểm tra tương thích */}
           <div
             className={`rounded-2xl border p-3.5 shadow-sm transition-all ${
               compatResult.status === 'ok'
@@ -322,17 +323,17 @@ export function SidebarUpgrade() {
               </div>
             </div>
 
-            {/* Chi tiáº¿t tá»«ng Ä‘iá»u kiá»‡n */}
+            {/* Chi tiết từng điều kiện */}
             <ul className="mt-2.5 space-y-1 rounded-xl bg-surface/80 p-2.5 text-[11px] text-ink backdrop-blur-sm">
               {compatResult.details.map((d, i) => (
                 <li key={i} className="flex items-start gap-1.5 leading-snug">
-                  <span className="shrink-0 text-ink-3">â€¢</span>
+                  <span className="shrink-0 text-ink-3">•</span>
                   <span>{d}</span>
                 </li>
               ))}
             </ul>
 
-            {/* NÃºt soi 3D */}
+            {/* Nút soi 3D */}
             <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2">
               <button
                 onClick={() => {
@@ -342,35 +343,35 @@ export function SidebarUpgrade() {
                 className={`flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline ${focus}`}
               >
                 <Desktop size={14} />
-                Xem cáº­n cáº£nh linh kiá»‡n trÃªn 3D â€º
+                Xem cận cảnh linh kiện trên 3D ›
               </button>
               <button
                 onClick={() => {
-setViewMode('advisor')
+                  setViewMode('advisor')
                 }}
                 className="text-[12px] font-medium text-ink-2 hover:text-ink"
               >
-                Xem cÃ¡ch thÃ¡o láº¯p â€º
+                Nhờ AI tư vấn chi tiết ›
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* SUB-VIEW 2: TÆ¯ Váº¤N AI */}
+      {/* SUB-VIEW 2: TƯ VẤN AI */}
       {viewMode === 'advisor' && (
         <div className="space-y-3.5">
           <SidebarAdvisor />
         </div>
       )}
 
-      {/* SUB-VIEW 3: TÃNH CÃ”NG SUáº¤T NGUá»’N */}
+      {/* SUB-VIEW 3: TÍNH CÔNG SUẤT NGUỒN */}
       {viewMode === 'power' && (
         <div className="space-y-3.5 rounded-2xl border border-line bg-surface p-4 shadow-sm">
           <div>
-            <h3 className="text-[14px] font-bold text-ink">Æ¯á»›c tÃ­nh cÃ´ng suáº¥t nguá»“n (PSU)</h3>
+            <h3 className="text-[14px] font-bold text-ink">Ước tính công suất nguồn (PSU)</h3>
             <p className="mt-0.5 text-[11px] text-ink-2">
-              KÃ©o chá»‰nh Ä‘á»ƒ tÃ­nh cÃ´ng suáº¥t cáº§n thiáº¿t khi báº¡n thay CPU hoáº·c Card Ä‘á»“ há»a.
+              Kéo chỉnh để tính công suất cần thiết khi bạn thay CPU hoặc Card đồ họa.
             </p>
           </div>
 
@@ -393,7 +394,7 @@ setViewMode('advisor')
 
             <div>
               <div className="flex justify-between text-[12px]">
-                <span className="font-medium text-ink">Card Ä‘á»“ há»a GPU (Watt):</span>
+                <span className="font-medium text-ink">Card đồ họa GPU (Watt):</span>
                 <span className="font-bold text-accent">{gpuWatts} W</span>
               </div>
               <input
@@ -409,18 +410,18 @@ setViewMode('advisor')
           </div>
 
           <div className="rounded-xl border border-accent/20 bg-accent/5 p-3 text-center">
-            <p className="text-[11px] text-ink-2">Tá»•ng tiÃªu thá»¥ Æ°á»›c tÃ­nh (kÃ¨m 100W bo máº¡ch & quáº¡t):</p>
+            <p className="text-[11px] text-ink-2">Tổng tiêu thụ ước tính (kèm 100W bo mạch & quạt):</p>
             <p className="text-[20px] font-black text-ink">{totalBaseCalc} W</p>
-            <p className="mt-1 text-[11px] font-semibold text-accent">Nguá»“n khuyáº¿n nghá»‹ nÃªn dÃ¹ng:</p>
+            <p className="mt-1 text-[11px] font-semibold text-accent">Nguồn khuyến nghị nên dùng:</p>
             <p className="text-[26px] font-black text-accent">{recommendedPsu} W</p>
-            <p className="text-[10px] text-ink-3">(ÄÃ£ cá»™ng 30% khoáº£ng Ä‘á»‡m chá»‘ng sá»¥t Ã¡p)</p>
+            <p className="text-[10px] text-ink-3">(Đã cộng 30% khoảng đệm chống sụt áp)</p>
           </div>
 
           <button
             onClick={() => viewPartIn3D('psu')}
             className={`w-full rounded-full bg-accent py-2 text-center text-[12px] font-semibold text-white hover:bg-accent-hover ${press} ${focus}`}
           >
-            Xem vá»‹ trÃ­ nguá»“n trÃªn 3D â€º
+            Xem vị trí nguồn trên 3D ›
           </button>
         </div>
       )}
