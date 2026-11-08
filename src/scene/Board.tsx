@@ -4,6 +4,7 @@ import { boardLayout, HAS_BOARD_MODEL, ramSlotsUsed } from '../data/layout'
 import { Fan } from './Fan'
 import { CoolerModel, CpuModel, GpuModel, MODEL_SIZE, MotherboardModel, RamModel, SsdModel } from './Models'
 import { Box, Mat, Part } from './Part'
+import { useViewer } from '../store'
 
 type Layout = ReturnType<typeof boardLayout>
 
@@ -12,10 +13,27 @@ export function BoardAssembly({ build }: { build: Build }) {
   const { socket } = L
   const S = L.surface // độ cao mặt bo: bo thật dày hơn bo tự dựng
   const accent = build.accent
-  const gpu = build.gpu
+  const ramSticks = useViewer((s) => s.ramSticks)
+  const ssdCount = useViewer((s) => s.ssdCount)
+  const customGpu = useViewer((s) => s.customGpu)
+
+  const gpu = customGpu
+    ? {
+        length: customGpu === 'gpu_240' ? 2.4 : 2.8,
+        height: 1.25,
+        thick: customGpu === 'gpu_240' ? 0.45 : 0.53,
+        fans: customGpu === 'gpu_240' ? 2 : 3,
+      }
+    : build.gpu
   const gpuThick = gpu ? MODEL_SIZE.gpu[1] * (gpu.length / MODEL_SIZE.gpu[0]) : 0
-  // Máy mạnh dùng RAM có tản nhiệt, máy văn phòng / học tập dùng RAM thường
-  const heatsinkRam = build.gpu !== null
+  const heatsinkRam = gpu !== null || build.gpu !== null
+  const effectiveRamSticks = ramSticks ?? build.ramSticks
+
+  const m2Slots: [number, number, number][] = [
+    [L.m2.x, L.m2.y, S + 0.005],
+    [L.m2.x, L.m2.y - 0.45, S + 0.005],
+  ]
+  const effectiveSsdSlots = ssdCount <= 0 ? [] : ssdCount === 1 ? [m2Slots[0]] : m2Slots.slice(0, Math.min(ssdCount, 2))
 
   return (
     <>
@@ -41,8 +59,8 @@ export function BoardAssembly({ build }: { build: Build }) {
         </Suspense>
       </Part>
 
-      {ramSlotsUsed(build.ramSticks, L.ramSlots).map((i) => (
-        <Part key={i} id="ram" position={[L.ramX(i), L.ramY, S + 0.04]} explode={[0, 0, 1.2]} order={1}>
+      {ramSlotsUsed(effectiveRamSticks, L.ramSlots).map((i) => (
+        <Part key={`b-ram-${i}`} id="ram" position={[L.ramX(i), L.ramY, S + 0.04]} explode={[0, 0, 1.2]} order={1}>
           <Suspense
             fallback={
               <>
@@ -56,18 +74,20 @@ export function BoardAssembly({ build }: { build: Build }) {
         </Part>
       ))}
 
-      <Part id="ssd" position={[L.m2.x, L.m2.y, S + 0.005]} explode={[0, 0, 0.7]} order={4}>
-        <Suspense
-          fallback={
-            <>
-              <Box size={[0.8, 0.22, 0.03]} position={[0, 0, 0.015]} color="#1f2937" />
-              <Box size={[0.5, 0.16, 0.005]} position={[0, 0, 0.033]} color="#d1d5db" metal={0} rough={0.9} />
-            </>
-          }
-        >
-          <SsdModel />
-        </Suspense>
-      </Part>
+      {effectiveSsdSlots.map((pos, idx) => (
+        <Part key={`b-ssd-${idx}`} id="ssd" position={pos} explode={[0, 0, 0.7]} order={4}>
+          <Suspense
+            fallback={
+              <>
+                <Box size={[0.8, 0.22, 0.03]} position={[0, 0, 0.015]} color="#1f2937" />
+                <Box size={[0.5, 0.16, 0.005]} position={[0, 0, 0.033]} color="#d1d5db" metal={0} rough={0.9} />
+              </>
+            }
+          >
+            <SsdModel />
+          </Suspense>
+        </Part>
+      ))}
 
       {gpu && (
         // Gốc đặt ở mép chân cắm của card, thân card hướng ra phía mặt kính

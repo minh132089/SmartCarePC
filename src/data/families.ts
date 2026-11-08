@@ -99,14 +99,30 @@ export const rotX = (r: Rot) => (r === 'R0' ? 0 : r === 'R+' ? Math.PI / 2 : -Ma
 /** Gốc linh kiện trên bo (tâm bo + toạ độ cục bộ, z theo lưng bo). */
 export const onFamilyBoard = (f: Family, p: Mm3): Mm3 => add(f.board.origin, p)
 
-/** Vị trí lắp tính sẵn cho một họ. */
-export function familyPlacement(f: Family) {
+/** Vị trí lắp tính sẵn cho một họ. Có thể tùy chỉnh số thanh RAM và ổ SSD khi người dùng nâng cấp. */
+export function familyPlacement(f: Family, ramSticks = 2, ssdCount = 1) {
   const L = BOARD_LAYOUT[f.board.ff]
   const ob = (x: number, y: number, z: number) => onFamilyBoard(f, [x, y, z])
   const cpu = ob(L.cpu[0], L.cpu[1], 4.7)
   const ihs = ob(L.cpu[0], L.cpu[1], 9.2)
-  const ram = L.ram_used.map((i) => ob(L.ram_x[i], L.ram_y, 5.5))
-  const ssd = ob(L.m2_center[0], L.m2_center[1], 3.5)
+
+  let ramIndices: number[]
+  if (f.board.ff === 'ITX') {
+    ramIndices = ramSticks <= 1 ? [1] : [0, 1]
+  } else {
+    if (ramSticks <= 1) ramIndices = [1]
+    else if (ramSticks === 2) ramIndices = [1, 3]
+    else if (ramSticks === 3) ramIndices = [0, 1, 3]
+    else ramIndices = [0, 1, 2, 3]
+  }
+  const ram = ramIndices.filter((i) => i < L.ram_x.length).map((i) => ob(L.ram_x[i], L.ram_y, 5.5))
+
+  const ssdSlots = [
+    ob(L.m2_center[0], L.m2_center[1], 3.5),
+    ob(L.m2_center[0], L.m2_center[1] - (f.board.ff === 'ITX' ? 18 : 45), 3.5),
+  ]
+  const ssd = ssdCount <= 0 ? [] : ssdCount === 1 ? [ssdSlots[0]] : ssdSlots.slice(0, Math.min(ssdCount, 2))
+
   // ổ nguồn 8 chân trên GPU (theo gốc GPU) và tâm dải chân PCIe
   const gpuSocket: Mm3 = f.gpu.kind === 'gpu_280' ? [125, 18.55, 125] : [105, 12.75, 120]
   const gpuFingers: Mm3 = f.gpu.kind === 'gpu_280' ? [-42, 24.7, 0] : [-22, 19.7, 0]

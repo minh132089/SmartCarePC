@@ -43,9 +43,19 @@ interface ViewerState {
   select: (id: PartId | null) => void
   hover: (id: PartId | null) => void
   inspect: (id: PartId | null) => void
+  /** Số thanh RAM lắp trong máy 3D (1, 2, 3 hoặc 4; mặc định là 2) */
+  ramSticks: number
+  setRamSticks: (n: number) => void
+  /** Số ổ SSD M.2 gắn trên bo mạch 3D (0, 1 hoặc 2; mặc định là 1) */
+  ssdCount: number
+  setSsdCount: (n: number) => void
+  /** Kiểu card đồ họa tùy chỉnh trong 3D: 'gpu_280' (3 quạt) hoặc 'gpu_240' (2 quạt) */
+  customGpu: 'gpu_280' | 'gpu_240' | null
+  setCustomGpu: (g: 'gpu_280' | 'gpu_240' | null) => void
 }
 
 export const useViewer = create<ViewerState>((set) => ({
+
   page: 'advice',
   setPage: (page) => set({ page }),
   buildId: 'gaming',
@@ -69,15 +79,43 @@ export const useViewer = create<ViewerState>((set) => ({
     set((s) => ({ qualityPref, quality: qualityPref === 'auto' ? s.detected : qualityPref }))
   },
   lowerQuality: () => set((s) => (s.qualityPref === 'auto' && LOWER[s.quality] ? { quality: LOWER[s.quality]! } : {})),
-  setBuild: (buildId) => set({ buildId, familyId: null, selected: null, exploded: false, step: 0, inspecting: null }),
-  setFamily: (familyId) => set({ familyId, selected: null, exploded: false, step: 0, inspecting: null }),
+  setBuild: (buildId) =>
+    set({
+      buildId,
+      familyId: null,
+      selected: null,
+      exploded: false,
+      step: 0,
+      inspecting: null,
+      ramSticks: 2,
+      ssdCount: 1,
+      customGpu: null,
+    }),
+  setFamily: (familyId) =>
+    set({
+      familyId,
+      selected: null,
+      exploded: false,
+      step: 0,
+      inspecting: null,
+      ramSticks: 2,
+      ssdCount: 1,
+      customGpu: null,
+    }),
   toggleExploded: () => set((s) => ({ exploded: !s.exploded })),
   setStep: (step) => set({ step }),
   toggleSide: () => set((s) => ({ sideOpen: !s.sideOpen })),
   select: (selected) => set({ selected }),
   hover: (hovered) => set({ hovered }),
   inspect: (inspecting) => set(inspecting ? { inspecting, selected: inspecting } : { inspecting: null }),
+  ramSticks: 2,
+  setRamSticks: (ramSticks) => set({ ramSticks }),
+  ssdCount: 1,
+  setSsdCount: (ssdCount) => set({ ssdCount }),
+  customGpu: null,
+  setCustomGpu: (customGpu) => set({ customGpu }),
 }))
+if (typeof window !== "undefined") (window as any).useViewer = useViewer;
 
 function initialQuality() {
   const detected = detectQuality()

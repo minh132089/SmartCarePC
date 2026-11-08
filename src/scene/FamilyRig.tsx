@@ -31,7 +31,11 @@ const FAN_ROT: Record<string, [number, number, number]> = { '-x': [0, 0, 0], '+y
  */
 export function FamilyRig({ id }: { id: FamilyId }) {
   const f = FAMILIES[id]
-  const P = useMemo(() => familyPlacement(f), [f])
+  const ramSticks = useViewer((s) => s.ramSticks)
+  const ssdCount = useViewer((s) => s.ssdCount)
+  const customGpu = useViewer((s) => s.customGpu)
+  const P = useMemo(() => familyPlacement(f, ramSticks, ssdCount), [f, ramSticks, ssdCount])
+  const gpuKind = customGpu ?? f.gpu.kind
   const coolerOut = useOut('cooler')
   const gpuOut = useOut('gpu')
   const cablesOut = useOut('cables')
@@ -61,14 +65,16 @@ export function FamilyRig({ id }: { id: FamilyId }) {
       <Part id="cpu" position={u(P.cpu)} explode={[0, 0, 0.9]} step="cpu">
         <GlbModel url={MODEL_URL.cpu} />
       </Part>
-      {P.ram.map((p, i) => (
-        <Part key={i} id="ram" position={u(p)} explode={[0, 0, 1.2]} step="ram">
+      {P.ram.map((p) => (
+        <Part key={`f-ram-${p[0]}`} id="ram" position={u(p)} explode={[0, 0, 1.2]} step="ram">
           <GlbModel url={MODEL_URL.ram} />
         </Part>
       ))}
-      <Part id="ssd" position={u(P.ssd)} explode={[0, 0, 0.7]} step="ssd">
-        <GlbModel url={MODEL_URL.ssd} />
-      </Part>
+      {P.ssd.map((p) => (
+        <Part key={`f-ssd-${p[1]}`} id="ssd" position={u(p)} explode={[0, 0, 0.7]} step="ssd">
+          <GlbModel url={MODEL_URL.ssd} />
+        </Part>
+      ))}
 
       {/* Tản CPU: tản khí (quạt quay) hoặc bơm AIO + két + ống */}
       <Part id="cooler" position={u(P.ihs)} explode={[0, 0, 1.9]} step="cooler">
@@ -88,7 +94,7 @@ export function FamilyRig({ id }: { id: FamilyId }) {
       {/* GPU: R0 cắm thẳng vào khe; R+ / R- dựng qua riser */}
       <Part id="gpu" position={u(f.gpu.origin)} explode={f.riser ? [0, 0, 1.4] : [0, 0, 1.5]} step="gpu">
         <group rotation-x={rotX(f.gpu.rot)}>
-          <GlbSpinner url={MODEL_URL.gpu[f.gpu.kind]} nodes={GPU_FANS[f.gpu.kind]} axis="y" />
+          <GlbSpinner url={MODEL_URL.gpu[gpuKind]} nodes={GPU_FANS[gpuKind]} axis="y" />
         </group>
       </Part>
       {f.riser && !gpuOut && <Riser f={f} fingers={P.gpuFingers} />}

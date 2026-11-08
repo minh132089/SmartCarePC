@@ -16,6 +16,7 @@ import {
   checkUpgradeCompatibility,
   type SystemPreset,
   type UpgradeCategory,
+  type UpgradeTargetOption,
 } from '../data/upgrades'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
@@ -25,6 +26,14 @@ export function SidebarUpgrade() {
   const familyId = useViewer((s) => s.familyId)
   const selectPart = useViewer((s) => s.select)
   const inspectPart = useViewer((s) => s.inspect)
+
+  // 3D component states
+  const ramSticks = useViewer((s) => s.ramSticks)
+  const setRamSticks = useViewer((s) => s.setRamSticks)
+  const ssdCount = useViewer((s) => s.ssdCount)
+  const setSsdCount = useViewer((s) => s.setSsdCount)
+  const customGpu = useViewer((s) => s.customGpu)
+  const setCustomGpu = useViewer((s) => s.setCustomGpu)
 
   // Sub-sections inside Upgrade tab
   const [viewMode, setViewMode] = useState<'check' | 'guide' | 'power'>('check')
@@ -63,6 +72,27 @@ export function SidebarUpgrade() {
   const viewPartIn3D = (partId: PartId) => {
     selectPart(partId)
     inspectPart(partId)
+  }
+
+  // Tự động cập nhật mô hình 3D khi chọn gói nâng cấp
+  const handleSelectUpgradeOption = (opt: UpgradeTargetOption) => {
+    setSelectedOptionId(opt.id)
+    if (opt.id === 'ram_add_8gb_ddr4') {
+      setRamSticks(2)
+      selectPart('ram')
+    } else if (opt.id === 'ram_up_32gb_ddr4' || opt.id === 'ram_up_32gb_ddr5') {
+      setRamSticks(4)
+      selectPart('ram')
+    } else if (opt.id === 'ssd_add_1tb_gen4' || opt.id === 'ssd_add_2tb_gen4') {
+      setSsdCount(2)
+      selectPart('ssd')
+    } else if (opt.id === 'gpu_rtx4060_2fan' || opt.id === 'gpu_rtx4070_mini_2fan') {
+      setCustomGpu('gpu_240')
+      selectPart('gpu')
+    } else if (opt.id === 'gpu_rtx4070_3fan') {
+      setCustomGpu('gpu_280')
+      selectPart('gpu')
+    }
   }
 
   // Calculated power
@@ -114,16 +144,125 @@ export function SidebarUpgrade() {
             </p>
           </div>
 
+          {/* BỘ ĐIỀU KHIỂN THAY ĐỔI 3D TRỰC TIẾP */}
+          <div className="rounded-2xl border border-accent/30 bg-accent/5 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[12px] font-bold text-accent">
+                <Sparkle size={14} weight="fill" />
+                Thao tác thay đổi trực tiếp trên 3D
+              </span>
+              <span className="text-[10px] text-ink-3">Cập nhật thời gian thực</span>
+            </div>
+
+            {/* RAM 3D Switcher */}
+            <div>
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <span className="font-semibold text-ink">Số thanh RAM trên bo mạch:</span>
+                <span className="font-bold text-accent">{ramSticks} thanh</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                {[
+                  { n: 1, label: '1 Thanh (8G)' },
+                  { n: 2, label: '2 Thanh (Dual)' },
+                  { n: 4, label: '4 Thanh (Full)' },
+                ].map((item) => (
+                  <button
+                    key={item.n}
+                    onClick={() => {
+                      setRamSticks(item.n)
+                      selectPart('ram')
+                    }}
+                    className={`rounded-lg py-1.5 font-medium transition-all ${press} ${focus} ${
+                      ramSticks === item.n
+                        ? 'bg-accent text-white font-semibold shadow-sm'
+                        : 'bg-surface text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SSD 3D Switcher */}
+            <div>
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <span className="font-semibold text-ink">Số ổ SSD M.2 trên bo mạch:</span>
+                <span className="font-bold text-accent">{ssdCount} ổ</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[11px]">
+                {[
+                  { n: 0, label: '0 Ổ (Tháo rời)' },
+                  { n: 1, label: '1 Ổ (Mặc định)' },
+                  { n: 2, label: '2 Ổ (Lắp thêm)' },
+                ].map((item) => (
+                  <button
+                    key={item.n}
+                    onClick={() => {
+                      setSsdCount(item.n)
+                      selectPart('ssd')
+                    }}
+                    className={`rounded-lg py-1.5 font-medium transition-all ${press} ${focus} ${
+                      ssdCount === item.n
+                        ? 'bg-accent text-white font-semibold shadow-sm'
+                        : 'bg-surface text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* GPU 3D Switcher */}
+            <div>
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <span className="font-semibold text-ink">Card đồ họa (GPU) trong máy:</span>
+                <span className="font-bold text-accent">
+                  {customGpu === 'gpu_240' ? '2 quạt (240mm)' : '3 quạt (280mm)'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-[11px]">
+                <button
+                  onClick={() => {
+                    setCustomGpu('gpu_240')
+                    selectPart('gpu')
+                  }}
+                  className={`rounded-lg py-1.5 font-medium transition-all ${press} ${focus} ${
+                    customGpu === 'gpu_240'
+                      ? 'bg-accent text-white font-semibold shadow-sm'
+                      : 'bg-surface text-ink-2 hover:text-ink'
+                  }`}
+                >
+                  2 Quạt (240 mm)
+                </button>
+                <button
+                  onClick={() => {
+                    setCustomGpu('gpu_280')
+                    selectPart('gpu')
+                  }}
+                  className={`rounded-lg py-1.5 font-medium transition-all ${press} ${focus} ${
+                    customGpu !== 'gpu_240'
+                      ? 'bg-accent text-white font-semibold shadow-sm'
+                      : 'bg-surface text-ink-2 hover:text-ink'
+                  }`}
+                >
+                  3 Quạt (280 mm)
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Chọn linh kiện nâng cấp */}
           <div>
-            <label className="text-[12px] font-semibold text-ink-2">Chọn linh kiện bạn muốn nâng cấp:</label>
+            <label className="text-[12px] font-semibold text-ink-2">Gói nâng cấp đề xuất (bấm để xem mô phỏng 3D):</label>
             <div className="mt-1.5 space-y-1.5">
               {UPGRADE_OPTIONS.map((opt) => {
                 const active = opt.id === selectedOptionId
                 return (
                   <button
                     key={opt.id}
-                    onClick={() => setSelectedOptionId(opt.id)}
+                    onClick={() => handleSelectUpgradeOption(opt)}
                     className={`flex w-full items-start justify-between rounded-xl border p-2.5 text-left transition-all ${press} ${focus} ${
                       active
                         ? 'border-accent bg-accent/5 ring-1.5 ring-accent'
@@ -208,7 +347,7 @@ export function SidebarUpgrade() {
                 className={`flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline ${focus}`}
               >
                 <Desktop size={14} />
-                Xem vị trí linh kiện trên 3D ›
+                Xem cận cảnh linh kiện trên 3D ›
               </button>
               <button
                 onClick={() => {

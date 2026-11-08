@@ -23,12 +23,37 @@ import {
 import { useViewer } from '../store'
 import { useOut } from '../data/assembly'
 import { Cable, type Route } from './Cables'
-import { GamingModel, GamingSpinner } from './Models'
+import { GamingModel, GamingSpinner, GlbSpinner } from './Models'
 import { Mat, Part } from './Part'
 
 const W = 220 // bề rộng thùng (mm), để đặt tấm kính
 const INSTALLED = ['peel_film'] // màng bảo vệ đế bơm đã bóc khi lắp
 const PANEL = ['side_panel'] // nắp kín phía sau khay
+
+const ATX_RAM_ALL: Mm3[] = [
+  [70, 62, 5.5],
+  [79, 62, 5.5],
+  [89, 62, 5.5],
+  [98, 62, 5.5],
+]
+
+function getGamingRamPositions(count: number): Mm3[] {
+  if (count <= 1) return [ATX_RAM_ALL[1]]
+  if (count === 2) return [ATX_RAM_ALL[1], ATX_RAM_ALL[3]]
+  if (count === 3) return [ATX_RAM_ALL[0], ATX_RAM_ALL[1], ATX_RAM_ALL[3]]
+  return ATX_RAM_ALL
+}
+
+const ATX_SSD_SLOTS: Mm3[] = [
+  [35, -62, 3.5],
+  [35, -108, 3.5],
+]
+
+function getGamingSsdPositions(count: number): Mm3[] {
+  if (count <= 0) return []
+  if (count === 1) return [ATX_SSD_SLOTS[0]]
+  return ATX_SSD_SLOTS.slice(0, Math.min(count, 2))
+}
 
 /**
  * Máy Gaming dựng theo bản vẽ của Codex: vỏ, bo mạch và linh kiện, tản nước, quạt, nguồn và dây.
@@ -37,8 +62,11 @@ const PANEL = ['side_panel'] // nắp kín phía sau khay
 export function GamingRig() {
   const coolerOut = useOut('cooler')
   const cablesOut = useOut('cables')
-  // Chọn "Dây cáp" thì tháo nắp kín phía sau khay để thấy dây đi sau lưng bo
   const cablesOpen = useViewer((s) => s.selected === 'cables')
+  const ramSticks = useViewer((s) => s.ramSticks)
+  const ssdCount = useViewer((s) => s.ssdCount)
+  const customGpu = useViewer((s) => s.customGpu)
+
   return (
     <>
       <Part id="case">
@@ -56,17 +84,25 @@ export function GamingRig() {
       <Part id="cpu" position={u(onBoard(ON_BOARD.cpu))} explode={[0, 0, 0.9]} step="cpu">
         <GamingModel name="cpu" />
       </Part>
-      {ON_BOARD.ram.map((p, i) => (
-        <Part key={i} id="ram" position={u(onBoard(p))} explode={[0, 0, 1.2]} step="ram">
+      {getGamingRamPositions(ramSticks).map((p) => (
+        <Part key={`g-ram-${p[0]}`} id="ram" position={u(onBoard(p))} explode={[0, 0, 1.2]} step="ram">
           <GamingModel name="ram" />
         </Part>
       ))}
-      <Part id="ssd" position={u(onBoard(ON_BOARD.ssd))} explode={[0, 0, 0.7]} step="ssd">
-        <GamingModel name="ssd" />
-      </Part>
-      <Part id="gpu" position={u(onBoard(ON_BOARD.gpu))} explode={[0, 0, 1.5]} step="gpu">
-        <GamingSpinner name="gpu" nodes={GPU_FANS} axis="y" />
-      </Part>
+      {getGamingSsdPositions(ssdCount).map((p) => (
+        <Part key={`g-ssd-${p[1]}`} id="ssd" position={u(onBoard(p))} explode={[0, 0, 0.7]} step="ssd">
+          <GamingModel name="ssd" />
+        </Part>
+      ))}
+      {customGpu === 'gpu_240' ? (
+        <Part id="gpu" position={u(onBoard(ON_BOARD.gpu))} explode={[0, 0, 1.5]} step="gpu">
+          <GlbSpinner url="/models/f_gpu_240_dual.glb" nodes={['gpu_fan_1', 'gpu_fan_2']} axis="y" />
+        </Part>
+      ) : (
+        <Part id="gpu" position={u(onBoard(ON_BOARD.gpu))} explode={[0, 0, 1.5]} step="gpu">
+          <GamingSpinner name="gpu" nodes={GPU_FANS} axis="y" />
+        </Part>
+      )}
 
       <Part id="cooler" position={u(onBoard(ON_BOARD.pump))} explode={[0, 0, 1.9]} step="cooler">
         <GamingModel name="aio_pump" hide={INSTALLED} />
