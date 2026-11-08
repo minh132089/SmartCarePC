@@ -1,5 +1,5 @@
 import { CaretRight } from '@phosphor-icons/react'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BOARDS, getBuild } from '../data/builds'
 import { FAMILIES, FAMILY_IDS, type FamilyId } from '../data/families'
 import { CREDITS, LICENSE } from '../data/credits'
@@ -10,9 +10,13 @@ import { QUALITY_LABEL, type QualityPref } from '../perf/quality'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { FlowSteps } from './AdvicePage'
 import { StudyBar } from './study/StudyBar'
+import { SidebarUpgrade } from './SidebarUpgrade'
+import { SidebarMaintenance } from './SidebarMaintenance'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+
+type SidebarTab = 'parts' | 'upgrade' | 'maintenance'
 
 /** Thông tin hiển thị của máy đang xem: máy Gaming đầy đủ hoặc một trong 6 họ case. */
 function useMachine() {
@@ -61,6 +65,8 @@ const MACHINES: { id: FamilyId | 'gaming'; label: string; img: string }[] = [
 export function Sidebar() {
   const { familyId, setFamily, setBuild, exploded, toggleExploded, sideOpen, toggleSide, selected, select, inspect } = useViewer()
   const machine = useMachine()
+  const [tab, setTab] = useState<SidebarTab>('parts')
+
   // máy slim không có quạt vỏ nên bỏ dòng "Quạt"
   const parts: PartId[] = ['case', 'motherboard', 'cpu', 'cooler', 'ram', 'gpu', 'ssd', 'psu', 'cables', 'fans', 'tools'].filter(
     (p) => p !== 'fans' || !familyId || FAMILIES[familyId].fans.length > 0,
@@ -86,122 +92,172 @@ export function Sidebar() {
         <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">Chọn kiểu máy bạn thích, rồi bấm vào từng linh kiện để biết nó làm gì.</p>
       </div>
 
-      <div className="enter" style={{ '--i': 1 } as React.CSSProperties}>
-      <SectionTitle>Chọn kiểu máy</SectionTitle>
-      <div role="radiogroup" aria-label="Kiểu máy" className="grid grid-cols-3 gap-2">
-        {MACHINES.map((m) => {
-          const on = m.id === current
-          return (
-            <button
-              key={m.id}
-              role="radio"
-              aria-checked={on}
-              onClick={() => (m.id === 'gaming' ? setBuild('gaming') : setFamily(m.id))}
-              className={`flex flex-col items-center gap-1 rounded-xl bg-surface p-1.5 pb-2 text-center ring-1 transition-[box-shadow,color] duration-150 ${press} ${focus} ${
-                on ? 'text-ink ring-2 ring-accent' : 'text-ink-2 ring-line hover:text-ink'
-              }`}
-            >
-              {m.img ? (
-                <img src={m.img} alt="" className="aspect-square w-full rounded-lg bg-canvas object-contain" loading="lazy" />
-              ) : (
-                <span className="grid aspect-square w-full place-items-center rounded-lg bg-[#16181d] text-[11px] font-semibold text-[#22d3ee]">GAMING</span>
-              )}
-              <span className={`text-[12px] leading-tight ${on ? 'font-semibold' : 'font-medium'}`}>{m.label}</span>
-            </button>
-          )
-        })}
-      </div>
-      {/* key đổi theo máy: khối này được tạo lại và mờ dần vào */}
-      <div key={machine.key} className="swap">
-        <p className="mt-4 text-[15px] leading-[1.47] text-ink">{machine.tagline}</p>
-        <Group className="mt-4">
-          {machine.rows.map(([label, value], i) => (
-            <Row key={label} label={label} value={value} last={i === machine.rows.length - 1} />
-          ))}
-        </Group>
-      </div>
-      </div>
-
-      <div className="enter mt-5 flex flex-wrap gap-2.5" style={{ '--i': 2 } as React.CSSProperties}>
+      {/* 3 Tab Tính năng trong cột tính năng */}
+      <div
+        role="tablist"
+        aria-label="Cột tính năng"
+        className="enter mt-5 grid grid-cols-3 gap-1 rounded-full bg-fill p-1"
+        style={{ '--i': 1 } as React.CSSProperties}
+      >
         <button
-          onClick={toggleExploded}
-          className={`rounded-full bg-accent px-5 py-2.5 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
+          role="tab"
+          aria-selected={tab === 'parts'}
+          onClick={() => setTab('parts')}
+          className={`rounded-full py-1.5 text-[13px] font-medium transition-all duration-150 ${focus} ${
+            tab === 'parts' ? 'bg-surface text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)] font-semibold' : 'text-ink-2 hover:text-ink'
+          }`}
         >
-          {exploded ? 'Lắp lại' : 'Tách rời linh kiện'}
+          Linh kiện
         </button>
         <button
-          onClick={toggleSide}
-          className={`rounded-full bg-fill px-5 py-2.5 text-[15px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}
+          role="tab"
+          aria-selected={tab === 'upgrade'}
+          onClick={() => setTab('upgrade')}
+          className={`rounded-full py-1.5 text-[13px] font-medium transition-all duration-150 ${focus} ${
+            tab === 'upgrade' ? 'bg-surface text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)] font-semibold' : 'text-ink-2 hover:text-ink'
+          }`}
         >
-          {machine.glass ? (sideOpen ? 'Lắp kính hông' : 'Tháo kính hông') : sideOpen ? 'Đóng nắp hông' : 'Mở nắp hông'}
+          Nâng cấp
         </button>
-        <PowerButton />
+        <button
+          role="tab"
+          aria-selected={tab === 'maintenance'}
+          onClick={() => setTab('maintenance')}
+          className={`rounded-full py-1.5 text-[13px] font-medium transition-all duration-150 ${focus} ${
+            tab === 'maintenance' ? 'bg-surface text-ink shadow-[0_1px_4px_rgba(0,0,0,0.12)] font-semibold' : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          Bảo trì
+        </button>
       </div>
-      <QualityPicker />
-      <GuideCard />
 
-      <div ref={listRef} className="enter" style={{ '--i': 3 } as React.CSSProperties}>
-      <SectionTitle>Linh kiện trong máy</SectionTitle>
-      <Group>
-        {parts.map((id, i) => {
-          const open = selected === id
-          return (
-            <div key={id} data-part={id} className={i < parts.length - 1 ? 'border-b border-line' : ''}>
-              <button
-                onClick={() => select(open ? null : id)}
-                aria-expanded={open}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left text-[15px] transition-colors duration-150 ease-[ease] active:bg-line ${focus} ${
-                  open ? 'text-link' : 'text-ink'
-                }`}
-              >
-                <span className={open ? 'font-medium' : ''}>{PARTS[id].name}</span>
-                <Chevron open={open} />
-              </button>
-              <div className="reveal" data-open={open}>
-                <div>
-                  <p className="px-4 pb-3 text-[14px] leading-[1.45] text-ink-2">{PARTS[id].about}</p>
-                  {INSPECTABLE.includes(id) && (
-                    <button
-                      onClick={() => inspect(id)}
-                      tabIndex={open ? 0 : -1}
-                      className={`mx-4 mb-3.5 text-[14px] font-medium text-link hover:underline ${focus}`}
-                    >
-                      Xem cận cảnh ›
-                    </button>
-                  )}
-                </div>
-              </div>
+      {/* TAB 1: KHÁM PHÁ LINH KIỆN & KIỂU MÁY (MẶC ĐỊNH) */}
+      {tab === 'parts' && (
+        <>
+          <div className="enter" style={{ '--i': 1 } as React.CSSProperties}>
+            <SectionTitle>Chọn kiểu máy</SectionTitle>
+            <div role="radiogroup" aria-label="Kiểu máy" className="grid grid-cols-3 gap-2">
+              {MACHINES.map((m) => {
+                const on = m.id === current
+                return (
+                  <button
+                    key={m.id}
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => (m.id === 'gaming' ? setBuild('gaming') : setFamily(m.id))}
+                    className={`flex flex-col items-center gap-1 rounded-xl bg-surface p-1.5 pb-2 text-center ring-1 transition-[box-shadow,color] duration-150 ${press} ${focus} ${
+                      on ? 'text-ink ring-2 ring-accent' : 'text-ink-2 ring-line hover:text-ink'
+                    }`}
+                  >
+                    {m.img ? (
+                      <img src={m.img} alt="" className="aspect-square w-full rounded-lg bg-canvas object-contain" loading="lazy" />
+                    ) : (
+                      <span className="grid aspect-square w-full place-items-center rounded-lg bg-[#16181d] text-[11px] font-semibold text-[#22d3ee]">GAMING</span>
+                    )}
+                    <span className={`text-[12px] leading-tight ${on ? 'font-semibold' : 'font-medium'}`}>{m.label}</span>
+                  </button>
+                )
+              })}
             </div>
-          )
-        })}
-      </Group>
-      </div>
+            {/* key đổi theo máy: khối này được tạo lại và mờ dần vào */}
+            <div key={machine.key} className="swap">
+              <p className="mt-4 text-[15px] leading-[1.47] text-ink">{machine.tagline}</p>
+              <Group className="mt-4">
+                {machine.rows.map(([label, value], i) => (
+                  <Row key={label} label={label} value={value} last={i === machine.rows.length - 1} />
+                ))}
+              </Group>
+            </div>
+          </div>
 
-      <p className="mt-5 text-[12px] leading-[1.45] text-ink-3">
-        Kéo để xoay, cuộn để phóng to. Bấm vào một linh kiện trong hình để xem nó là gì.
-      </p>
+          <div className="enter mt-5 flex flex-wrap gap-2.5" style={{ '--i': 2 } as React.CSSProperties}>
+            <button
+              onClick={toggleExploded}
+              className={`rounded-full bg-accent px-5 py-2.5 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}
+            >
+              {exploded ? 'Lắp lại' : 'Tách rời linh kiện'}
+            </button>
+            <button
+              onClick={toggleSide}
+              className={`rounded-full bg-fill px-5 py-2.5 text-[15px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}
+            >
+              {machine.glass ? (sideOpen ? 'Lắp kính hông' : 'Tháo kính hông') : sideOpen ? 'Đóng nắp hông' : 'Mở nắp hông'}
+            </button>
+            <PowerButton />
+          </div>
+          <QualityPicker />
+          <GuideCard />
 
-      <details className="mt-3 text-[12px] leading-[1.45] text-ink-3">
-        <summary className="cursor-pointer select-none hover:text-ink-2">Nguồn model 3D</summary>
-        <ul className="mt-2 space-y-1">
-          {CREDITS.map((c) => (
-            <li key={c.url}>
-              {c.part}: “
-              <a href={c.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
-                {c.title}
+          <div ref={listRef} className="enter" style={{ '--i': 3 } as React.CSSProperties}>
+            <SectionTitle>Linh kiện trong máy</SectionTitle>
+            <Group>
+              {parts.map((id, i) => {
+                const open = selected === id
+                return (
+                  <div key={id} data-part={id} className={i < parts.length - 1 ? 'border-b border-line' : ''}>
+                    <button
+                      onClick={() => select(open ? null : id)}
+                      aria-expanded={open}
+                      className={`flex w-full items-center justify-between px-4 py-3 text-left text-[15px] transition-colors duration-150 ease-[ease] active:bg-line ${focus} ${
+                        open ? 'text-link' : 'text-ink'
+                      }`}
+                    >
+                      <span className={open ? 'font-medium' : ''}>{PARTS[id].name}</span>
+                      <Chevron open={open} />
+                    </button>
+                    <div className="reveal" data-open={open}>
+                      <div>
+                        <p className="px-4 pb-3 text-[14px] leading-[1.45] text-ink-2">{PARTS[id].about}</p>
+                        {INSPECTABLE.includes(id) && (
+                          <button
+                            onClick={() => inspect(id)}
+                            tabIndex={open ? 0 : -1}
+                            className={`mx-4 mb-3.5 text-[14px] font-medium text-link hover:underline ${focus}`}
+                          >
+                            Xem cận cảnh ›
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </Group>
+          </div>
+
+          <p className="mt-5 text-[12px] leading-[1.45] text-ink-3">
+            Kéo để xoay, cuộn để phóng to. Bấm vào một linh kiện trong hình để xem nó là gì.
+          </p>
+
+          <details className="mt-3 text-[12px] leading-[1.45] text-ink-3">
+            <summary className="cursor-pointer select-none hover:text-ink-2">Nguồn model 3D</summary>
+            <ul className="mt-2 space-y-1">
+              {CREDITS.map((c) => (
+                <li key={c.url}>
+                  {c.part}: “
+                  <a href={c.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
+                    {c.title}
+                  </a>
+                  ” của {c.author}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Dùng theo giấy phép{' '}
+              <a href={LICENSE.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
+                {LICENSE.label}
               </a>
-              ” của {c.author}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2">
-          Dùng theo giấy phép{' '}
-          <a href={LICENSE.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
-            {LICENSE.label}
-          </a>
-          . Đã chỉnh sửa: xoá logo, đổi hướng, thu nhỏ.
-        </p>
-      </details>
+              . Đã chỉnh sửa: xoá logo, đổi hướng, thu nhỏ.
+            </p>
+          </details>
+        </>
+      )}
+
+      {/* TAB 2: TÍNH NĂNG NÂNG CẤP */}
+      {tab === 'upgrade' && <SidebarUpgrade />}
+
+      {/* TAB 3: TÍNH NĂNG BẢO TRÌ */}
+      {tab === 'maintenance' && <SidebarMaintenance />}
     </aside>
   )
 }
