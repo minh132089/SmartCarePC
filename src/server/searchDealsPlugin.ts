@@ -90,8 +90,22 @@ export function searchDealsPlugin(): Plugin {
             }
           }
 
+
+          // Lọc kết quả: loại bỏ các link mạng xã hội, wikipedia, link category chung chung
+          const validSources = sources.filter((s) => {
+            const u = s.url.toLowerCase();
+            if (u.includes('facebook.com') || u.includes('wikipedia.org') || u.includes('ebay.com') || u.includes('reddit.com')) {
+              return false;
+            }
+            if (u.endsWith('/c/') || u.includes('/list/') || u.includes('?q=') || u.includes('/search')) {
+              return false;
+            }
+            return true;
+          });
+          const finalSources = validSources.length >= 2 ? validSources : sources;
+
           const result: SearchDealsResult = {
-            sources: sources.slice(0, max),
+            sources: finalSources.slice(0, max),
             provider,
           }
 

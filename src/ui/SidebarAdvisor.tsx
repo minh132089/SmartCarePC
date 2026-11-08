@@ -86,7 +86,7 @@ function generatePlans(input: AdvisorInput): Plan[] {
         targetRam === 32 ? '800.000 – 1.200.000 ₫' : targetRam === 64 ? '1.800.000 – 2.800.000 ₫' : '500.000 – 800.000 ₫',
       whyThisWorks: `Kit 2 thanh cùng hãng, cùng tần số đảm bảo Dual-Channel hoạt động ổn định nhất. Dành cho render đồ họa và chơi game nặng.`,
       tags: ['Kit đôi', 'Ổn định nhất', 'DDR4 3600 CL18'],
-      scene3D: { ram: 4 },
+      scene3D: { ram: 2 }, // Kit 2 thanh cắm khe 2 & 4 (Dual-Channel)
       searchQuery: `Kit RAM 2 thanh ${targetRam / 2}GB DDR4 3600 Kingston Corsair GSkill giá rẻ Việt Nam`,
     }
 
@@ -189,6 +189,13 @@ const PURPOSE_OPTIONS: { id: Purpose; label: string }[] = [
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+
+
+function extractPrice(text: string | undefined): string | null {
+  if (!text) return null
+  const m = text.match(/(\d{1,3}(?:\.\d{3})+)\s*(?:₫|đ|VND|vnđ)/i) || text.match(/(\d{3,4})k/i)
+  return m ? m[0] : null
+}
 
 export function SidebarAdvisor() {
   const ramSticks = useViewer((s) => s.ramSticks)
@@ -495,6 +502,26 @@ export function SidebarAdvisor() {
                   ))}
                 </div>
 
+                
+                {/* Cảnh báo tương thích BIOS / Firmware quan trọng */}
+                <div className="mt-2.5 rounded-xl border border-amber-500/20 bg-amber-50/50 p-2.5 text-[11px] text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                  <div className="flex items-center gap-1 font-bold text-amber-700 dark:text-amber-400">
+                    <span>⚠️</span>
+                    <span>Xác minh trước khi nâng cấp (BIOS & Firmware):</span>
+                  </div>
+                  <ul className="mt-1 space-y-1 list-disc list-inside text-ink-2 text-[10.5px] leading-relaxed">
+                    <li>
+                      <strong>Cập nhật BIOS:</strong> Cần update BIOS bo mạch chủ lên bản mới nhất để nhận diện đúng bus RAM (3200/3600MHz) và tránh lỗi kén RAM.
+                    </li>
+                    <li>
+                      <strong>Bật XMP / EXPO:</strong> Sau khi cắm RAM, bắt buộc vào BIOS bật Profile 1 (XMP) để đạt tốc độ tối đa, nếu không RAM sẽ bị hạ về 2133MHz.
+                    </li>
+                    <li>
+                      <strong>Khuyến nghị cắm khe:</strong> Với Kit 2 thanh, ưu tiên cắm khe <strong>DIMM 2 & DIMM 4</strong> (tính từ CPU sang) để kích hoạt Dual-Channel tối ưu.
+                    </li>
+                  </ul>
+                </div>
+
                 {/* Shop links */}
                 {shops.length > 0 && (
                   <div className="mt-2.5 space-y-1">
@@ -505,6 +532,7 @@ export function SidebarAdvisor() {
                     {shops.map((s, i) => {
                       let domain = ''
                       try { domain = new URL(s.url).hostname.replace('www.', '') } catch { domain = s.url }
+                      const price = extractPrice(s.title) || extractPrice(s.snippet)
                       return (
                         <a
                           key={i}
@@ -513,7 +541,14 @@ export function SidebarAdvisor() {
                           rel="noopener noreferrer"
                           className="flex flex-col rounded-lg border border-line bg-surface/80 px-2.5 py-1.5 hover:border-accent/40 hover:bg-surface transition-all"
                         >
-                          <span className="text-[11px] font-semibold text-accent truncate">{s.title || domain}</span>
+                          <div className="flex items-start justify-between gap-1.5">
+                            <span className="text-[11px] font-semibold text-accent truncate">{s.title || domain}</span>
+                            {price && (
+                              <span className="shrink-0 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                {price}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] text-ink-3 truncate">{domain}</span>
                           {s.snippet && (
                             <span className="mt-0.5 text-[10px] text-ink-2 line-clamp-2 leading-relaxed">{s.snippet}</span>
