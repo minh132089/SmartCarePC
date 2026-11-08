@@ -1,10 +1,11 @@
-import react from '@vitejs/plugin-react'
+﻿import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type ProxyOptions } from 'vite'
+import { searchDealsPlugin } from './src/server/searchDealsPlugin.js'
 
 /**
- * Frontend và /api cùng một địa chỉ (đi qua proxy này) nên không phải gọi khác nguồn.
- * Bỏ header Origin: mở bằng địa chỉ khác localhost (link tunnel khi demo) thì backend không chặn vì CORS.
+ * Frontend vÃ  /api cÃ¹ng má»™t Ä‘á»‹a chá»‰ (Ä‘i qua proxy nÃ y) nÃªn khÃ´ng pháº£i gá»i khÃ¡c nguá»“n.
+ * Bá» header Origin: má»Ÿ báº±ng Ä‘á»‹a chá»‰ khÃ¡c localhost (link tunnel khi demo) thÃ¬ backend khÃ´ng cháº·n vÃ¬ CORS.
  */
 const apiProxy: ProxyOptions = {
   target: 'http://localhost:8083',
@@ -12,19 +13,24 @@ const apiProxy: ProxyOptions = {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [searchDealsPlugin(), react(), tailwindcss()],
   server: {
-    // Frontend gọi /api/... sẽ được chuyển sang backend Spring Boot (backend/, cổng 8083)
-    proxy: { '/api': apiProxy },
+    // Frontend gá»i /api/... sáº½ Ä‘Æ°á»£c chuyá»ƒn sang backend Spring Boot (backend/, cá»•ng 8083)
+    proxy: {
+      // /api/search-deals Ä‘Æ°á»£c xá»­ lÃ½ bá»Ÿi searchDealsPlugin, khÃ´ng forward sang Spring Boot
+      '/api/chat': apiProxy,
+      '/api/pc': apiProxy,
+      '/api/recommend': apiProxy,
+    },
   },
-  // Bản build chạy bằng `vite preview` (demo qua Cloudflare Tunnel) cũng chuyển /api sang backend
+  // Báº£n build cháº¡y báº±ng `vite preview` (demo qua Cloudflare Tunnel) cÅ©ng chuyá»ƒn /api sang backend
   preview: { proxy: { '/api': apiProxy } },
   build: {
-    // three và bộ R3F tự thân đã ~750–850 kB, không chia nhỏ hơn được; code app chỉ ~100 kB
+    // three vÃ  bá»™ R3F tá»± thÃ¢n Ä‘Ã£ ~750â€“850 kB, khÃ´ng chia nhá» hÆ¡n Ä‘Æ°á»£c; code app chá»‰ ~100 kB
     chunkSizeWarningLimit: 900,
     rolldownOptions: {
       output: {
-        // Tách thư viện ra file riêng: trình duyệt tải song song và giữ cache khi code app đổi
+        // TÃ¡ch thÆ° viá»‡n ra file riÃªng: trÃ¬nh duyá»‡t táº£i song song vÃ  giá»¯ cache khi code app Ä‘á»•i
         codeSplitting: {
           groups: [
             { name: 'three', test: /node_modules[\\/]three[\\/]/ },
