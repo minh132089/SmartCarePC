@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import App from './App'
+import { MaintenanceHub } from './ui/maintenance/MaintenanceHub'
 import { ParticipantGate } from './ui/study/ParticipantGate'
 
 const FeedbackAdmin = lazy(() => import('./ui/study/FeedbackAdmin').then((m) => ({ default: m.FeedbackAdmin })))
@@ -17,6 +18,7 @@ export default function Root() {
   return <>
     <App />
     <ParticipantGate />
+    <MaintenanceHub />
     {uiPreview && <a href="/feedback-preview" className="fixed right-3 bottom-3 z-40 rounded-full border border-line-strong bg-surface px-4 py-2 text-[12px] font-medium text-ink shadow-sm">UI preview · View sample dashboard ↗</a>}
   </>
 }

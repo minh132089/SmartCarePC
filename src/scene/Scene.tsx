@@ -122,7 +122,7 @@ function SwapIn({ children }: { children: ReactNode }) {
  * Chỉ bay lúc đổi bước; giữa chừng người dùng vẫn tự xoay được.
  */
 function GuideCamera({ machine }: { machine: Machine }) {
-  const view = useViewer((s) => (s.guide && !s.guideFull ? guideView(machine, s.guidePart) : null))
+  const view = useViewer((s) => (s.guide && !s.guideFull ? guideView(machine, s.guidePart, s.guideKind === 'maintenance') : null))
   const part = useViewer((s) => s.guidePart)
   const scene = useThree((s) => s.scene)
   const controls = useThree((s) => s.controls) as unknown as { object: { position: Vector3 }; target: Vector3; update: () => void } | null
@@ -193,7 +193,9 @@ function DevExpose() {
       import('./pathCheck').then((m) => m.findPaths(scene, () => get().advance(performance.now(), true), machines, parts))
     const checkAssembled = (machines?: import('./pathCheck').Machine[]) =>
       import('./pathCheck').then((m) => m.checkAssembled(scene, () => get().advance(performance.now(), true), machines))
-    Object.assign(window, { __scene: scene, __checkPaths: checkPaths, __findPaths: findPaths, __checkAssembled: checkAssembled })
+    const checkMaintenancePaths = (machines?: import('./pathCheck').Machine[]) =>
+      import('./pathCheck').then(m => m.checkMaintenancePaths(scene, () => get().advance(performance.now(), true), machines))
+    Object.assign(window, { __checkMaintenancePaths: checkMaintenancePaths, __scene: scene, __checkPaths: checkPaths, __findPaths: findPaths, __checkAssembled: checkAssembled })
   }, [scene, get])
   return null
 }

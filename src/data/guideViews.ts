@@ -18,5 +18,6 @@ export const GUIDE_VIEWS: Partial<Record<Machine, Partial<Record<AssemblyKey, Ve
   gaming: { psu: [-1, 0.15, 0] }, // 76%
 }
 
-export const guideView = (machine: Machine, part: AssemblyKey | null): Vec3 | null =>
-  (part && GUIDE_VIEWS[machine]?.[part]) || null
+const MAINTENANCE_VIEWS: Partial<Record<AssemblyKey, Vec3>> = { fans: [0.7, 0.4, 1], cooler: [0.4, 0.5, 1], gpu: [0.4, 0.2, 1], cables: [-0.7, 0.3, -1], psu: [-1, 0.15, 0] }
+export const guideView = (machine: Machine, part: AssemblyKey | null, maintenance = false): Vec3 | null =>
+  (part && (GUIDE_VIEWS[machine]?.[part] || (maintenance ? MAINTENANCE_VIEWS[part] : null))) || null

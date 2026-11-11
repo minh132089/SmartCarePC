@@ -4,6 +4,7 @@ import { FEEDBACK } from './questions'
 import { PrimaryButton, QuietButton, focus } from './StudyParts'
 import { FeedbackOverview } from './FeedbackOverview'
 import { participantOf, score as num, type FeedbackRow as Row } from './feedbackStats'
+import { MaintenanceSummary, type MaintenanceRow } from '../maintenance/MaintenanceSummary'
 import LatticeLoader from '../../components/LatticeLoader'
 
 /**
@@ -29,6 +30,8 @@ export function FeedbackAdmin() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [maintenanceRows, setMaintenanceRows] = useState<MaintenanceRow[] | null>(null)
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'stars' | 'study'>('all')
 
   const load = useCallback(async (k: string) => {
@@ -40,6 +43,12 @@ export function FeedbackAdmin() {
       if (res.status === 403) throw new Error("Incorrect access key, or the server has no access key configured.")
       if (!res.ok) throw new Error(res.status === 503 ? "The demo server is offline." : `Error ${res.status}`)
       setRows((await res.json()) as Row[])
+      setMaintenanceError(null)
+      try {
+        const m = await fetch('/api/maintenance/list', { headers: { 'X-Export-Key': k } })
+        if (!m.ok) throw new Error(`Maintenance data is unavailable (error ${m.status}).`)
+        setMaintenanceRows(await m.json() as MaintenanceRow[])
+      } catch (e) { setMaintenanceRows(null); setMaintenanceError(e instanceof Error ? e.message : 'Could not load maintenance data.') }
       try {
         sessionStorage.setItem(KEY, k)
       } catch {
@@ -81,6 +90,15 @@ export function FeedbackAdmin() {
     a.download = 'pcsmartcare-feedback.csv'
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const downloadMaintenance = async () => {
+    try {
+      const r = await fetch('/api/maintenance/export.csv', { headers: { 'X-Export-Key': key } })
+      if (!r.ok) throw new Error(`Could not download maintenance CSV (error ${r.status}).`)
+      const url = URL.createObjectURL(await r.blob()), a = document.createElement('a')
+      a.href = url; a.download = 'pcsmartcare-maintenance.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) { setMaintenanceError(e instanceof Error ? e.message : 'Could not download maintenance CSV.') }
   }
 
   if (!key || (!rows && error)) {
@@ -159,6 +177,7 @@ export function FeedbackAdmin() {
         {busy && <div className="mt-5 text-ink-2"><LatticeLoader label="Loading feedback" fontSize={13} /></div>}
 
         {rows && <FeedbackOverview rows={shown} />}
+        {rows && <MaintenanceSummary rows={maintenanceRows} feedback={rows} error={maintenanceError} download={() => void downloadMaintenance()} />}
 
         <section className="mt-5">
           <p className="text-[13px] font-semibold text-ink">Responses (newest first)</p>

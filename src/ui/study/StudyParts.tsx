@@ -16,7 +16,15 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
     const field = box.current?.querySelector<HTMLElement>('input:not([type]), input[type=text]')
     const target = field ?? box.current
     target?.focus()
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Tab') return
+      const fields = [...(box.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? [])].filter(el => el.offsetParent !== null)
+      const first = fields[0], last = fields.at(-1)
+      if (!first) { e.preventDefault(); box.current?.focus() }
+      else if (e.shiftKey && (document.activeElement === first || document.activeElement === box.current)) { e.preventDefault(); last?.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)

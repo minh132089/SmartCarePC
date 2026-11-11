@@ -27,5 +27,5 @@ const index = (k: AssemblyKey) => ASSEMBLY.findIndex((s) => s.key === k) + 1
 export const isOut = (step: number, k: AssemblyKey) => step >= STEPS - index(k) + 1
 
 export function useOut(k: AssemblyKey) {
-  return useViewer((s) => isOut(s.step, k))
+  return useViewer((s) => s.guide && s.guideKind === 'maintenance' ? k === 'cooler' && s.maintenanceLift : isOut(s.step, k))
 }

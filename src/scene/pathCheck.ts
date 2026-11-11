@@ -84,7 +84,7 @@ function harness(scene: Scene, advance: () => void) {
     else s.setFamily(machine)
     // Bước "Chuẩn bị" không đặt hẹn giờ lắp linh kiện, nên bảng hướng dẫn không ghi đè trạng thái lúc đang đo.
     // instantMotion: linh kiện nhảy ngay tới đích; nếu chờ lò xo (chạy theo thời gian thật) sẽ đo nhầm lúc đang bay
-    useViewer.setState({ guide: true, guideFull: false, guideIndex: 0, page: 'build', powered: false, instantMotion: true })
+    useViewer.setState({ guide: true, guideKind: 'assembly', guideFull: false, guideIndex: 0, page: 'build', powered: false, instantMotion: true })
     for (let i = 0; i < 40 && !scene.getObjectByName('mount_case'); i++) await settle(5)
     await new Promise((r) => setTimeout(r, 1200))
     await settle(60)
@@ -95,7 +95,7 @@ function harness(scene: Scene, advance: () => void) {
     useViewer.setState({ guidePart: part, step: STEPS - k - (installed ? 1 : 0) })
     await settle(12)
   }
-  return { open, at }
+  return { open, at, settle }
 }
 
 /** Các khối đang hiện của bước `part`, theo mã khối */
@@ -147,6 +147,10 @@ const boxOf = (meshes: Mesh[]) =>
 
 /** Quét khối `moving` (đang ở chỗ chờ) đi theo d vào chỗ lắp. Trả về chỗ chạm sai, null nếu sạch. */
 function sweep(statics: Mesh[], moving: Mesh[], d: Vector3, samples = SAMPLES): Omit<Violation, 'machine' | 'path'> | null {
+  // Chỉ vật giao với hộp bao toàn đường đi mới có thể bị quét trúng; tránh bắn 700 tia qua mọi lỗ lưới của vỏ.
+  const region = boxOf(moving)
+  region.union(region.clone().translate(d)).expandByScalar(0.02)
+  statics = statics.filter(m => boxOf([m]).intersectsBox(region))
   // Bắn tia trúng cả mặt sau tam giác, nếu không tia đi từ trong vật ra sẽ lọt
   const sides = new Map<Material, Side>()
   for (const m of [...statics, ...moving]) {
@@ -438,4 +442,40 @@ function inside(statics: Mesh[], meshes: Mesh[], center: Vector3): { hits: strin
   if (total <= rays * SEAT_SHARE) return null
   const worst = [...bad.entries()].sort((a, b) => b[1] - a[1])
   return { hits: worst.slice(0, 3).map(([k, n]) => `${k} ×${n}`).join(', '), count: `${total}/${rays}` }
+}
+
+
+/** Bảo trì: chỉ đế tản / bơm di chuyển, GPU và quạt vẫn lắp; không dùng trạng thái tháo toàn bộ. */
+export async function checkMaintenancePaths(scene: Scene, advance: () => void, machines: Machine[] = MACHINES): Promise<Violation[]> {
+  const h = harness(scene, advance), out: Violation[] = []
+  try {
+    for (const machine of machines) {
+      await h.open(machine)
+      useViewer.setState({ guideKind: 'maintenance', maintenanceTask: 'paste', guideIndex: 4, maintenanceHasGpu: true })
+      await h.settle(80)
+      scene.updateMatrixWorld(true)
+      let start = blocksOf(scene, 'cooler').get('cooler.1')
+      for (let attempt = 0; attempt < 200 && !start?.length; attempt++) {
+        await new Promise(r => setTimeout(r, 50)); await h.settle(3); scene.updateMatrixWorld(true)
+        start = blocksOf(scene, 'cooler').get('cooler.1')
+      }
+      if (!start?.length) {
+        const paths: string[] = []; scene.traverse(o => { if (o.userData.path) paths.push(`${o.userData.path}:${shown(o)}`) })
+        throw new Error(`Missing CPU cooler on ${machine}; guide=${useViewer.getState().guideKind}, part=${useViewer.getState().guidePart}; paths=${paths.join(',')}`)
+      }
+      const a = new Vector3().setFromMatrixPosition(start[0].matrixWorld)
+      useViewer.getState().setGuideIndex(3)
+      await h.settle(80)
+      scene.updateMatrixWorld(true)
+      const meshes = blocksOf(scene, 'cooler').get('cooler.1')!
+      const b = new Vector3().setFromMatrixPosition(meshes[0].matrixWorld)
+      const offset = a.clone().sub(b)
+      if (offset.length() < 0.01) throw new Error(`CPU cooler did not lift on ${machine}`)
+      // Ống mềm vẫn nối bơm với két, biến dạng theo bơm nên không phải vật cản cố định.
+      const statics = staticMeshes(scene, new Set(meshes)).filter(m => !(mountOf(m)?.name === 'mount_cooler' && !mountOf(m)?.userData.path))
+      const hit = fromOutside(meshes, offset, () => sweep(statics, meshes, offset.clone().negate()))
+      if (hit) out.push({ machine, path: 'maintenance.cooler.1', ...hit })
+    }
+  } finally { useViewer.setState({ instantMotion: false }); useViewer.getState().setGuide(false) }
+  return out
 }

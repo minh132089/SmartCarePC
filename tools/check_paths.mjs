@@ -9,6 +9,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+const maintenance = process.argv.includes('--maintenance')
 const find = process.argv.includes('--find')
 const fix = process.argv.includes('--fix')
 const TABLE = new URL('../src/data/installPaths.json', import.meta.url)
@@ -48,10 +49,10 @@ let code = 2
 try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false })
   const openPage = async () => {
-    await send('Page.navigate', { url: 'http://localhost:5173/' })
+    await send('Page.navigate', { url: 'http://localhost:5173/?baotri=check' })
     await sleep(6000)
     // Mở trang mô hình 3D để có cảnh và hàm __checkPaths (chỉ có ở bản dev)
-    await evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.includes('xem mô hình 3D'))?.click()`)
+    // Deep link bảo trì mở cảnh 3D trước hộp chọn máy, không phụ thuộc nhãn nút của trang tư vấn.
     for (let i = 0; i < 60; i++) {
       if ((await evaluate('typeof window.__checkPaths')).result.value === 'function') break
       await sleep(500)
@@ -59,7 +60,7 @@ try {
   }
   await openPage()
   const check = async (list) => {
-    const r = await evaluate(`window.__checkPaths(${list ? JSON.stringify(list) : 'undefined'})`)
+    const r = await evaluate(`window.${maintenance ? '__checkMaintenancePaths' : '__checkPaths'}(${list ? JSON.stringify(list) : 'undefined'})`)
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? 'lỗi trong trang')
     return r.result.value
   }

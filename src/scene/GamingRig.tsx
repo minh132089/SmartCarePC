@@ -38,6 +38,7 @@ const PANEL = ['side_panel'] // nắp kín phía sau khay
 export function GamingRig() {
   const xp = (path: string, fallback: Vec3) => ({ path, explode: installPath('gaming', path, fallback) })
   const coolerOut = useOut('cooler')
+  const maintenance = useViewer(s => s.guide && s.guideKind === 'maintenance')
   const cablesOut = useOut('cables')
   // Chọn "Dây cáp" thì tháo nắp kín phía sau khay để thấy dây đi sau lưng bo
   const cablesOpen = useViewer((s) => s.selected === 'cables')
@@ -76,7 +77,7 @@ export function GamingRig() {
       <Part id="cooler" position={u(CASE_PARTS.radiator)} step="cooler" {...xp('cooler.2', [0, 0, 1.6])}>
         <GamingSpinner name="aio_radiator" nodes={RAD_FANS} axis="y" />
       </Part>
-      {!coolerOut && <AioHoses />}
+      {(!coolerOut || maintenance) && <AioHoses />}
 
       {[...CASE_PARTS.frontFans, CASE_PARTS.rearFan].map((p, i) => (
         // Quạt trước tháo ra phía trước, quạt sau ra phía sau; quay theo chiều kim đồng hồ khi nhìn vào mặt hút (+x)
@@ -142,10 +143,12 @@ const CASE_FAN = ['blades']
  * (z ≤ -32, không chạm khung quạt), vòng qua đầu két ở x ≥ 146 rồi đi lên vào hai cút dưới bình két.
  */
 function AioHoses() {
+  const lift = useViewer(s => s.guide && s.guideKind === 'maintenance' && s.maintenanceLift)
   const tubes = useMemo(() => {
     const pump = onBoard(ON_BOARD.pump)
     return PUMP_FITTINGS.map((f, i) => {
-      const a = add(pump, f)
+      const offset = lift ? installPath('gaming', 'cooler.1', [0, 0, 1.9]).map(n => n * 100) as Mm3 : [0, 0, 0] as Mm3
+      const a = add(add(pump, f), offset)
       const b = add(CASE_PARTS.radiator, RAD_FITTINGS[i])
       const dz = i === 0 ? -7 : 7
       const pts: Mm3[] = [
@@ -162,7 +165,7 @@ function AioHoses() {
       const curve = new CatmullRomCurve3(pts.map(v), false, 'centripetal')
       return new TubeGeometry(curve, 128, 0.055, 12, false)
     })
-  }, [])
+  }, [lift])
   return (
     <Part id="cooler">
       {tubes.map((g, i) => (
@@ -246,7 +249,7 @@ const top = (p: Plug): Mm3 => [p.at[0], p.at[1], p.at[2] + PLUG_SIZE[p.kind][2]]
  * chỉ chui ra ở lỗ luồn gần đầu cắm (G1, G2, G3, G5, G6) rồi cắm thẳng vào đầu cắm.
  * Dây nguồn GPU đi trong khoang nguồn, lên trong ống che G4, ra ở miệng G4 cạnh card.
  */
-function gamingWiring(hasGpu: boolean): { routes: Route[]; plugs: Plug[]; splitter: Mm3; joints: Mm3[] } {
+function gamingWiring(hasGpu: boolean, disconnected = false): { routes: Route[]; plugs: Plug[]; splitter: Mm3; joints: Mm3[] } {
   const routes: Route[] = []
   const plugs: Plug[] = []
   const power = (points: Mm3[], cols: number, rows: number): Route => ({ points: points.map(v), cols, rows, r: 0.01 })
@@ -278,9 +281,12 @@ function gamingWiring(hasGpu: boolean): { routes: Route[]; plugs: Plug[]; splitt
   const pwm = (h: Mm3) => plug({ kind: 'pwm4', at: onHeader(h, PCB_TOP + 1.2) })
 
   // Bơm: dây đi dọc ống nước một đoạn rồi xuống thẳng đầu AIO_PUMP ngay bên dưới
+  if (!disconnected) {
   const pumpRoot = add(onBoard(ON_BOARD.pump), [14, 42, 30])
   const pp = pwm(HEADERS.pump)
   routes.push(signal([pumpRoot, [pumpRoot[0] - 2, 176, -60], [pp.at[0] + 6, pp.at[1] + 10, -72], top(pp)]))
+
+  }
 
   // Hai quạt két: men cạnh két phía bo, vào G3, gặp nhau ở bộ chia Y sau khay; một dây từ bộ chia ra lại G3 tới CPU_FAN
   const splitter = behind(G3[0], G3[1] - 10)
@@ -289,8 +295,11 @@ function gamingWiring(hasGpu: boolean): { routes: Route[]; plugs: Plug[]; splitt
     const mid: Mm3[] = sx > 0 ? [[40, 205, -34], [-40, 208, -40]] : [[-88, 210, -60]]
     routes.push(signal([stub, ...mid, [G3[0] + sx * 8, 220, -92], front(G3[0] + sx * 8, G3[1]), behind(G3[0] + sx * 6, G3[1] - 4), splitter]))
   }
+  if (!disconnected) {
   const cf = pwm(HEADERS.cpuFan)
   routes.push(signal([splitter, behind(G3[0] + 10, G3[1] - 2), front(G3[0] + 12, G3[1], 1), [cf.at[0] - 2, cf.at[1] + 14, -76], top(cf)]))
+
+  }
 
   // Ba quạt trước nằm sát mặt khay tới lỗ luồn. Trên: vào G2, ra lại mép trên G2 tới SYS_FAN1.
   // Giữa: vào G2, xuống sau khay, ra G5. Dưới: vào thẳng G5.
@@ -429,11 +438,12 @@ function fitLength(pts: Mm3[], target: number, at: number, dir: Mm3): Mm3[] {
 const FLAT = { below: -1.03, min: BEHIND_RANGE[0] / 100, max: BEHIND_RANGE[1] / 100 }
 
 function GamingCables() {
-  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
+  const hasGpu = useViewer(s => s.guide && s.guideKind === 'maintenance' ? s.maintenanceHasGpu : s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
+  const disconnected = useViewer(s => s.guide && s.guideKind === 'maintenance' && s.maintenanceTask === 'paste' && s.guideIndex >= 3 && s.guideIndex <= 5)
   const { routes, plugs, splitter, joints } = useMemo(() => {
-    const w = gamingWiring(hasGpu)
+    const w = gamingWiring(hasGpu, disconnected)
     return { ...w, routes: w.routes.map((r) => ({ ...r, flatten: FLAT })) }
-  }, [hasGpu])
+  }, [hasGpu, disconnected])
   return (
     <Part id="cables">
       {routes.map((r, i) => (

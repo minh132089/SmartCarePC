@@ -34,7 +34,9 @@ export function FamilyRig({ id }: { id: FamilyId }) {
   const f = FAMILIES[id]
   const P = useMemo(() => familyPlacement(f), [f])
   const coolerOut = useOut('cooler')
+  const maintenance = useViewer(s => s.guide && s.guideKind === 'maintenance')
   const gpuOut = useOut('gpu')
+  const hasGpu = useViewer(s => s.guide && s.guideKind === 'maintenance' ? s.maintenanceHasGpu : s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
   const cablesOut = useOut('cables')
   const sideOpen = useViewer((s) => s.sideOpen)
   const cablesOpen = useViewer((s) => s.selected === 'cables')
@@ -90,7 +92,7 @@ export function FamilyRig({ id }: { id: FamilyId }) {
           <GlbSpinner url={MODEL_URL.radiator[f.radiator.kind]} nodes={RAD_FANS[f.radiator.kind]} axis="y" />
         </Part>
       )}
-      {f.radiator && !coolerOut && <Hoses f={f} ihs={P.ihs} />}
+      {f.radiator && (!coolerOut || maintenance) && <Hoses f={f} ihs={P.ihs} />}
 
       {/* GPU: R0 cắm thẳng vào khe; R+ / R- dựng qua riser */}
       {/* Card nằm sau tấm đỡ bo (Mini): tháo ra và lắp vào qua hông sau (-z); nếu ra +z thì card xuyên qua bo mạch */}
@@ -99,7 +101,7 @@ export function FamilyRig({ id }: { id: FamilyId }) {
           <GlbSpinner url={MODEL_URL.gpu[f.gpu.kind]} nodes={GPU_FANS[f.gpu.kind]} axis="y" />
         </group>
       </Part>
-      {f.riser && !gpuOut && <Riser f={f} fingers={P.gpuFingers} />}
+      {f.riser && hasGpu && !gpuOut && <Riser f={f} fingers={P.gpuFingers} />}
 
       <Part id="psu" position={u(f.psu.center as Mm3)} step="psu" {...xp('psu.0', [0, 0, 1.8])}>
         <group rotation-x={rotX(f.psu.rot)}>
@@ -139,17 +141,19 @@ const v = (p: number[]) => new Vector3(p[0] / 100, p[1] / 100, p[2] / 100)
 
 /** Hai ống nước Ø11 từ cút trên bơm, đi lên trên bo rồi tới hai đầu ống dưới bình két (phía +x). */
 function Hoses({ f, ihs }: { f: Family; ihs: Mm3 }) {
+  const lift = useViewer(s => s.guide && s.guideKind === 'maintenance' && s.maintenanceLift)
   const tubes = useMemo(() => {
     const R = f.radiator!
     const fx = RAD_FITTING_X[R.kind]
     return PUMP_FITTINGS.map((pf, i) => {
-      const a = add(ihs, pf)
+      const offset = lift ? installPath(f.id, 'cooler.1', [0, 0, 1.9]).map(n => n * 100) as Mm3 : [0, 0, 0] as Mm3
+      const a = add(add(ihs, pf), offset)
       const b = add(R.origin, [fx, -40, i === 0 ? -15 : 15])
       const midY = (a[1] + b[1] - 50) / 2
       const pts: Mm3[] = [a, [a[0], a[1] + 30, a[2] + 4], [(a[0] + b[0]) / 2, midY + 30, (a[2] + b[2]) / 2 + (i === 0 ? -8 : 8)], [b[0] + 12, b[1] - 36, b[2]], [b[0], b[1] - 10, b[2]], b]
       return new TubeGeometry(new CatmullRomCurve3(pts.map(v), false, 'centripetal'), 96, 0.055, 12, false)
     })
-  }, [f, ihs])
+  }, [f, ihs, lift])
   return (
     <Part id="cooler">
       {tubes.map((g, i) => (
@@ -222,8 +226,9 @@ function ribbon(points: Vector3[], w: number) {
  * chui ra ở lỗ gần đầu cắm nhất rồi cắm thẳng vào đầu cắm.
  */
 function FamilyCables({ f }: { f: Family }) {
-  const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
-  const routes = useMemo(() => familyRoutes(f, hasGpu), [f, hasGpu])
+  const hasGpu = useViewer(s => s.guide && s.guideKind === 'maintenance' ? s.maintenanceHasGpu : s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
+  const disconnected = useViewer(s => s.guide && s.guideKind === 'maintenance' && s.maintenanceTask === 'paste' && s.guideIndex >= 3 && s.guideIndex <= 5)
+  const routes = useMemo(() => familyRoutes(f, hasGpu, disconnected), [f, hasGpu, disconnected])
   return (
     <Part id="cables">
       {routes.map((r, i) => (
@@ -233,7 +238,7 @@ function FamilyCables({ f }: { f: Family }) {
   )
 }
 
-function familyRoutes(f: Family, hasGpu: boolean): Route[] {
+function familyRoutes(f: Family, hasGpu: boolean, disconnected = false): Route[] {
   const P = familyPlacement(f)
   const L = P.L
   const tz = f.tray.z
@@ -334,6 +339,7 @@ function familyRoutes(f: Family, hasGpu: boolean): Route[] {
   }
 
   // Tản CPU tới đầu cắm trên bo (đoạn ngắn trên mặt bo)
+  if (!disconnected) {
   const cf = P.header(L.headers.cpu_fan, HEADER_Z.fan)
   if (f.cooler.kind.startsWith('aio')) {
     // bơm → AIO_PUMP (hoặc CPU_FAN nếu bo không có đầu riêng)
@@ -351,6 +357,8 @@ function familyRoutes(f: Family, hasGpu: boolean): Route[] {
   } else {
     const root: Mm3 = add(P.ihs, f.cooler.kind === 'tower_air_155' ? [30, 55, 60] : [40, 40, 30])
     routes.push({ ...signal([root, [root[0], root[1] + 8, root[2] - 6], [cf[0], cf[1] + 10, cf[2] + 24], [cf[0], cf[1], cf[2] + 14]]), plug: plug(cf, FAN_PLUG) })
+  }
+
   }
 
   // Cụm cổng trên vỏ: USB-A → USB 3.0, USB-C → đầu Type-E, nút / đèn → F_PANEL, jack → HD_AUDIO

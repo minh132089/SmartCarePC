@@ -12,7 +12,7 @@ import { StudyDialogs } from './ui/study/StudyBar'
 export default function App() {
   const guide = useViewer((s) => s.guide)
   const page = useViewer((s) => s.page)
-  const machine = useViewer((s) => s.familyId ?? s.buildId)
+  const machine = useViewer((s) => `${s.familyId ?? s.buildId}:${s.guideKind}:${s.maintenanceTask}:${s.maintenanceCooler}:${s.maintenanceHasGpu}:${s.maintenanceRunId}`)
   // Trang 1 tư vấn chọn máy; trang 2 là mô hình 3D kèm hướng dẫn lắp và khung chat hỏi khi lắp
   if (page === 'advice')
     return (

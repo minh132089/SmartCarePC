@@ -15,6 +15,8 @@ import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
 import { playRandom, useSound } from './sound/sfx'
 import { useStudy } from './study/study'
+import { MaintenanceEntry } from './maintenance/MaintenanceHub'
+import { useMaintenance } from './maintenance/maintenanceState'
 import { StudyBar } from './study/StudyBar'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
@@ -142,6 +144,7 @@ export function AdvicePage() {
       <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-2 md:px-10">
         <FlowSteps current={1} />
         <div className="flex items-center gap-2">
+          <MaintenanceEntry />
           {soundButton}
           <IconButton label="New conversation" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
@@ -271,6 +274,7 @@ const NAV_ITEMS: CardNavItem[] = [
     links: [
       { label: "Open 3D viewer", href: '#' },
       { label: "Assembly guide", href: '#' },
+      { label: "Maintenance guide", href: '#' },
     ],
   },
   {
@@ -337,6 +341,7 @@ function Intro({
     event.preventDefault()
     const example = EXAMPLES.find((ex) => ex.label === link.label)
     if (example) fill(example.text)
+    else if (link.label === "Maintenance guide") useMaintenance.getState().open()
     else if (link.label === "Open 3D viewer") setPage('build')
     else if (link.label === "Assembly guide") {
       setGuide(true)
@@ -458,11 +463,11 @@ function useOpenMachine() {
 }
 
 /** Thanh hai bước ở đầu trang: 1 Tư vấn, 2 Lắp máy. Dùng chung cho cả hai trang. */
-export function FlowSteps({ current }: { current: 1 | 2 }) {
+export function FlowSteps({ current, maintenance = false }: { current: 1 | 2; maintenance?: boolean }) {
   const setPage = useViewer((s) => s.setPage)
   const items = [
     { n: 1, label: "Choose your PC", short: "Advice", page: 'advice' as const },
-    { n: 2, label: "Assembly guide", short: "Assemble", page: 'build' as const },
+    { n: 2, label: maintenance ? "Maintenance guide" : "Assembly guide", short: maintenance ? "Maintain" : "Assemble", page: 'build' as const },
   ]
   return (
     <nav aria-label="Your steps" className="flex items-center gap-2 text-[13px]">

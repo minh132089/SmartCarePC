@@ -169,6 +169,16 @@ public class ChatService {
             4. Việc có thể làm hỏng linh kiện (ấn mạnh CPU, cắm ngược đầu dây, cắm khi máy đang có điện) thì cảnh báo trước.
             """;
 
+    /** Hỏi phụ trợ đúng bước bảo trì, không biến hướng dẫn thành một cuộc tư vấn mua linh kiện. */
+    private static final String MAINTENANCE = """
+            Help a beginner with the current desktop PC maintenance step. The canonical maintenance instructions
+            describe the owner's chosen cooler and take priority over the illustrative model's default parts.
+            Give 1–3 short sentences about the question and one relevant safety check. Do not repeat the whole guide
+            or recommend purchases. Keep the CPU in its socket for paste work. Never suggest opening a power supply,
+            an AIO pump or liquid-cooling tubes. Before touching internal parts, require shutdown and unplugging.
+            If something is stuck, damaged, smells burnt or repeatedly shuts down, stop and suggest qualified help.
+            """;
+
     /** Luật chung cho cả hai trang */
     private static final String RULES = """
             TỐI ƯU GIÁ TRỊ (skill của app, docs/pc_value_optimization_skill.md): tìm cấu hình tương thích, đủ nhu cầu, \
@@ -440,9 +450,11 @@ public class ChatService {
     private ChatResponse replyWithinBudget(ChatRequest request, java.util.function.Consumer<String> progress) {
         progress.accept(STAGE_READ);
         List<Map<String, Object>> messages = new ArrayList<>();
+        boolean maintenance = request.guideStep() != null && request.guideStep().startsWith("Maintenance guide:");
         String step = request.guideStep() == null || request.guideStep().isBlank() ? ""
-                : "\nThe user is following this assembly guide context: " + request.guideStep().strip() + ".\n";
-        String intro = "advice".equals(request.mode()) ? ADVICE : ASSEMBLY;
+                : "\nThe user is following this " + (maintenance ? "maintenance" : "assembly") + " guide context: " + request.guideStep().strip() + ".\n";
+        String intro = "advice".equals(request.mode()) ? ADVICE
+                : maintenance ? MAINTENANCE : ASSEMBLY;
         if (!search.enabled()) {
             intro += "\nNOTE: product search is disabled. Skip real product lookup, leave product fields empty, use estimated prices "
                     + "and do not name specific brands or models.\n";

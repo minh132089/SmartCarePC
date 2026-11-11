@@ -9,6 +9,7 @@ import { INSPECTABLE } from '../data/hotspots'
 import { QUALITY_LABEL, type QualityPref } from '../perf/quality'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { FlowSteps } from './AdvicePage'
+import { MaintenanceEntry } from './maintenance/MaintenanceHub'
 import { StudyBar } from './study/StudyBar'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
@@ -141,6 +142,7 @@ export function Sidebar() {
       </div>
       <QualityPicker />
       <GuideCard />
+      <div className="mt-4 rounded-2xl bg-surface p-4"><p className="mb-2 text-[14px] text-ink-2">Already have a PC? Keep it clean and plan your next check.</p><MaintenanceEntry /></div>
 
       <div ref={listRef} className="enter" style={{ '--i': 3 } as React.CSSProperties}>
       <SectionTitle>Inside this PC</SectionTitle>

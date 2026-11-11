@@ -37,10 +37,10 @@ export function Part({
   children: ReactNode
 }) {
   const exploded = useViewer((s) => s.exploded)
-  const out = useViewer((s) => (step ? isOut(s.step, step) : s.exploded))
+  const out = useViewer((s) => s.guide && s.guideKind === 'maintenance' ? s.maintenanceLift && path === 'cooler.1' : (step ? isOut(s.step, step) : s.exploded))
   // Hướng dẫn lắp: linh kiện của bước sau chưa xuất hiện; linh kiện của bước đang xem hiện ở chỗ tháo rồi bay vào
-  const hidden = useViewer((s) => (!!step && s.guide && !s.guideFull && isOut(s.step, step) && s.guidePart !== step)
-    || (id === 'gpu' && s.advisedBuild != null && !s.advisedBuild.items.some((i) => i.category === 'gpu')))
+  const hidden = useViewer((s) => (!!step && s.guide && s.guideKind === 'assembly' && !s.guideFull && isOut(s.step, step) && s.guidePart !== step)
+    || (id === 'gpu' && (s.guide && s.guideKind === 'maintenance' ? !s.maintenanceHasGpu : s.advisedBuild != null && !s.advisedBuild.items.some((i) => i.category === 'gpu'))))
   const select = useViewer((s) => s.select)
   const hover = useViewer((s) => s.hover)
   const [over, setOver] = useState(false)

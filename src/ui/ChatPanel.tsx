@@ -3,6 +3,7 @@ import { ArrowCounterClockwise, ChatCircleDots, X } from '@phosphor-icons/react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
 import { guideChatContext, guideSteps } from '../data/guide'
+import { maintenanceContext, maintenanceSteps } from '../data/maintenance'
 import { useViewer } from '../store'
 import { useAssemblyChat } from './chat/chatStore'
 import { Bubble, Composer, IconButton, Thread } from './chat/ChatParts'
@@ -30,11 +31,15 @@ export function ChatPanel() {
   const guideIndex = useViewer((s) => s.guideIndex)
   const advised = useViewer((s) => s.advisedBuild)
   const hasGpu = advised == null || advised.items.some((i) => i.category === 'gpu')
-  const steps = useMemo(() => guideSteps(familyId, buildId, hasGpu), [familyId, buildId, hasGpu])
+  const kind = useViewer(s => s.guideKind)
+  const task = useViewer(s => s.maintenanceTask)
+  const cooler = useViewer(s => s.maintenanceCooler)
+  const maintenanceGpu = useViewer(s => s.maintenanceHasGpu)
+  const steps = useMemo(() => kind === 'maintenance' ? maintenanceSteps(task, familyId, buildId, maintenanceGpu, cooler) : guideSteps(familyId, buildId, hasGpu), [kind, task, familyId, buildId, hasGpu, maintenanceGpu, cooler])
   const step = guide ? steps[Math.min(guideIndex, steps.length - 1)] : null
   const stepText = step ? `Step ${Math.min(guideIndex, steps.length - 1) + 1}/${steps.length}: ${step.title}` : null
-  const suggestions = step ? [`What should I watch for in the step: ${step.title}?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
-  const ctx = { buildCode: familyId ?? buildId, guideStep: guideChatContext(familyId, buildId, guide ? guideIndex : null, advised) }
+  const suggestions = kind === 'maintenance' ? [`What should I watch for in the step: ${step?.title ?? 'preparation'}?`, 'How can I tell whether it is safe to continue?', 'Which parts should I leave in place?'] : step ? [`What should I watch for in the step: ${step.title}?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
+  const ctx = { buildCode: familyId ?? buildId, guideStep: kind === 'maintenance' && guide ? maintenanceContext(steps, guideIndex, familyId ?? buildId, task) : guideChatContext(familyId, buildId, guide ? guideIndex : null, advised) }
 
   const { messages, busy, stage, error, send, retry, reset } = useAssemblyChat()
   const [open, setOpen] = useState(false)
@@ -65,11 +70,11 @@ export function ChatPanel() {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Open assembly help"
+        aria-label={kind === 'maintenance' ? 'Open step help' : 'Open assembly help'}
         className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-on-ink shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:bottom-5 md:py-3 md:pr-5 md:pl-4"
       >
         <ChatCircleDots size={19} aria-hidden />
-        <span className="hidden md:inline">Assembly help</span>
+        <span className="hidden md:inline">{kind === 'maintenance' ? 'Step help' : 'Assembly help'}</span>
       </button>
     )
   }
@@ -77,7 +82,7 @@ export function ChatPanel() {
   return (
     <section
       role="dialog"
-      aria-label="Assembly help"
+      aria-label={kind === 'maintenance' ? 'Maintenance step help' : 'Assembly help'}
       className="chat-pop fixed inset-x-2 top-12 bottom-2 z-50 flex flex-col overflow-hidden rounded-[24px] bg-panel shadow-[0_18px_60px_rgba(0,0,0,0.22)] ring-1 ring-line md:absolute md:inset-auto md:right-4 md:bottom-4 md:h-[min(620px,calc(100%-32px))] md:w-[390px]"
     >
       <header className="flex items-center gap-3 border-b border-line bg-glass px-4 py-3 backdrop-blur-xl">
@@ -85,7 +90,7 @@ export function ChatPanel() {
           <ChatCircleDots size={19} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] leading-tight font-semibold">Assembly help</p>
+          <p className="text-[15px] leading-tight font-semibold">{kind === 'maintenance' ? 'Step help' : 'Assembly help'}</p>
           <p className="truncate text-[12px] text-ink-2">{stepText ? `${machine} · ${stepText}` : `Viewing: ${machine}`}</p>
         </div>
         <IconButton label="New conversation" onClick={reset} disabled={messages.length === 0 && !busy} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
@@ -93,7 +98,7 @@ export function ChatPanel() {
       </header>
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
-        <Bubble role="assistant">{GREETING}</Bubble>
+        <Bubble role="assistant">{kind === 'maintenance' ? 'Need help with this maintenance step? Ask about the instructions or a safety check before continuing.' : GREETING}</Bubble>
         {messages.length === 0 && (
           <div className="flex flex-wrap gap-2 pt-1">
             {suggestions.map((s) => (

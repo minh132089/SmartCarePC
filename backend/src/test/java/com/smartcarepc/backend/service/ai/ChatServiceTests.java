@@ -58,6 +58,14 @@ class ChatServiceTests {
     }
 
     @Test
+    void baoTriUuTienHuongDanChuanVaGiuNguonDong() {
+        reply(answer("Keep the power supply closed and work only at the outside grille."));
+        service.reply(new ChatRequest(List.of(new Message("user", "Can I open the power supply to clean it?")),
+                null, "Maintenance guide: Clean out dust. Canonical instructions: Keep the PSU closed.", "assembly"));
+        assertThat((String) messages(0).getFirst().get("content")).contains("current desktop PC maintenance step", "Never suggest opening a power supply", "take priority over the illustrative model");
+    }
+
+    @Test
     void thongSoHienThiTheoHangThatKhongGiuBaoHanhHayGenAiDoan() {
         assertThat(ChatService.purchasedSpec("psu", "JETEK Revolve B650 650W 80 Plus Bronze", "650W Bronze, bảo hành 60 tháng"))
                 .isEqualTo("650W");

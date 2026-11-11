@@ -114,6 +114,9 @@ public class FeedbackService {
         return out;
     }
 
+    /** Cùng khoá cho dữ liệu bảo trì; tuyệt đối không nhận khoá từ query. */
+    public void authorizeExport(String key) { checkKey(key); }
+
     private void checkKey(String key) {
         if (exportKey.length == 0) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Feedback export is unavailable because the server has no access key configured");

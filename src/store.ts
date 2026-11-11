@@ -3,6 +3,7 @@ import type { AssemblyKey } from './data/assembly'
 import type { BuildId } from './data/builds'
 import type { FamilyId } from './data/families'
 import type { PartId } from './data/parts'
+import type { Cooler, MaintenanceTask } from './data/maintenance'
 import type { BuildCard } from './ui/chat/chatStore'
 import { detectQuality, LOWER, loadPref, savePref, type QualityLevel, type QualityPref } from './perf/quality'
 
@@ -29,6 +30,12 @@ interface ViewerState {
   togglePower: () => void
   /** Đang mở hướng dẫn lắp từng bước: bảng bên trái thành danh sách bước, hình 3D lắp theo bước đang xem */
   guide: boolean
+  guideKind: 'assembly' | 'maintenance'
+  maintenanceTask: MaintenanceTask
+  maintenanceCooler: Cooler
+  maintenanceRunId: string
+  maintenanceHasGpu: boolean
+  maintenanceLift: boolean
   /** Bước đang xem trong hướng dẫn (chỉ số trong guideSteps) */
   guideIndex: number
   /**
@@ -77,9 +84,15 @@ export const useViewer = create<ViewerState>((set) => ({
   powered: false,
   togglePower: () => set((s) => ({ powered: !s.powered })),
   guide: false,
+  guideKind: 'assembly',
+  maintenanceTask: 'dust',
+  maintenanceCooler: 'unknown',
+  maintenanceLift: false,
+  maintenanceHasGpu: true,
+  maintenanceRunId: '',
   guideIndex: 0,
   // Mở hay đóng hướng dẫn đều đưa máy về trạng thái lắp đủ (exploded = false): đóng thì máy tự lắp lại từng bước
-  setGuide: (guide) => set({ guide, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null }),
+  setGuide: (guide) => set({ guide, guideKind: 'assembly', maintenanceLift: false, step: 0, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null }),
   // Chọn một bước thì thoát toàn cảnh để hình quay về đúng bước đó
   setGuideIndex: (guideIndex) => set({ guideIndex, guideFull: false }),
   guidePart: null,

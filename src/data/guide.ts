@@ -20,9 +20,12 @@ export interface GuideStep {
   warning?: string
   /** Dấu hiệu cho biết đã lắp đúng */
   check: string
+  /** Bảo trì giữ máy lắp đủ, chỉ nhấc đế tản khi lau / bôi keo. */
+  coolerOut?: boolean
+  panelOpen?: boolean
 }
 
-interface GuideMachine {
+export interface GuideMachine {
   cooler: 'air' | 'lowprofile' | 'aio'
   psu: 'atx' | 'sfx'
   board: 'ATX' | 'mATX' | 'ITX'
@@ -32,7 +35,7 @@ interface GuideMachine {
   hub: boolean
 }
 
-function machineOf(familyId: FamilyId | null, buildId: BuildId): GuideMachine {
+export function machineOf(familyId: FamilyId | null, buildId: BuildId): GuideMachine {
   if (familyId) {
     const f = FAMILIES[familyId]
     const kind = f.cooler.kind
@@ -217,8 +220,10 @@ export function guideChatContext(familyId: FamilyId | null, buildId: BuildId, in
   return context.filter(Boolean).join('\n').slice(0, 2000)
 }
 
+export const THERMAL_PASTE = "If thermal paste is already applied to the cooler base, do not add more. Otherwise, apply a pea-sized drop at the centre of the CPU without spreading it."
+
 function coolerStep(m: GuideMachine): GuideStep {
-  const paste = "If thermal paste is already applied to the cooler base, do not add more. Otherwise, apply a pea-sized drop at the centre of the CPU without spreading it."
+  const paste = THERMAL_PASTE
   if (m.cooler === 'aio') {
     return {
       id: 'cooler',
