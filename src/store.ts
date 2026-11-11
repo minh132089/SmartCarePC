@@ -7,10 +7,15 @@ import type { Cooler, MaintenanceTask } from './data/maintenance'
 import type { BuildCard } from './ui/chat/chatStore'
 import { detectQuality, LOWER, loadPref, savePref, type QualityLevel, type QualityPref } from './perf/quality'
 
+export type Page = 'home' | 'advice' | 'build' | 'upgrade'
+
 interface ViewerState {
-  /** Trang đang mở: tư vấn chọn máy trước, rồi tới trang hướng dẫn (mô hình 3D) */
-  page: 'advice' | 'build'
-  setPage: (page: 'advice' | 'build') => void
+  /**
+   * Trang đang mở. home: chọn một trong ba hướng (lắp máy mới, bảo dưỡng, nâng cấp). advice: tư vấn chọn máy mới,
+   * build: mô hình 3D kèm hướng dẫn lắp / bảo dưỡng, upgrade: tư vấn nâng cấp máy đang có.
+   */
+  page: Page
+  setPage: (page: Page) => void
   buildId: BuildId
   /** Cấu hình người dùng thực sự chọn từ tư vấn; null khi xem máy mẫu độc lập. */
   advisedBuild: BuildCard | null
@@ -69,7 +74,7 @@ interface ViewerState {
 }
 
 export const useViewer = create<ViewerState>((set) => ({
-  page: 'advice',
+  page: 'home',
   setPage: (page) => set({ page }),
   buildId: 'gaming',
   advisedBuild: null,

@@ -71,9 +71,22 @@ export type Pick = { tier: Tier; variant: number }
 export type Tier = 'cheap' | 'balanced' | 'quality'
 /** options: các phương án đã kiểm tra; build là gợi ý chính do backend chọn. */
 export type Msg = { role: 'user' | 'assistant'; content: string; build?: BuildCard | null; options?: BuildCard[] | null }
-/** advice: trang tư vấn chọn máy. assembly: khung hỏi đáp khi lắp. */
-export type ChatMode = 'advice' | 'assembly'
-export type ChatContext = { buildCode?: string | null; guideStep?: string | null }
+/** advice: trang tư vấn chọn máy. assembly: khung hỏi đáp khi lắp. upgrade: tư vấn nâng cấp máy đang có. */
+export type ChatMode = 'advice' | 'assembly' | 'upgrade'
+export type CaseSize = 'mini' | 'compact' | 'standard' | 'large' | 'unknown'
+/** Máy hiện tại ở trang nâng cấp; ô trống là "không biết". gpu = 'none' khi không có card rời. */
+export type UpgradeForm = {
+  cpu: string
+  motherboard: string
+  ram: string
+  gpu: string
+  storage: string
+  psu: string
+  caseSize: CaseSize
+  purpose: string
+  budgetVnd: number
+}
+export type ChatContext = { buildCode?: string | null; guideStep?: string | null; upgrade?: UpgradeForm | null }
 
 /** Gửi tối đa từng này tin gần nhất, đủ để trợ lý nhớ mạch chuyện mà không quá dài */
 const HISTORY = 20
@@ -161,7 +174,7 @@ function createChat(mode: ChatMode) {
       const ctrl = new AbortController()
       abort = ctrl
       try {
-        const body = { mode, ...ctx, messages: next.slice(-HISTORY).map(toWire) }
+        const body = { mode, ...ctx, messages: next.slice(-HISTORY).map(mode === 'upgrade' ? planWire : toWire) }
         const data = await ask(body, ctrl.signal, (stage) => abort === ctrl && set({ stage }))
         set({ messages: [...next, { role: 'assistant', content: data.reply, build: data.build, options: data.options }] })
         playDone()
@@ -191,6 +204,14 @@ function createChat(mode: ChatMode) {
 
 export const useAdviceChat = createChat('advice')
 export const useAssemblyChat = createChat('assembly')
+export const useUpgradeChat = createChat('upgrade')
+
+/** Trang nâng cấp: kèm tên sản phẩm của kế hoạch trước, để câu hỏi tiếp ("card rẻ hơn được không") biết đang nói món nào */
+function planWire(m: Msg) {
+  if (!m.build) return { role: m.role, content: m.content }
+  const parts = m.build.items.map((i) => `${i.category}: ${i.productName ?? i.name}${i.priceMaxVnd ? ` (${i.priceMaxVnd} VND)` : ''}`).join('; ')
+  return { role: m.role, content: `${m.content}\n\n[Previous upgrade plan: ${parts}]` }
+}
 
 /**
  * Tin gửi lên backend chỉ gồm role và content. Thẻ cấu hình được ghi kèm dưới dạng mã linh kiện,

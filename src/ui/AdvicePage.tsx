@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react'
-import { ArrowCounterClockwise, CaretRight, DiceFive, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, CaretRight, DiceFive, House, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
 import CardNav, { type CardNavItem, type CardNavLink } from '@/components/CardNav'
 import MicroSlats from '@/components/MicroSlats'
 import PixelSwap from '@/components/PixelSwap'
@@ -377,7 +377,11 @@ function Intro({
       <div className="relative flex h-full flex-col overflow-y-auto">
         <div className="relative z-20 shrink-0 px-4 pt-4">
           <CardNav
-            logo={<span className="text-[15px] font-semibold tracking-[-0.01em]">SmartCare PC</span>}
+            logo={
+              <button onClick={() => setPage('home')} title="Home" className={`rounded-md text-[15px] font-semibold tracking-[-0.01em] ${focus}`}>
+                SmartCare PC
+              </button>
+            }
             logoAlt="SmartCare PC"
             items={NAV_ITEMS}
             theme={dark ? 'dark' : 'light'}
@@ -471,6 +475,10 @@ export function FlowSteps({ current, maintenance = false }: { current: 1 | 2; ma
   ]
   return (
     <nav aria-label="Your steps" className="flex items-center gap-2 text-[13px]">
+      <button onClick={() => setPage('home')} aria-label="Home" title="Home" className={`grid size-7 place-items-center rounded-full text-ink-2 hover:bg-fill hover:text-ink ${focus}`}>
+        <House size={16} aria-hidden />
+      </button>
+      <span className="h-px w-3 bg-line-strong" aria-hidden />
       {items.map((it, i) => {
         const on = it.n === current
         return (
