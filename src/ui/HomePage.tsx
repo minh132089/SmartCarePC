@@ -1,6 +1,11 @@
-import { ArrowRight, ArrowCircleUp, Desktop, Wrench } from '@phosphor-icons/react'
-import type { ReactNode } from 'react'
+import { ArrowRight } from '@phosphor-icons/react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useReducedMotion } from 'motion/react'
+import { AnimateIcon } from '@animate-ui/react/icons'
 import { Tilt, TiltContent } from '@animate-ui/react/primitives/effects/tilt'
+import { ArrowUp } from '@/components/animate-ui/icons/arrow-up'
+import { CircuitBoard } from '@/components/animate-ui/icons/circuit-board'
+import { Settings } from '@/components/animate-ui/icons/settings'
 import { useViewer } from '../store'
 import { Rise } from './Rise'
 import { useMaintenance } from './maintenance/maintenanceState'
@@ -53,7 +58,7 @@ export function HomePage() {
             <Choice
               index={0}
               tilt={tilt}
-              icon={<Desktop size={26} aria-hidden />}
+              icon={<CircuitBoard size={26} aria-hidden />}
               title="Build a new PC"
               text="Get three component options for your budget, then follow a 3D guide to assemble it yourself."
               need="Your budget and what you will use the PC for."
@@ -62,7 +67,7 @@ export function HomePage() {
             <Choice
               index={1}
               tilt={tilt}
-              icon={<Wrench size={26} aria-hidden />}
+              icon={<Settings size={26} aria-hidden />}
               title="Maintain my PC"
               text="Clean out dust, replace thermal paste or run a quick health check, with reminders when it is due."
               need="Your PC's shape and cooler type. Pictures help you choose."
@@ -71,7 +76,7 @@ export function HomePage() {
             <Choice
               index={2}
               tilt={tilt}
-              icon={<ArrowCircleUp size={26} aria-hidden />}
+              icon={<ArrowUp size={26} aria-hidden />}
               title="Upgrade my PC"
               text="Find out which parts to replace for your use, with store prices and checks that they fit your PC."
               need="Your current parts if you know them, what you use the PC for, and your upgrade budget."
@@ -86,7 +91,18 @@ export function HomePage() {
 }
 
 function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: ReactNode; title: string; text: string; need: string; onClick: () => void; index: number; tilt: boolean }) {
+  // Sau khi thẻ hiện ra, icon "chào" một lần lần lượt từng cái; sau đó chỉ chuyển động khi rê chuột hoặc chạm vào thẻ
+  const reduce = useReducedMotion()
+  const [greet, setGreet] = useState(false)
+  useEffect(() => {
+    if (reduce) return
+    const start = 700 + index * 220
+    const on = setTimeout(() => setGreet(true), start)
+    const off = setTimeout(() => setGreet(false), start + 1500)
+    return () => { clearTimeout(on); clearTimeout(off) }
+  }, [index, reduce])
   const card = (
+    <AnimateIcon animate={greet} animateOnHover animateOnTap asChild>
       <button
         onClick={onClick}
         className={`group flex h-full w-full flex-col rounded-[24px] bg-panel p-5 text-left ring-1 ring-line transition-shadow duration-150 hover:shadow-lg hover:ring-line-strong ${press} ${focus}`}
@@ -103,6 +119,7 @@ function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: React
           <ArrowRight size={14} aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5" />
         </span>
       </button>
+    </AnimateIcon>
   )
   return (
     <li>
