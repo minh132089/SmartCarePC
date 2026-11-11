@@ -171,6 +171,8 @@ public class UpgradeService {
         volatile Plan plan;
         /** Các khoản tiền người dùng tự viết trong hội thoại: câu trả lời được nhắc lại, không coi là giá bịa */
         volatile List<Long> userAmounts = List.of();
+        /** Lời người dùng trong hội thoại: model họ tự nhắc được phép xuất hiện cạnh số tiền của họ */
+        volatile String userText = "";
         /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
         volatile List<String> lastErrors = List.of();
 
@@ -206,6 +208,8 @@ public class UpgradeService {
         }
         turn.userAmounts = request.messages().stream().filter(m -> "user".equals(m.role()))
                 .flatMap(m -> amounts(m.content()).stream()).toList();
+        turn.userText = request.messages().stream().filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content)
+                .collect(java.util.stream.Collectors.joining(" "));
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false;
         for (int round = 0; round < MAX_ROUNDS && !Io.expired(); round++) {
@@ -495,7 +499,8 @@ public class UpgradeService {
         if (fresh != null && fresh < need) {
             errors.add("psu: \"" + psu.product().title() + "\" (" + fresh + "W) is below the " + need + "W this PC's graphics card needs.");
         }
-        if (psu != null && SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find() && !SFX.matcher(psu.product().title()).find()) {
+        boolean newCase = by.containsKey("case");
+        if (psu != null && !newCase && SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find() && !SFX.matcher(psu.product().title()).find()) {
             errors.add("psu: the current power supply is the small SFX size, so a standard ATX unit will not fit this case. Choose an SFX "
                     + "power supply.");
         }
@@ -508,11 +513,11 @@ public class UpgradeService {
                 unknowns.add(new Issue("PSU_UNKNOWN", "This graphics card needs a power supply of at least " + need + "W with the right "
                         + "PCIe power cable. Read the label on the side of your power supply before buying."));
             }
-            unknowns.add(new Issue("GPU_CLEARANCE", "mini".equals(pc.caseSize())
+            unknowns.add(new Issue("GPU_CLEARANCE", "mini".equals(pc.caseSize()) && !newCase
                     ? "Mini cases fit only short cards. Measure the free length in your case and compare it with the card's length."
                     : "Measure the free length inside your case and compare it with the card's length before buying."));
         }
-        if (psu != null && "mini".equals(pc.caseSize()) && !SFX.matcher(psu.product().title()).find()
+        if (psu != null && !newCase && "mini".equals(pc.caseSize()) && !SFX.matcher(psu.product().title()).find()
                 && !SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find()) {
             warnings.add(new Issue("PSU_FORM", "Mini cases often take only small SFX power supplies. Check which size your case needs."));
         }
@@ -666,8 +671,9 @@ public class UpgradeService {
         }
         var d = DONG.matcher(text);
         while (d.find()) {
-            String n = d.group(1) != null ? d.group(1) : d.group(2);
-            out.add(Long.parseLong(n.replaceAll("[.,]", "")));
+            String n = (d.group(1) != null ? d.group(1) : d.group(2)).replaceAll("[.,]", "");
+            // Số dài bất thường (vd người dùng gõ 20 chữ số): coi là số lạ, không phải giá đã kiểm tra
+            out.add(n.length() > 15 ? Long.MAX_VALUE : Long.parseLong(n));
         }
         return out;
     }
@@ -677,8 +683,30 @@ public class UpgradeService {
      * món, tổng, tiền còn lại) và không được có link (link nằm trên thẻ, lấy từ kết quả tìm kiếm). Câu nào có số tiền khác
      * thì bỏ cả câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
      */
+    private static final Pattern MODEL = Pattern.compile(
+            "\\b(?:rtx|gtx|rx|arc|gt)\\s*[a-z]?\\d{3,4}(?:\\s*(?:ti|super|xtx|xt|gre))?\\b|\\bi[3579]\\s*-?\\s*\\d{4,5}[a-z]{0,2}\\b"
+                    + "|\\b(?:ryzen|r)\\s*[3579]\\s*\\d{4}[a-z0-9]{0,3}\\b|\\bultra\\s*[579]\\s*\\d{3}[a-z]?\\b", Pattern.CASE_INSENSITIVE);
+
+    /** Mã model nhắc trong câu (card, CPU), viết gọn để so: "RTX 4090" -> "rtx4090" */
+    static List<String> models(String text) {
+        List<String> out = new ArrayList<>();
+        if (text == null) return out;
+        var m = MODEL.matcher(text);
+        while (m.find()) out.add(m.group().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", ""));
+        return out;
+    }
+
     static String checkedReply(String draft, Turn turn) {
         if (draft == null) return null;
+        // Model được phép đi kèm số tiền: món trong kế hoạch, máy hiện tại và lời người dùng
+        StringBuilder known = new StringBuilder();
+        Plan current = turn.plan;
+        if (current != null) current.items().forEach(p -> known.append(' ').append(p.product().title()));
+        for (String part : new String[] { turn.pc.cpu(), turn.pc.motherboard(), turn.pc.gpu(), turn.pc.purpose() }) {
+            if (part != null) known.append(' ').append(part);
+        }
+        known.append(' ').append(turn.userText);
+        String knownModels = String.join(" ", models(known.toString()));
         List<Long> allowed = new ArrayList<>(turn.userAmounts);
         allowed.add(turn.pc.budgetVnd());
         Plan plan = turn.plan;
@@ -697,8 +725,11 @@ public class UpgradeService {
             String kept = java.util.Arrays.stream(LINK.matcher(line).replaceAll(r -> r.group(1) != null ? java.util.regex.Matcher.quoteReplacement(r.group(1)) : "")
                             .split("(?<=[.!?])\\s+"))
                     .filter(sentence -> {
-                        boolean ok = amounts(sentence).stream().allMatch(a -> allowed.stream()
-                                .anyMatch(known -> Math.abs(a - known) <= Math.max(60_000, known * 0.03)));
+                        var money = amounts(sentence);
+                        boolean ok = money.stream().allMatch(a -> allowed.stream()
+                                .anyMatch(v -> Math.abs(a - v) <= Math.max(60_000, v * 0.03)))
+                                // Số tiền đúng nhưng gắn với sản phẩm ngoài kế hoạch (vd "RTX 4090 costs 10 million" = ngân sách): bỏ
+                                && (money.isEmpty() || models(sentence).stream().allMatch(knownModels::contains));
                         if (!ok) log.info("Upgrade: bỏ câu có số tiền chưa kiểm tra: {} (số được phép {})", sentence, allowed);
                         return ok;
                     })

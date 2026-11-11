@@ -250,6 +250,35 @@ class UpgradeServiceTests {
         assertThat(res.reply()).doesNotContain("8.5 million").contains("Nothing useful fits.");
     }
 
+    @Test
+    void soTienDungNhungGanSanPhamNgoaiKeHoachThiBo() {
+        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
+        turn.plan = new UpgradeService.Plan("Gaming", List.of(pick("gpu", "replace", RTX4060)), List.of(), List.of());
+        String reply = UpgradeService.checkedReply("Your budget is 10 million VND. An RTX 4090 costs 10 million VND. "
+                + "The RTX 4060 costs 7.99 million. Your i5-10400 stays.", turn);
+        assertThat(reply).contains("Your budget is 10 million VND.", "The RTX 4060 costs 7.99 million.", "Your i5-10400 stays.")
+                .doesNotContain("RTX 4090");
+        assertThat(UpgradeService.models("RTX 4060 Ti, Ryzen 5 5600X and i5-12400F")).containsExactly("rtx4060ti", "ryzen55600x", "i512400f");
+    }
+
+    @Test
+    void soQuaDaiKhongLamHongLuot() {
+        assertThat(UpgradeService.amounts("VND 99999999999999999999")).containsExactly(Long.MAX_VALUE);
+        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
+        assertThat(UpgradeService.checkedReply("You wrote VND 99999999999999999999. Keep your PC.", turn)).isEqualTo("Keep your PC.");
+    }
+
+    @Test
+    void doiVoMoiThiKhongBatNguonSfxCuaVoCu() {
+        var info = new UpgradeInfo("Intel Core i5-12400", "ASUS ROG STRIX B660-I GAMING WIFI", "16GB DDR4", "RTX 4070 12GB", "", "SFX 450W", "mini",
+                "Gaming", 10_000_000L);
+        var atxCase = product("Vỏ case Xigmatek Gaming X ATX Mid Tower", 900_000L);
+        assertThat(UpgradeService.fit(info, List.of(pick("case", "replace", atxCase), pick("psu", "replace", PSU650)), new ArrayList<>(), new ArrayList<>()))
+                .isEmpty();
+        assertThat(UpgradeService.fit(info, List.of(pick("psu", "replace", PSU650)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("SFX"));
+    }
+
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
         return new UpgradeService.Pick(category, action, p, new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()),
                 1, null, null);
