@@ -9,7 +9,7 @@ import { newSubmissionId, useStudy } from '../study/study'
 import { calendarLink, currentPC, flushMaintenanceQueue, recordEvent, startMaintenance, useMaintenance, type MaintenancePC } from './maintenanceState'
 
 const TASK_IDS = Object.keys(TASKS) as MaintenanceTask[]
-const THUMB = { standard_tower: '01', compact_tower: '02', showcase_dual_chamber: '03', mini_sff: '04', full_tower: '06' }
+const THUMB = { standard_tower: '01', compact_tower: '02', showcase_dual_chamber: '03', mini_sff: '04', full_tower: '06', gaming: '07' }
 const COOLERS: { value: Cooler; label: string }[] = [{ value: 'air', label: 'Tower air cooler' }, { value: 'lowprofile', label: 'Low-profile fan' }, { value: 'aio', label: 'Liquid cooler (AIO)' }, { value: 'unknown', label: "I don’t know" }]
 const SYMPTOMS = [{ value: 'noise', label: 'Louder fans' }, { value: 'heat', label: 'Hot or slow under load' }, { value: 'shutdown', label: 'Unexpected shutdowns / restarts' }]
 const input = `w-full rounded-xl bg-surface px-3 py-2 text-[14px] text-ink ring-1 ring-line-strong ${focus}`
@@ -71,9 +71,13 @@ export function MaintenanceHub() {
     {dialog === 'reminders' && !studyDialog && pc && <ReminderSetup pc={pc} onClose={close} />}
   </>
 }
+/** Ảnh minh hoạ chung (tạo bằng AI, không có hãng thật) để người không rành so với tản trong máy mình */
+const COOLER_PHOTO: Partial<Record<Cooler, string>> = { air: '/coolers/tower_air.jpg', lowprofile: '/coolers/lowprofile.jpg', aio: '/coolers/aio.jpg' }
 function CoolerPicture({ kind }: { kind: Cooler }) {
-  return <svg viewBox="0 0 120 76" className="h-16 w-full text-ink-2" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
-    {kind === 'air' ? <><rect x="40" y="9" width="44" height="53" rx="5" /><path d="M45 20h34M45 29h34M45 38h34M45 47h34M45 56h34M50 62v5h25v-5" /><circle cx="59" cy="36" r="16" /><path d="m59 21 4 12 10 9-14-3-13 3 9-10Z" /></> : kind === 'lowprofile' ? <><rect x="22" y="46" width="78" height="13" rx="4" /><ellipse cx="60" cy="35" rx="34" ry="15" /><path d="m60 21 4 12 22 7-26-2-24 2 20-8Z" /></> : kind === 'aio' ? <><rect x="60" y="8" width="47" height="58" rx="4" /><circle cx="83" cy="24" r="12" /><circle cx="83" cy="50" r="12" /><rect x="10" y="32" width="25" height="25" rx="7" /><path d="M35 38c20-32 27-23 27-23M35 48c18 22 29 9 29 9" /></> : <><circle cx="60" cy="36" r="25" /><text x="60" y="45" textAnchor="middle" fill="currentColor" stroke="none" fontSize="28">?</text></>}
+  const photo = COOLER_PHOTO[kind]
+  if (photo) return <img src={photo} alt="" loading="lazy" decoding="async" className="mx-auto h-24 w-full object-contain" />
+  return <svg viewBox="0 0 120 76" className="h-24 w-full text-ink-2" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="60" cy="38" r="25" /><text x="60" y="47" textAnchor="middle" fill="currentColor" stroke="none" fontSize="28">?</text>
   </svg>
 }
 function ChoosePC({ initial, task: firstTask, advised, fromCalendar, onClose }: { initial: MaintenancePC | null; task: MaintenanceTask; advised: boolean; fromCalendar: boolean; onClose: () => void }) {
@@ -89,7 +93,7 @@ function ChoosePC({ initial, task: firstTask, advised, fromCalendar, onClose }: 
       <Question label="Which one looks most like your PC?" hint="Choose the closest desktop shape. The 3D view is a reference, not an exact service manual.">
         <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Your desktop PC style">
           {[...FAMILY_IDS, 'gaming' as const].map(id => <button key={id} role="radio" aria-checked={!laptop && selected && pc.machine === id} onClick={() => { setPC({ ...pc, machine: id }); setSelected(true); setLaptop(false) }} className={`rounded-xl bg-surface p-2 text-[12px] ring-1 ${selected && !laptop && pc.machine === id ? 'ring-2 ring-accent' : 'ring-line'} ${focus}`}>
-            {id === 'gaming' ? <svg viewBox="0 0 120 100" className="aspect-square w-full text-ink-2" aria-hidden="true"><rect x="28" y="8" width="60" height="82" rx="5" fill="none" stroke="currentColor" strokeWidth="3" /><path d="m39 17 36 0v57H39z" fill="var(--color-fill)" /><circle cx="57" cy="35" r="11" fill="none" stroke="currentColor" /><path d="M39 57h36M38 95v-5m42 5v-5" stroke="currentColor" /></svg> : <img src={`/families/${THUMB[id]}_${id}.jpg`} alt="" className="aspect-square w-full rounded-lg object-contain" />}
+            <img src={`/families/${THUMB[id]}_${id}.jpg`} alt="" className="aspect-square w-full rounded-lg object-contain" />
             {id === 'gaming' ? 'Gaming tower' : FAMILIES[id].label}
           </button>)}
         </div>

@@ -57,7 +57,7 @@ const THUMB: Record<FamilyId, string> = { standard_tower: '01', compact_tower: '
 /** Các máy người dùng chọn được: 6 họ case theo dáng và máy Gaming đã dựng đầy đủ. */
 const MACHINES: { id: FamilyId | 'gaming'; label: string; img: string }[] = [
   ...FAMILY_IDS.map((id) => ({ id, label: FAMILIES[id].label, img: `/families/${THUMB[id]}_${id}.jpg` })),
-  { id: 'gaming', label: "Gaming (complete)", img: '' },
+  { id: 'gaming', label: "Gaming (complete)", img: '/families/07_gaming.jpg' },
 ]
 
 export function Sidebar() {
