@@ -13,6 +13,7 @@ import com.smartcarepc.backend.dto.ChatRequest;
 import com.smartcarepc.backend.dto.ChatResponse;
 import com.smartcarepc.backend.service.ai.ChatJobs;
 import com.smartcarepc.backend.service.ai.ChatService;
+import com.smartcarepc.backend.service.ai.UpgradeService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,11 +25,12 @@ import lombok.RequiredArgsConstructor;
 public class ChatController {
 
     private final ChatService chatService;
+    private final UpgradeService upgradeService;
     private final ChatJobs chatJobs;
 
     @PostMapping
     public ChatResponse chat(@Valid @RequestBody ChatRequest request) {
-        return chatService.reply(request);
+        return "upgrade".equals(request.mode()) ? upgradeService.reply(request, stage -> { }) : chatService.reply(request);
     }
 
     /** Gửi câu hỏi chạy nền: trả mã việc ngay (202), rồi hỏi lại bằng GET /api/chat/jobs/{id} */

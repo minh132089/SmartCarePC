@@ -49,12 +49,29 @@ public class ChatJobs {
     }
 
     private final ChatService chat;
+    /** Trang nâng cấp (mode "upgrade"); null khi test chỉ dựng ChatService */
+    private final UpgradeService upgrade;
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     /** Vài câu hỏi cùng lúc là đủ cho demo; mỗi câu đã tự chạy song song các lượt tìm kiếm bên trong */
     private final ExecutorService pool = Executors.newFixedThreadPool(4);
 
     public ChatJobs(ChatService chat) {
+        this(chat, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ChatJobs(ChatService chat, UpgradeService upgrade) {
         this.chat = chat;
+        this.upgrade = upgrade;
+    }
+
+    /** Câu hỏi nâng cấp đi sang UpgradeService, còn lại là ChatService */
+    public ChatResponse answer(ChatRequest request, java.util.function.Consumer<String> progress) {
+        if ("upgrade".equals(request.mode())) {
+            if (upgrade == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Upgrade advice is not available.");
+            return upgrade.reply(request, progress);
+        }
+        return chat.reply(request, progress);
     }
 
     public JobView start(ChatRequest request) {
@@ -74,7 +91,7 @@ public class ChatJobs {
 
     private void run(Job job, ChatRequest request) {
         try {
-            job.result = chat.reply(request, stage -> job.stage = stage);
+            job.result = answer(request, stage -> job.stage = stage);
             job.status = Status.done;
         } catch (AiUnavailableException | ResponseStatusException e) {
             job.error = e instanceof ResponseStatusException r && r.getReason() != null ? r.getReason() : e.getMessage();

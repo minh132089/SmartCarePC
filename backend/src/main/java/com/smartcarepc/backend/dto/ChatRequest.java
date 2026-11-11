@@ -12,7 +12,8 @@ import jakarta.validation.constraints.Size;
  * Cả đoạn hội thoại trong khung chat, tin cũ trước, tin cuối là câu người dùng vừa gửi.
  * buildCode là máy đang xem trên màn hình 3D (vd "mini_sff"), để trợ lý biết người dùng đang nói về máy nào.
  * guideStep là bước hướng dẫn lắp đang mở (vd "Bước 3/10: Đặt CPU vào socket"), null nếu không mở hướng dẫn.
- * mode: "advice" ở trang tư vấn chọn máy, "assembly" (mặc định) ở khung hỏi đáp khi lắp.
+ * mode: "advice" ở trang tư vấn chọn máy, "assembly" (mặc định) ở khung hỏi đáp khi lắp, "upgrade" ở trang nâng cấp
+ * (khi đó upgrade mang máy hiện tại, mục đích và ngân sách nâng cấp).
  * { "buildCode": "gaming", "messages": [ { "role": "user", "content": "Máy này chơi game được không?" } ] }
  */
 public record ChatRequest(
@@ -20,14 +21,19 @@ public record ChatRequest(
         List<@Valid Message> messages,
         String buildCode,
         @Size(max = 2000) String guideStep,
-        @Pattern(regexp = "advice|assembly", message = "mode must be advice or assembly") String mode) {
+        @Pattern(regexp = "advice|assembly|upgrade", message = "mode must be advice, assembly or upgrade") String mode,
+        @Valid UpgradeInfo upgrade) {
 
     public ChatRequest(List<Message> messages, String buildCode) {
-        this(messages, buildCode, null, null);
+        this(messages, buildCode, null, null, null);
     }
 
     public ChatRequest(List<Message> messages, String buildCode, String guideStep) {
-        this(messages, buildCode, guideStep, null);
+        this(messages, buildCode, guideStep, null, null);
+    }
+
+    public ChatRequest(List<Message> messages, String buildCode, String guideStep, String mode) {
+        this(messages, buildCode, guideStep, mode, null);
     }
 
 

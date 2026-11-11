@@ -36,6 +36,9 @@ class ChatControllerTests {
     @MockitoBean
     private ChatJobs chatJobs;
 
+    @MockitoBean
+    private com.smartcarepc.backend.service.ai.UpgradeService upgradeService;
+
     @Test
     void traVeCauTraLoi() throws Exception {
         when(chatService.reply(any())).thenReturn(new ChatResponse("Được bạn nhé."));

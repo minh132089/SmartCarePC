@@ -2491,7 +2491,7 @@ public class ChatService {
             + "components, prices and purchase links. The detailed explanation is temporarily unavailable; you can ask a follow-up below.";
 
     /** Hàng không nên đưa người mới tham khảo */
-    private static final java.util.regex.Pattern JUNK =
+    static final java.util.regex.Pattern JUNK =
             java.util.regex.Pattern.compile("like ?new|cũ|đã qua sử dụng|2nd|trưng bày|thanh lý|tray|bóc máy", java.util.regex.Pattern.CASE_INSENSITIVE);
     /** "2x8GB", "2 x 16GB", "kit": bộ nhiều thanh */
     private static final java.util.regex.Pattern KIT =
@@ -4174,7 +4174,7 @@ public class ChatService {
             Map.entry("rx9070xt", 77));
 
     /** Công suất nguồn hãng chip khuyên dùng (W) cho cả máy; chip không có trong bảng coi như 550W */
-    private static final Map<String, Integer> GPU_PSU = Map.ofEntries(
+    static final Map<String, Integer> GPU_PSU = Map.ofEntries(
             Map.entry("gtx1650", 300), Map.entry("rtx3050", 450), Map.entry("rx6600", 450), Map.entry("rtx4060", 450),
             Map.entry("rtx3060", 550), Map.entry("rx7600", 550), Map.entry("rx6650xt", 500), Map.entry("rtx5060", 500),
             Map.entry("rtx4060ti", 500), Map.entry("rtx3060ti", 600), Map.entry("rx6700xt", 650), Map.entry("rtx3070", 650),
