@@ -11,6 +11,11 @@ assert.equal(maintenancePlan(base, today).dust.date, '2027-02-28')
 assert.equal(maintenancePlan({ ...base, age: 'over-three', paste: 'never', symptoms: ['heat'] }, today).paste.due, true)
 assert.equal(maintenancePlan({ ...base, age: 'over-three', paste: 'unknown', symptoms: ['heat'] }, today).paste.due, false)
 assert.equal(maintenancePlan({ ...base, cleanedButStillHot: true }, today).paste.due, true)
+// Thay keo lần cuối đã quá 30 tháng: đến hạn ngay, ngày hẹn không nằm trong quá khứ
+const oldPaste = maintenancePlan({ ...base, paste: 'changed', lastPasteDate: '2023-01-01' }, '2026-11-11')
+assert.equal(oldPaste.paste.due, true)
+assert.ok(oldPaste.paste.date > '2026-11-11')
+assert.equal(maintenancePlan({ ...base, paste: 'changed', lastPasteDate: '2026-01-01' }, '2026-11-11').paste.due, false)
 assert.equal(addMonths('2026-01-31', 1), '2026-02-28')
 const reminder = { task: 'dust', date: '2026-10-31', months: 3, uid: 'sample-event', link: 'https://ai.smartcarepc.pages.dev/?baotri=dust&thunghiem=P01' }
 const ics = reminderIcs(reminder, new Date('2026-10-29T10:00:00Z'))
