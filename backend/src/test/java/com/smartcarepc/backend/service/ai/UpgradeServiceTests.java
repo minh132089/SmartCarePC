@@ -287,6 +287,7 @@ class UpgradeServiceTests {
         assertThat(UpgradeService.fit(nothing, List.of(pick("ssd", "add", sata)), new ArrayList<>(), new ArrayList<>())).isEmpty();
         var turn = new UpgradeService.Turn(nothing);
         assertThat(UpgradeService.checkedReply("Plan accepted. Add a SATA SSD.", turn)).isEqualTo("Add a SATA SSD.");
+        assertThat(UpgradeService.checkedReply("Your gaming upgrade is accepted. Add a SATA SSD.", turn)).isEqualTo("Add a SATA SSD.");
     }
 
     @Test
@@ -310,6 +311,23 @@ class UpgradeServiceTests {
             assertThat(UpgradeService.fit(info, List.of(pick("case", "replace", product(name, 900_000L)), pick("psu", "replace", PSU650)),
                     new ArrayList<>(), new ArrayList<>())).as(name).noneSatisfy(e -> assertThat(e).contains("SFX"));
         }
+    }
+
+    @Test
+    void thayCpuHayCardNgangHangThiKhongDeXuat() {
+        var amd = new UpgradeInfo("AMD Ryzen 5 3600", "Gigabyte B450M DS3H", "16GB DDR4", "RTX 3060 12GB", "", "650W", "standard",
+                "Gaming. CS2 at 240Hz", 5_000_000L);
+        assertThat(UpgradeService.fit(amd, List.of(pick("cpu", "replace", product("CPU AMD Ryzen 5 5500", 2_490_000L))), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("barely faster");
+        assertThat(UpgradeService.fit(amd, List.of(pick("cpu", "replace", product("CPU AMD Ryzen 7 5700X3D", 4_990_000L))), new ArrayList<>(), new ArrayList<>()))
+                .isEmpty();
+        var game = pc("650W", 12_000_000L);
+        var oldCard = new UpgradeInfo(game.cpu(), game.motherboard(), game.ram(), "RTX 3060 12GB", game.storage(), "650W", "standard", "Gaming", 12_000_000L);
+        assertThat(UpgradeService.fit(oldCard, List.of(pick("gpu", "replace", RTX4060)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("not clearly faster");
+        assertThat(UpgradeService.fit(oldCard, List.of(pick("gpu", "replace", RTX4070)), new ArrayList<>(), new ArrayList<>())).isEmpty();
+        assertThat(UpgradeService.cpuScore("CPU Intel Core i5-12400F")).isEqualTo(120);
+        assertThat(UpgradeService.gpuRank("GTX 750 Ti 2GB")).isEqualTo(4);
     }
 
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {

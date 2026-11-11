@@ -477,6 +477,16 @@ public class UpgradeService {
                         + "and check its CPU support list before buying."));
             }
         }
+        // Chơi game: thay CPU phải mạnh hơn rõ rệt (ít nhất ~15%), không thì tốn tiền mà không thấy khác. Bảng chỉ đo hiệu năng
+        // game; việc khác (lập trình, dựng video) hưởng lợi từ số nhân mà bảng không có, nên không xét
+        if (cpu != null && UpgradeInfo.known(pc.cpu()) && GAMING_USE.matcher(pc.purpose()).find()) {
+            Integer before = cpuScore(pc.cpu()), after = cpuScore(cpu.product().title());
+            if (before != null && after != null && after < before * 1.15) {
+                errors.add("cpu: \"" + cpu.product().title() + "\" is barely faster than the current " + pc.cpu().strip()
+                        + " (about " + Math.round((after * 100.0 / before) - 100) + "% in games), so it is not worth buying. Choose a CPU at least "
+                        + "15% faster on the same socket, or spend the budget on another part.");
+            }
+        }
         // CPU mới không có đồ họa tích hợp (đuôi F) mà máy không có card rời: lắp xong màn hình không lên
         Pick newGpu = by.get("gpu");
         if (cpu != null && newGpu == null) {
@@ -543,6 +553,16 @@ public class UpgradeService {
                 && !SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find()) {
             warnings.add(new Issue("PSU_FORM", "Mini cases often take only small SFX power supplies. Check which size your case needs."));
         }
+        // Thay card phải mạnh hơn rõ rệt; với AI, card nhiều VRAM hơn cũng tính là nâng cấp
+        if (gpu != null && oldGpu) {
+            Integer before = gpuRank(pc.gpu()), after = gpuRank(gpu.product().title());
+            Integer vramBefore = ChatService.vram(pc.gpu()), vramAfter = ChatService.vram(gpu.product().title());
+            boolean moreVram = AI_USE.matcher(pc.purpose()).find() && vramBefore != null && vramAfter != null && vramAfter > vramBefore;
+            if (before != null && after != null && !moreVram && (after < before * 1.2 || after - before < 4)) {
+                errors.add("gpu: \"" + gpu.product().title() + "\" is not clearly faster than the current " + pc.gpu().strip()
+                        + ", so it is not worth buying. Choose a clearly stronger card, or spend the budget on another part.");
+            }
+        }
         if (gpu != null && AI_USE.matcher(pc.purpose()).find()) {
             String t = gpu.product().title().toLowerCase(Locale.ROOT);
             Integer vram = ChatService.vram(gpu.product().title());
@@ -569,6 +589,8 @@ public class UpgradeService {
 
     private static final Pattern AI_USE = Pattern.compile(
             "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern GAMING_USE = Pattern.compile(
+            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE);
     /**
      * Công suất nguồn hãng khuyên cho cả máy, bổ sung GPU_PSU cho card yếu / mạnh mà máy cũ hay có. GPU_PSU của trang lắp máy
@@ -582,6 +604,58 @@ public class UpgradeService {
             Map.entry("rx580", 500), Map.entry("rx6750xt", 650), Map.entry("rtx3070ti", 750), Map.entry("rtx3080", 750),
             Map.entry("rtx4080", 750), Map.entry("rtx4080super", 750), Map.entry("rtx5080", 850), Map.entry("rtx4090", 850),
             Map.entry("rx7900xt", 750), Map.entry("rx7900xtx", 800), Map.entry("rtx5090", 1000));
+
+    /**
+     * Chỉ số chơi game Full HD gần đúng (Ryzen 5 3600 = 100), tổng hợp tay từ các bài so sánh phổ biến (11/2026), chỉ để chặn
+     * "nâng cấp" ngang (vd Ryzen 5 3600 lên 5500 gần như bằng nhau). Bản F của Intel tính như bản thường. CPU không có trong
+     * bảng thì không xét (không đoán).
+     */
+    static final Map<String, Integer> CPU_GAMING = Map.ofEntries(
+            Map.entry("i5-4460", 55), Map.entry("i5-4590", 57), Map.entry("i7-4770", 63), Map.entry("i7-4790", 65),
+            Map.entry("i5-6500", 63), Map.entry("i5-7500", 68), Map.entry("i7-7700", 78), Map.entry("i3-8100", 70),
+            Map.entry("i5-8400", 85), Map.entry("i5-9400", 88), Map.entry("i7-8700", 95), Map.entry("i7-9700", 100),
+            Map.entry("i3-10100", 85), Map.entry("i5-10400", 95), Map.entry("i5-10600k", 102), Map.entry("i7-10700", 108),
+            Map.entry("i5-11400", 105), Map.entry("i7-11700", 112), Map.entry("i3-12100", 105), Map.entry("i3-13100", 110),
+            Map.entry("i3-14100", 112), Map.entry("i5-12400", 120), Map.entry("i5-13400", 128), Map.entry("i5-14400", 132),
+            Map.entry("i5-12600k", 135), Map.entry("i5-13600k", 152), Map.entry("i5-14600k", 158), Map.entry("i7-12700", 142),
+            Map.entry("i7-13700", 160), Map.entry("i7-14700", 165),
+            Map.entry("ryzen3-1200", 55), Map.entry("ryzen5-1600", 72), Map.entry("ryzen5-2600", 85), Map.entry("ryzen7-2700x", 90),
+            Map.entry("ryzen3-3100", 88), Map.entry("ryzen3-3300x", 98), Map.entry("ryzen5-3500x", 92), Map.entry("ryzen5-3600", 100),
+            Map.entry("ryzen5-3600x", 102), Map.entry("ryzen7-3700x", 104), Map.entry("ryzen5-4500", 90), Map.entry("ryzen5-5500", 104),
+            Map.entry("ryzen5-5600g", 105), Map.entry("ryzen5-5600", 118), Map.entry("ryzen5-5600x", 122), Map.entry("ryzen7-5700x", 125),
+            Map.entry("ryzen7-5800x", 128), Map.entry("ryzen7-5700x3d", 140), Map.entry("ryzen7-5800x3d", 148),
+            Map.entry("ryzen5-7500f", 140), Map.entry("ryzen5-7600", 140), Map.entry("ryzen5-7600x", 145), Map.entry("ryzen7-7700", 150),
+            Map.entry("ryzen7-7800x3d", 180), Map.entry("ryzen5-9600x", 155), Map.entry("ryzen7-9700x", 160), Map.entry("ryzen7-9800x3d", 200));
+
+    /** Hạng card cũ chưa có trong GPU_RANK (cùng thang: GTX 1650 = 10, RTX 4060 = 38) */
+    static final Map<String, Integer> OLD_GPU_RANK = Map.ofEntries(
+            Map.entry("gtx750ti", 4), Map.entry("gtx950", 5), Map.entry("gtx960", 6), Map.entry("gtx1050", 6), Map.entry("gtx1050ti", 8),
+            Map.entry("rx560", 6), Map.entry("rx570", 12), Map.entry("rx580", 14), Map.entry("gtx1060", 14), Map.entry("gtx1650super", 14),
+            Map.entry("gtx1660", 16), Map.entry("gtx1660super", 19), Map.entry("gtx1660ti", 19), Map.entry("rtx2060", 24),
+            Map.entry("rx5600xt", 26), Map.entry("rtx2060super", 28), Map.entry("rtx2070", 30), Map.entry("rx5700", 30),
+            Map.entry("rx5700xt", 33), Map.entry("rtx2070super", 34), Map.entry("rtx2080", 37), Map.entry("rtx2080super", 40),
+            Map.entry("rtx2080ti", 46), Map.entry("rtx3070ti", 50), Map.entry("rtx3080", 58), Map.entry("rx6800", 58),
+            Map.entry("rx6800xt", 66), Map.entry("rtx4080", 85), Map.entry("rtx5080", 90), Map.entry("rtx4090", 100));
+
+    /** Chỉ số CPU trong CPU_GAMING (bỏ đuôi F của Intel), null nếu không có */
+    static Integer cpuScore(String title) {
+        if (title == null) return null;
+        String m = ChatService.cpuModel(title);
+        if (m == null) return null;
+        Integer v = CPU_GAMING.get(m);
+        if (v == null && m.startsWith("i")) v = CPU_GAMING.get(m.replaceAll("f$", ""));
+        if (v == null && m.startsWith("i")) v = CPU_GAMING.get(m.replaceAll("k?f?$", ""));
+        return v;
+    }
+
+    /** Hạng card (GPU_RANK của trang lắp máy, bổ sung card cũ); RTX 3050 6GB yếu hơn bản 8GB; null nếu không có */
+    static Integer gpuRank(String title) {
+        if (title == null) return null;
+        String chip = ChatService.gpuChip(title);
+        if (chip == null) return null;
+        if ("rtx3050".equals(chip) && Integer.valueOf(6).equals(ChatService.vram(title))) return 15;
+        return ChatService.GPU_RANK.getOrDefault(chip, OLD_GPU_RANK.get(chip));
+    }
 
     /** Nguồn (W) cần cho cả máy khi dùng card này; không đọc được chip thì coi như 550W */
     static int gpuNeed(String title) {
@@ -725,7 +799,7 @@ public class UpgradeService {
      * câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
      */
     /** Chữ của công cụ bị trợ lý chép lại ("Plan accepted.") không phải lời tư vấn */
-    private static final Pattern TOOL_ECHO = Pattern.compile("^\\s*(the\\s+)?plan\\s+(is\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE);
 
     static String checkedReply(String draft, Turn turn) {
         if (draft == null) return null;
