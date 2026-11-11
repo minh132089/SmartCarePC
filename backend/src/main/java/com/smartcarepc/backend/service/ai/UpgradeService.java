@@ -167,6 +167,17 @@ public class UpgradeService {
     record Plan(String summary, List<Pick> items, List<Issue> warnings, List<Issue> unknowns) {
     }
 
+    record RamGoal(int gb, boolean minimum) { }
+
+    private static RamGoal ramGoal(List<String> preferences) {
+        for (String text : preferences) {
+            Integer gb = ChatService.requestedRam(List.of(text));
+            if (gb != null) return new RamGoal(gb, Pattern.compile("(?iu)(?:at least|minimum|tối thiểu|ít nhất|>=)\\s*"
+                    + "(?:of\\s+)?(?:ram\\s*)?" + gb + "\\s*gb\\b(?!\\s*vram)").matcher(text).find());
+        }
+        return null;
+    }
+
     /** Trạng thái một lượt trả lời: kết quả tìm kiếm theo id ngắn và kế hoạch đã chốt */
     static final class Turn {
         final UpgradeInfo pc;
@@ -179,6 +190,7 @@ public class UpgradeService {
         /** Câu mới nhất xin phương án rẻ hơn: kế hoạch mới phải rẻ hơn kế hoạch trước */
         volatile boolean wantsCheaper;
         String requiredGpuVendor;
+        RamGoal ramGoal;
         /** Món bị bỏ ở lần đề xuất cuối vì không kiểm tra được giá / còn hàng */
         volatile List<String> dropped = List.of();
         /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
@@ -187,6 +199,7 @@ public class UpgradeService {
         Turn(UpgradeInfo pc) {
             this.pc = pc;
             this.requiredGpuVendor = ChatService.gpuVendor(List.of(pc.purpose()));
+            this.ramGoal = ramGoal(List.of(pc.purpose()));
         }
     }
 
@@ -200,13 +213,17 @@ public class UpgradeService {
     @SuppressWarnings("unchecked")
     private ChatResponse run(ChatRequest request, Consumer<String> progress) {
         progress.accept(STAGE_READ);
-        Turn turn = new Turn(request.upgrade());
+        var history = request.messages();
+        UpgradeInfo pc = request.upgrade();
+        Long budget = followUpBudget(history);
+        if (budget != null) pc = new UpgradeInfo(pc.cpu(), pc.motherboard(), pc.ram(), pc.gpu(), pc.storage(), pc.psu(),
+                pc.caseSize(), pc.purpose(), budget);
+        Turn turn = new Turn(pc);
         if (laptop(turn.pc)) {
             return new ChatResponse("This upgrade adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have "
                     + "soldered memory and a single M.2 slot, so check the manufacturer's service manual for your model or ask a repair "
                     + "shop before buying parts.");
         }
-        var history = request.messages();
         var lastAssistant = history.stream().filter(m -> "assistant".equals(m.role())).reduce((a, b) -> b).orElse(null);
         // The first user message describes existing hardware, not a requested GPU brand.
         // Only follow-up requests and the stated purpose impose a purchasing preference.
@@ -218,6 +235,7 @@ public class UpgradeService {
         }
         preferences.add(turn.pc.purpose());
         turn.requiredGpuVendor = ChatService.gpuVendor(preferences);
+        turn.ramGoal = ramGoal(preferences);
         if (lastAssistant != null && lastAssistant.content().contains("[Previous upgrade plan:")) {
             var m = PREVIOUS_PRICE.matcher(lastAssistant.content().substring(lastAssistant.content().indexOf("[Previous upgrade plan:")));
             long sum = 0;
@@ -252,7 +270,14 @@ public class UpgradeService {
                     : TOOLS);
             if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
             var first = Io.async(() -> client.complete(body));
-            Map<String, Object> res = Io.await(first, Duration.ofSeconds(40), null);
+            Map<String, Object> res;
+            try {
+                res = Io.await(first, Duration.ofSeconds(40), null);
+            } catch (AiUnavailableException e) {
+                if (turn.plan == null) throw e;
+                log.warn("Upgrade: provider failed after the plan was checked; returning the checked card");
+                return respond(null, turn);
+            }
             // AI chậm một lượt (nhà cung cấp quá tải): còn thời gian thì gọi thêm một lần, vẫn giữ lượt đầu, nhận lượt nào xong trước
             if (res == null && turn.plan == null && !retried && Io.remainingNanos(Long.MAX_VALUE) > Duration.ofSeconds(25).toNanos()) {
                 retried = true;
@@ -314,6 +339,34 @@ public class UpgradeService {
             progress.accept(turn.plan != null ? STAGE_WRITE : STAGE_CHECK);
         }
         return respond(null, turn);
+    }
+
+    private static final Pattern FOLLOW_UP_BUDGET = Pattern.compile(
+            "(?iu)(?:\\b(?:total\\s+)?budget\\b|ngân sách)\\s*:?\\s*"
+                    + "(?:(?:is|now|of|to|only|just|up to|at most|maximum|là|còn|chỉ|của tôi|của mình|có|hiện tại|bây giờ|lên|xuống|tối đa)\\s+){0,6}"
+                    + "((?:vnd\\s*)?\\d+(?:[.,]\\d+)*\\s*(?:million|mil|triệu|tr\\b|củ|m\\b|vnd|đồng|đ|₫)?)");
+    private static final Pattern NEGATED_BUDGET = Pattern.compile("(?iu)\\b(?:don't|do not|not|không|đừng)\\b[^.!?;\\n]*$");
+    private static final Pattern COMPONENT_BUDGET = Pattern.compile("(?iu)\\b(?:gpu|card|vga|ram|memory|ssd|storage|cpu|motherboard|psu|case|cooler)\\s+$");
+
+    /** Only explicit total-budget statements in follow-ups override the form, never a quoted component price. */
+    static Long followUpBudget(List<ChatRequest.Message> history) {
+        Long budget = null;
+        boolean followUp = false;
+        for (var message : history) {
+            if ("assistant".equals(message.role())) followUp = true;
+            if (!followUp || !"user".equals(message.role())) continue;
+            var m = FOLLOW_UP_BUDGET.matcher(message.content());
+            while (m.find()) {
+                String before = message.content().substring(0, m.start());
+                if (NEGATED_BUDGET.matcher(before).find() || COMPONENT_BUDGET.matcher(before).find()) continue;
+                var values = amounts(m.group(1));
+                String digits = m.group(1).strip().replaceAll("[.,]", "");
+                Long value = !values.isEmpty() ? values.getFirst()
+                        : digits.matches("\\d{6,9}") ? Long.valueOf(digits) : null;
+                if (value != null && value > 0 && value <= 200_000_000L) budget = value;
+            }
+        }
+        return budget;
     }
 
     /** Kết quả thành công đầu tiên của hai lượt gọi; cả hai lỗi thì báo lỗi của lượt sau */
@@ -449,16 +502,16 @@ public class UpgradeService {
             log.info("Upgrade: lần đề xuất cuối, bỏ món chưa kiểm tra được giá {} và xét phần còn lại", dropped);
             errors.clear();
         }
-        if (errors.isEmpty()) errors.addAll(fit(turn.pc, picks, warnings, unknowns));
+        if (errors.isEmpty()) errors.addAll(fit(turn.pc, picks, warnings, unknowns, turn.ramGoal));
         if (errors.isEmpty() && lastChance && picks.stream().mapToLong(Pick::total).sum() > turn.pc.budgetVnd()) {
             // A smaller checked plan can still solve the bottleneck when the optional extras exceed the budget.
-            List<Pick> reduced = affordableSubset(turn.pc, picks);
+            List<Pick> reduced = affordableSubset(turn.pc, picks, turn.ramGoal);
             if (!reduced.isEmpty()) {
                 picks.clear();
                 picks.addAll(reduced);
                 warnings.clear();
                 unknowns.clear();
-                errors.addAll(fit(turn.pc, picks, warnings, unknowns));
+                errors.addAll(fit(turn.pc, picks, warnings, unknowns, turn.ramGoal));
                 warnings.add(new Issue("BUDGET_TRIM", "Optional parts were left out to keep this upgrade within your budget."));
             }
         }
@@ -521,6 +574,10 @@ public class UpgradeService {
 
     /** At most nine categories: check the subsets, preserving coupled CPU/board/RAM/PSU requirements through fit. */
     static List<Pick> affordableSubset(UpgradeInfo pc, List<Pick> picks) {
+        return affordableSubset(pc, picks, ramGoal(List.of(pc.purpose())));
+    }
+
+    private static List<Pick> affordableSubset(UpgradeInfo pc, List<Pick> picks, RamGoal ramGoal) {
         List<Pick> best = List.of();
         int bestScore = 0;
         long bestCost = Long.MAX_VALUE;
@@ -541,7 +598,7 @@ public class UpgradeService {
                 };
             }
             long cost = candidate.stream().mapToLong(Pick::total).sum();
-            if (score == 0 || cost > pc.budgetVnd() || !fit(pc, candidate, new ArrayList<>(), new ArrayList<>()).isEmpty()) continue;
+            if (score == 0 || cost > pc.budgetVnd() || !fit(pc, candidate, new ArrayList<>(), new ArrayList<>(), ramGoal).isEmpty()) continue;
             if (score > bestScore || score == bestScore && cost < bestCost) {
                 best = candidate;
                 bestScore = score;
@@ -556,6 +613,10 @@ public class UpgradeService {
      * Chỉ báo những gì liên quan tới món mới: máy cũ của người dùng không phải việc của kế hoạch này.
      */
     static List<String> fit(UpgradeInfo pc, List<Pick> picks, List<Issue> warnings, List<Issue> unknowns) {
+        return fit(pc, picks, warnings, unknowns, ramGoal(List.of(pc.purpose())));
+    }
+
+    private static List<String> fit(UpgradeInfo pc, List<Pick> picks, List<Issue> warnings, List<Issue> unknowns, RamGoal ramGoal) {
         List<String> errors = new ArrayList<>();
         Map<String, Pick> by = new LinkedHashMap<>();
         picks.forEach(p -> by.put(p.category(), p));
@@ -599,12 +660,21 @@ public class UpgradeService {
         }
         boolean samePlatform = oldType == null || newRamType == null || oldType.equals(newRamType);
         Integer newRamGb = ram == null ? null : ChatService.amount("ram", ram.product().title());
+        if (ram != null && ramGoal != null) {
+            Integer totalGb = memoryCapacity(pc, ram);
+            if (totalGb == null || totalGb < ramGoal.gb() || !ramGoal.minimum() && totalGb != ramGoal.gb()) {
+                errors.add("ram: the owner requested " + ramGoal.gb() + " GB total memory"
+                        + (ramGoal.minimum() ? " or more" : " exactly") + ". This plan results in " + totalGb
+                        + " GB. Count the retained modules when adding RAM and choose the appropriate quantity.");
+            }
+        }
         if (ram != null && "replace".equals(ram.action()) && samePlatform && haveRam != null && newRamGb != null
                 && newRamGb * ram.qty() <= haveRam) {
             errors.add("ram: replacing the current " + haveRam + " GB with " + newRamGb * ram.qty()
                     + " GB does not increase capacity. Keep the old RAM or choose a larger total capacity.");
         }
         if (ram != null && samePlatform && haveRam != null && haveRam >= 16 && GAMING_USE.matcher(pc.purpose()).find()
+                && (ramGoal == null || ramGoal.gb() <= haveRam)
                 && !HEAVY_USE.matcher(pc.purpose()).find()) {
             errors.add("ram: the PC already has " + haveRam + " GB, which is enough for gaming. Remove the RAM line and spend the budget on "
                     + "a part that raises frame rates, or leave the money unspent.");
@@ -909,7 +979,7 @@ public class UpgradeService {
                 if (psu != null) variants.add(swapped.stream().filter(x -> x != psu).toList());
                 variants.add(swapped);
                 for (var v : variants) {
-                    if (!fit(pc, v, new ArrayList<>(), new ArrayList<>()).isEmpty()) continue;
+                    if (!fit(pc, v, new ArrayList<>(), new ArrayList<>(), turn.ramGoal).isEmpty()) continue;
                     long cost = alt.total() + (v.contains(psu) && psu != null ? psu.total() : 0);
                     boolean better = r > rank && cost <= planCost || r >= rank && cost < planCost * 0.95;
                     if (better && (best == null || r > bestRank || r == bestRank && cost < bestCost)) {
@@ -1020,6 +1090,21 @@ public class UpgradeService {
     /** Câu trả lời và thẻ kế hoạch. Không có kế hoạch đã kiểm tra thì không đưa giá nào. */
     private ChatResponse respond(String draft, Turn turn) {
         Plan plan = turn.plan;
+        if (plan != null && !plan.items().isEmpty()) {
+            List<Pick> current = new ArrayList<>();
+            for (Pick p : plan.items()) {
+                Offer offer = checked(p.product());
+                if (offer == null || !ChatService.plausible(p.category(), offer.priceVnd())) return new ChatResponse("The store price or stock changed while preparing this plan. "
+                        + "Please ask again so I can check an available option before recommending a purchase.");
+                current.add(new Pick(p.category(), p.action(), p.product(), offer, p.qty(), p.spec(), p.reason()));
+            }
+            long total = current.stream().mapToLong(Pick::total).sum();
+            if (total > turn.pc.budgetVnd() || turn.wantsCheaper && turn.previousTotal != null && total >= turn.previousTotal) {
+                return new ChatResponse("The store price changed while preparing this plan and it no longer meets your budget "
+                        + "or cheaper-option request. Please ask again to check another option.");
+            }
+            plan = new Plan(plan.summary(), List.copyOf(current), plan.warnings(), plan.unknowns());
+        }
         String reply = draft == null ? null : checkedReply(draft.replaceAll("(?s)<think>.*?</think>", ""), turn);
         if (plan == null) return new ChatResponse(noPlan(turn));
         if (plan.items().isEmpty()) {
@@ -1041,25 +1126,37 @@ public class UpgradeService {
         if (plan.items().stream().anyMatch(p -> "ram".equals(p.category()))) reply = memoryReply(turn.pc, plan.items());
         List<Line> lines = plan.items().stream().map(p -> new Line("upgrade_" + p.category(), p.category(),
                 ("add".equals(p.action()) ? "Extra " : "New ") + CATEGORIES.get(p.category()).toLowerCase(Locale.ROOT), physicalQuantity(p),
-                spec(p), p.reason(), p.total(), p.total(),
+                spec(p), "ram".equals(p.category()) ? memoryReason(turn.pc, p) : p.reason(), p.total(), p.total(),
                 p.offer().imageUrl() != null ? p.offer().imageUrl() : p.product().imageUrl(), p.product().url(), p.product().title(),
                 p.product().shop(), p.offer().inStock(), p.offer().warrantyMonths(), p.offer().checkedAt(), List.of(), true)).toList();
         String summary = plan.summary() == null || plan.summary().isBlank() ? "Your upgrade plan" : plan.summary();
+        if (plan.items().stream().anyMatch(p -> "ram".equals(p.category()))) summary = "Your upgrade plan";
         var card = new BuildCard(lines, true, List.of(), plan.warnings(), summary, turn.pc.budgetVnd(), null, null, 1,
                 plan.unknowns(), List.of(), null);
         return new ChatResponse(reply, card);
     }
 
-    static String memoryReply(UpgradeInfo pc, List<Pick> picks) {
-        Pick ram = picks.stream().filter(p -> "ram".equals(p.category())).findFirst().orElseThrow();
+    static Integer memoryCapacity(UpgradeInfo pc, Pick ram) {
         Integer gb = ChatService.amount("ram", ram.product().title());
         Integer old = UpgradeInfo.known(pc.ram()) ? ChatService.amount("ram", pc.ram()) : null;
+        if (gb == null || "add".equals(ram.action()) && old == null) return null;
+        return gb * ram.qty() + ("add".equals(ram.action()) ? old : 0);
+    }
+
+    private static String memoryReason(UpgradeInfo pc, Pick ram) {
+        Integer gb = memoryCapacity(pc, ram);
+        return gb == null ? "More memory for applications. Check module and slot compatibility before buying."
+                : "Resulting memory capacity: " + gb + " GB. Check module and slot compatibility before buying.";
+    }
+
+    static String memoryReply(UpgradeInfo pc, List<Pick> picks) {
+        Pick ram = picks.stream().filter(p -> "ram".equals(p.category())).findFirst().orElseThrow();
+        Integer total = memoryCapacity(pc, ram);
         String change = "add".equals(ram.action()) ? "Add " : "Replace the existing RAM with ";
         StringBuilder out = new StringBuilder(change);
         if (ram.qty() > 1) out.append(ram.qty()).append(" × ");
         out.append(ram.product().title()).append('.');
-        if (gb != null && (!"add".equals(ram.action()) || old != null)) {
-            int total = gb * ram.qty() + ("add".equals(ram.action()) ? old : 0);
+        if (total != null) {
             out.append(" The resulting memory capacity is ").append(total).append(" GB.");
         }
         out.append(" More RAM helps when your applications run out of memory.");
