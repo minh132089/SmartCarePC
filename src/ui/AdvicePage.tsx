@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowCounterClockwise, ArrowRight, CaretRight, X } from '@phosphor-icons/react'
 import type { FamilyId } from '../data/families'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
@@ -31,7 +31,7 @@ const BUSY_HINTS = [
  * và chạy kiểm tra tương thích. Dưới thẻ cấu hình có nút "Xem và lắp máy này" để sang trang 2 (mô hình 3D).
  * Trang này không vẽ cảnh 3D nên không làm nóng máy người dùng.
  */
-export function AdvicePage() {
+export function AdvicePage({ account }: { account?: ReactNode }) {
   const { messages, busy, error, send, retry, reset } = useAdviceChat()
   const setPage = useViewer((s) => s.setPage)
   const open = useOpenMachine()
@@ -103,6 +103,7 @@ export function AdvicePage() {
           <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
             Bỏ qua, xem mô hình 3D ›
           </button>
+          {account}
         </div>
       </header>
       <div className="shrink-0 px-5 md:px-10">

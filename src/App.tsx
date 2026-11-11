@@ -8,15 +8,21 @@ import { InspectButton } from './ui/InspectButton'
 import { Inspector } from './ui/Inspector'
 import { Sidebar } from './ui/Sidebar'
 import { StudyDialogs } from './ui/study/StudyBar'
+import { AuthPage, clearSession, loadSession, type Session } from './ui/AuthPage'
+import { useState } from 'react'
+import { AccountMenu } from './ui/AccountMenu'
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(() => loadSession())
   const guide = useViewer((s) => s.guide)
   const page = useViewer((s) => s.page)
+  if (!session) return <AuthPage onLogin={setSession} />
+  const account = <AccountMenu session={session} onLogout={() => { clearSession(); setSession(null) }} />
   // Trang 1 tư vấn chọn máy; trang 2 là mô hình 3D kèm hướng dẫn lắp và khung chat hỏi khi lắp
   if (page === 'advice')
     return (
       <>
-        <AdvicePage />
+        <AdvicePage account={account} />
         <StudyDialogs />
       </>
     )
@@ -25,6 +31,7 @@ export default function App() {
       {guide ? <GuidePanel /> : <Sidebar />}
       {/* Khung 3D như ảnh sản phẩm: thẻ bo góc lớn, nền trắng loang nhẹ */}
       <main className="relative m-3 min-h-0 flex-1 overflow-hidden rounded-[28px] bg-stage md:my-4 md:mr-4 md:ml-0">
+        <div className="absolute right-4 top-4 z-30">{account}</div>
         <Scene />
         <AssemblySteps />
         <GuideCaption />
