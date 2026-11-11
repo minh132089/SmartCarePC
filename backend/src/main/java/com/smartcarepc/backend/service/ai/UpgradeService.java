@@ -228,7 +228,7 @@ public class UpgradeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The final message must be a user question");
         }
         int searchRounds = 0, proposeRounds = 0;
-        boolean nudged = false;
+        boolean nudged = false, retried = false;
         for (int round = 0; round < MAX_ROUNDS && !Io.expired(); round++) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
@@ -240,6 +240,12 @@ public class UpgradeService {
                     : TOOLS);
             if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
             Map<String, Object> res = Io.await(Io.async(() -> client.complete(body)), Duration.ofSeconds(40), null);
+            // AI chậm một lượt (nhà cung cấp quá tải): còn thời gian thì gọi lại một lần, không báo lỗi ngay
+            if (res == null && turn.plan == null && !retried && Io.remainingNanos(Long.MAX_VALUE) > Duration.ofSeconds(25).toNanos()) {
+                retried = true;
+                log.warn("Upgrade: AI không trả lời trong 40 giây, gọi lại một lần");
+                res = Io.await(Io.async(() -> client.complete(body)), Duration.ofSeconds(40), null);
+            }
             if (res == null) {
                 if (turn.plan != null) return respond(null, turn);
                 throw new AiUnavailableException(HttpStatus.GATEWAY_TIMEOUT, "The upgrade adviser is responding slowly. Please try again.");
@@ -407,6 +413,10 @@ public class UpgradeService {
             errors.add("The total " + ChatService.millions(total) + " is over the budget " + ChatService.millions(budget)
                     + " by " + ChatService.millions(total - budget) + ". Drop the least useful part or choose cheaper products.");
         }
+        if (errors.isEmpty() && !lastChance) {
+            String better = betterChoice(turn, picks);
+            if (better != null) errors.add(better);
+        }
         if (errors.isEmpty() && turn.wantsCheaper && turn.previousTotal != null && !picks.isEmpty() && total >= turn.previousTotal) {
             errors.add("The owner asked for a cheaper option, but this plan costs " + ChatService.millions(total) + ", not less than the "
                     + "previous plan (" + ChatService.millions(turn.previousTotal) + "). Count any extra power supply too, and choose parts that "
@@ -502,7 +512,16 @@ public class UpgradeService {
             errors.add("ram: the PC already has " + haveRam + " GB, which is enough for gaming. Remove the RAM line and spend the budget on "
                     + "a part that raises frame rates, or leave the money unspent.");
         }
-        if (ram != null && "add".equals(ram.action())) {
+        Integer slots = by.containsKey("motherboard") ? null : boardSlots(pc.motherboard());
+        Integer sticks = sticks(pc.ram());
+        if (ram != null && "add".equals(ram.action()) && slots != null && sticks != null) {
+            int adding = ram.qty() * kitSticks(ram.product().title());
+            if (sticks + adding > slots) {
+                errors.add("ram: this motherboard has " + slots + " RAM slots and " + sticks + (sticks == 1 ? " is" : " are") + " already used, so "
+                        + adding + " more stick" + (adding == 1 ? "" : "s") + " will not fit. Replace the sticks with a larger kit instead.");
+            }
+        }
+        if (ram != null && "add".equals(ram.action()) && (slots == null || sticks == null)) {
             unknowns.add(new Issue("RAM_SLOTS", "Adding sticks needs free RAM slots, and mixed sticks may run at the slower speed. "
                     + "Open the side panel and count the empty slots before buying."));
         }
@@ -597,6 +616,14 @@ public class UpgradeService {
                 unknowns.add(new Issue("PSU_UNKNOWN", "This graphics card needs a power supply of at least " + need + "W with the right "
                         + "PCIe power cable. Read the label on the side of your power supply before buying."));
             }
+            Integer fans = ChatService.gpuFans(gpu.product().title());
+            if (!newCase && fans != null && fans >= 3 && "mini".equals(pc.caseSize())) {
+                errors.add("gpu: \"" + gpu.product().title() + "\" is a long 3-fan card (usually 280–330 mm) that rarely fits a mini case. "
+                        + "Choose a short 1–2 fan card.");
+            } else if (!newCase && fans != null && fans >= 3 && "compact".equals(pc.caseSize())) {
+                warnings.add(new Issue("GPU_LENGTH", "This is a long 3-fan card (usually 280–330 mm). Compact cases often fit only shorter cards: "
+                        + "measure the free length first."));
+            }
             unknowns.add(new Issue("GPU_CLEARANCE", "mini".equals(pc.caseSize()) && !newCase
                     ? "Mini cases fit only short cards. Measure the free length in your case and compare it with the card's length."
                     : "Measure the free length inside your case and compare it with the card's length before buying."));
@@ -625,7 +652,11 @@ public class UpgradeService {
             }
         }
         Pick ssd = by.get("ssd");
-        if (ssd != null && NVME.matcher(ssd.product().title()).find() && !by.containsKey("motherboard") && !UpgradeInfo.known(pc.motherboard())) {
+        String oldChipset = UpgradeInfo.known(pc.motherboard()) ? chipsetToken(pc.motherboard()) : null;
+        if (ssd != null && NVME.matcher(ssd.product().title()).find() && !by.containsKey("motherboard") && oldChipset != null
+                && NO_M2.contains(oldChipset)) {
+            errors.add("ssd: the " + oldChipset.toUpperCase(Locale.ROOT) + " motherboard has no M.2 slot for an NVMe SSD. Choose a 2.5-inch SATA SSD.");
+        } else if (ssd != null && NVME.matcher(ssd.product().title()).find() && !by.containsKey("motherboard") && !UpgradeInfo.known(pc.motherboard())) {
             errors.add("ssd: the motherboard is unknown, so a free M.2 slot is not confirmed. Choose a 2.5-inch SATA SSD, which fits almost "
                     + "any desktop.");
         } else if (ssd != null && NVME.matcher(ssd.product().title()).find()) {
@@ -736,6 +767,67 @@ public class UpgradeService {
         return UpgradeInfo.known(pc.cpu()) ? ProductRules.read("cpu", pc.cpu()).ramType() : null;
     }
 
+    private static final Pattern WANTS_NVIDIA = Pattern.compile("\\b(nvidia|geforce|rtx|gtx|cuda)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern WANTS_AMD = Pattern.compile("\\b(radeon|amd gpu|amd card|rx \\d{3,4})\\b", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Trong các kết quả tìm kiếm đã kiểm tra giá, có card (hoặc CPU, khi chơi game) mạnh hơn mà tổng không đắt hơn, hay ngang
+     * sức mà rẻ hơn rõ (từ 5%) không. Tính cả nguồn: card chạy được với nguồn đang có thì không phải mua nguồn kèm. Phương án
+     * thay phải qua mọi kiểm tra của fit (socket, nguồn, vỏ mini, AI cần NVIDIA 12GB, nâng cấp ngang). Có thì trả câu nhắc
+     * trợ lý đổi; không có thì null. Giữ hãng card người dùng nêu (NVIDIA / AMD).
+     */
+    String betterChoice(Turn turn, List<Pick> picks) {
+        UpgradeInfo pc = turn.pc;
+        for (String cat : List.of("gpu", "cpu")) {
+            Pick now = picks.stream().filter(p -> p.category().equals(cat)).findFirst().orElse(null);
+            if (now == null || "cpu".equals(cat) && !GAMING_USE.matcher(pc.purpose()).find()) continue;
+            Integer rank = "gpu".equals(cat) ? gpuRank(now.product().title()) : cpuScore(now.product().title());
+            if (rank == null) continue;
+            Pick psu = "gpu".equals(cat) ? picks.stream().filter(p -> "psu".equals(p.category())).findFirst().orElse(null) : null;
+            long planCost = now.total() + (psu == null ? 0 : psu.total());
+            String want = "gpu".equals(cat) ? "gpu" : "cpu";
+            Pick best = null;
+            long bestCost = 0;
+            int bestRank = 0;
+            for (var p : turn.results.values()) {
+                if (p.title() == null || p.url() == null || p.url().equals(now.product().url()) || ChatService.JUNK.matcher(p.title()).find()) continue;
+                if (!want.equals(PriceEngine.kind(PriceEngine.norm(p.title())))) continue;
+                Integer r = "gpu".equals(cat) ? gpuRank(p.title()) : cpuScore(p.title());
+                if (r == null || r < rank) continue;
+                if ("gpu".equals(cat)) {
+                    String vendor = ChatService.vendorOf(ChatService.gpuChip(p.title()));
+                    if (WANTS_NVIDIA.matcher(pc.purpose()).find() && !"nvidia".equals(vendor)) continue;
+                    if (WANTS_AMD.matcher(pc.purpose()).find() && !"amd".equals(vendor)) continue;
+                }
+                Offer o = checked(p);
+                if (o == null || !ChatService.plausible(cat, o.priceVnd())) continue;
+                Pick alt = new Pick(cat, now.action(), p, o, now.qty(), null, null);
+                // Thử bỏ nguồn trước (card chạy với nguồn đang có), rồi giữ nguồn của kế hoạch
+                List<List<Pick>> variants = new ArrayList<>();
+                List<Pick> swapped = new ArrayList<>(picks.stream().map(x -> x == now ? alt : x).toList());
+                if (psu != null) variants.add(swapped.stream().filter(x -> x != psu).toList());
+                variants.add(swapped);
+                for (var v : variants) {
+                    if (!fit(pc, v, new ArrayList<>(), new ArrayList<>()).isEmpty()) continue;
+                    long cost = alt.total() + (v.contains(psu) && psu != null ? psu.total() : 0);
+                    boolean better = r > rank && cost <= planCost || r >= rank && cost < planCost * 0.95;
+                    if (better && (best == null || r > bestRank || r == bestRank && cost < bestCost)) {
+                        best = alt;
+                        bestCost = cost;
+                        bestRank = r;
+                    }
+                    break;
+                }
+            }
+            if (best != null) {
+                return cat + ": \"" + best.product().title() + "\" is " + (bestRank > rank ? "faster" : "as fast") + " and costs "
+                        + ChatService.millions(bestCost) + " against " + ChatService.millions(planCost) + " for \"" + now.product().title() + "\""
+                        + (psu != null ? " plus its power supply" : "") + ". Use it instead (and drop the power supply if the current one covers it).";
+            }
+        }
+        return null;
+    }
+
     /** Kết luận về nguồn của kế hoạch đã chốt, gửi cho trợ lý để câu trả lời không nói sai (vd "nguồn 450W quá yếu" khi vẫn đủ) */
     static String power(UpgradeInfo pc, List<Pick> picks) {
         Pick gpu = picks.stream().filter(p -> "gpu".equals(p.category())).findFirst().orElse(null);
@@ -747,6 +839,45 @@ public class UpgradeService {
         return current != null
                 ? "The current " + current + "W power supply already covers the " + need + "W this graphics card needs, so it is kept."
                 : "The current power supply is unknown: the owner must check its label shows at least " + need + "W before buying.";
+    }
+
+    /** Chipset đời cũ không có khe M.2 (Intel 6x/7x/8x, AMD FM2+/AM3+) */
+    static final Set<String> NO_M2 = Set.of("h61", "h67", "p67", "z68", "b75", "h77", "z77", "q77", "h81", "b85", "h87", "z87", "q87",
+            "a68h", "a78", "a88x", "970", "990fx", "990x");
+    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}[-\\s]?i\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*x\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE);
+
+    /** Mã chipset trong tên bo ("ASUS H81M-K" -> "h81"), null nếu không đọc được */
+    static String chipsetToken(String board) {
+        var m = CHIPSET_TOKEN.matcher(board.toLowerCase(Locale.ROOT));
+        while (m.find()) {
+            String c = m.group(1);
+            if (NO_M2.contains(c) || c.length() == 4) return c;
+        }
+        return null;
+    }
+
+    /** Số khe RAM: bo Mini-ITX có 2; một số SKU biết chắc (ProductRules.memorySlots); không rõ thì null */
+    static Integer boardSlots(String board) {
+        if (!UpgradeInfo.known(board)) return null;
+        Integer sku = ProductRules.memorySlots(board);
+        if (sku != null) return sku;
+        return ITX_BOARD.matcher(board).find() ? 2 : null;
+    }
+
+    /** Số thanh RAM người dùng ghi ("16GB DDR4, 2 sticks"), null nếu không ghi */
+    static Integer sticks(String ram) {
+        if (!UpgradeInfo.known(ram)) return null;
+        var m = STICKS.matcher(ram);
+        return m.find() ? Integer.parseInt(m.group(1)) : null;
+    }
+
+    /** Số thanh trong một sản phẩm RAM ("2x8GB" -> 2), mặc định 1 */
+    static int kitSticks(String title) {
+        var m = KIT_COUNT.matcher(title);
+        return m.find() ? Integer.parseInt(m.group(1)) : 1;
     }
 
     /** Công suất nguồn người dùng ghi, vd "550W", "Cooler Master 650 W"; null nếu không đọc được */

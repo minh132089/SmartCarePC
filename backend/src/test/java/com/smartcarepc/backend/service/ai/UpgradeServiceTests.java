@@ -400,6 +400,44 @@ class UpgradeServiceTests {
         assertThat(UpgradeService.fit(game, b560, new ArrayList<>(), new ArrayList<>())).anySatisfy(e -> assertThat(e).contains("enough for gaming"));
     }
 
+    @Test
+    void coCardManhHonMaKhongDatHonThiBatDoi() {
+        var rtx3060 = product("VGA ASUS DUAL RTX 3060 12GB 2 Fan V2", 7_890_000L);
+        var rtx4060 = product("VGA ASUS Dual GeForce RTX 4060 EVO 8GB", 7_990_000L);
+        for (var p : List.of(rtx3060, rtx4060)) {
+            when(search.offer(p.url())).thenReturn(new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()));
+        }
+        when(search.search(any())).thenReturn(List.of(rtx3060, PSU650, rtx4060));
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-1\"},{\"category\":\"psu\",\"product_id\":\"s1-2\"}]}"),
+                toolCall("p2", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-3\"}]}"),
+                answer("An RTX 4060 runs on your power supply."));
+        var res = service.reply(ask(new UpgradeInfo("Intel Core i5-10400F", "ASUS PRIME B460M-A", "16GB DDR4", "GTX 1650 4GB", "SSD 256GB",
+                "450W", "standard", "Gaming. GTA V", 12_000_000L)), s -> { });
+        assertThat(toolResult(2)).contains("RTX 4060", "faster");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.productName()).contains("RTX 4060"));
+    }
+
+    @Test
+    void card3QuatKhongVaoVoMiniVaBoCuKhongCoM2() {
+        var mini = new UpgradeInfo("Intel Core i5-12400", "ASUS ROG STRIX B660-I GAMING WIFI", "16GB DDR4, 2 sticks", "none", "", "SFX 750W", "mini",
+                "Gaming", 20_000_000L);
+        var trio = product("VGA MSI GeForce RTX 4070 SUPER GAMING X TRIO 12G", 17_000_000L);
+        assertThat(UpgradeService.fit(mini, List.of(pick("gpu", "replace", trio)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("3-fan"));
+        var haswell = new UpgradeInfo("Intel Core i7-4790", "Gigabyte B85M-D3H", "8GB DDR3", "none", "HDD 1TB", "450W", "standard", "Office", 3_000_000L);
+        var nvme = product("SSD Samsung 970 EVO Plus 1TB PCIe NVMe M.2 2280", 1_950_000L);
+        assertThat(UpgradeService.fit(haswell, List.of(pick("ssd", "add", nvme)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("no M.2 slot");
+        // Bo ITX 2 khe đã đủ 2 thanh: không thêm được thanh nữa
+        var stick = product("RAM Kingston Fury Beast 16GB DDR4 3200", 1_590_000L);
+        assertThat(UpgradeService.fit(mini, List.of(pick("ram", "add", stick)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("2 RAM slots"));
+        assertThat(UpgradeService.sticks("16GB DDR4, 2 sticks")).isEqualTo(2);
+        assertThat(UpgradeService.boardSlots("MSI MAG B550M MORTAR")).isNull();
+        assertThat(UpgradeService.kitSticks("Kingston Fury 32GB (2x16GB) DDR4")).isEqualTo(2);
+    }
+
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
         return new UpgradeService.Pick(category, action, p, new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()),
                 1, null, null);

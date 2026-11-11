@@ -38,6 +38,7 @@ type Draft = {
   motherboard: string
   ramSize: string
   ramType: string
+  ramSticks: string
   gpu: string
   noGpu: boolean
   storage: string
@@ -48,7 +49,7 @@ type Draft = {
   budget: string
   laptop: boolean
 }
-const EMPTY: Draft = { cpu: '', motherboard: '', ramSize: '', ramType: '', gpu: '', noGpu: false, storage: '', psu: '', caseSize: '', uses: [], details: '', budget: '', laptop: false }
+const EMPTY: Draft = { cpu: '', motherboard: '', ramSize: '', ramType: '', ramSticks: '', gpu: '', noGpu: false, storage: '', psu: '', caseSize: '', uses: [], details: '', budget: '', laptop: false }
 
 /** Bản nháp chỉ lưu trong trình duyệt này để quay lại không phải gõ lại; bị chặn lưu thì vẫn dùng được trong phiên */
 function loadDraft(): Draft {
@@ -74,7 +75,7 @@ function budgetOf(text: string): number | null {
 }
 
 function toForm(d: Draft): UpgradeForm {
-  const ram = [d.ramSize && `${d.ramSize}GB`, d.ramType].filter(Boolean).join(' ')
+  const ram = [[d.ramSize && `${d.ramSize}GB`, d.ramType].filter(Boolean).join(' '), d.ramSticks && `${d.ramSticks} ${d.ramSticks === '1' ? 'stick' : 'sticks'}`].filter(Boolean).join(', ')
   return {
     cpu: d.cpu.trim(),
     motherboard: d.motherboard.trim(),
@@ -172,9 +173,9 @@ export function UpgradePage() {
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <Field label="Processor (CPU)" value={draft.cpu} onChange={(cpu) => update({ cpu })} placeholder="e.g. Intel Core i5-10400" />
               <Field label="Motherboard" hint="Helps check which CPU and RAM fit" value={draft.motherboard} onChange={(motherboard) => update({ motherboard })} placeholder="e.g. ASUS PRIME B460M-A" />
-              <div>
+              <div className="md:col-span-2">
                 <span className="text-[13.5px] font-medium text-ink">Memory (RAM)</span>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
                   <select aria-label="RAM amount" value={draft.ramSize} onChange={(e) => update({ ramSize: e.target.value })} className={input}>
                     <option value="">Amount: not sure</option>
                     {RAM_SIZES.map((s) => <option key={s} value={s}>{s} GB</option>)}
@@ -182,6 +183,10 @@ export function UpgradePage() {
                   <select aria-label="RAM type" value={draft.ramType} onChange={(e) => update({ ramType: e.target.value })} className={input}>
                     <option value="">Type: not sure</option>
                     {RAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select aria-label="Number of RAM sticks" value={draft.ramSticks} onChange={(e) => update({ ramSticks: e.target.value })} className={input}>
+                    <option value="">Sticks: not sure</option>
+                    {['1', '2', '4'].map((n) => <option key={n} value={n}>{n} {n === '1' ? 'stick' : 'sticks'}</option>)}
                   </select>
                 </div>
               </div>
