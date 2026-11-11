@@ -104,8 +104,9 @@ public class UpgradeService {
             propose_upgrade with an empty items list and explain why.
             5. The final answer is at most 90 words of plain English for a beginner: one line restating their use and \
             budget; what to upgrade and why it helps their use; which current parts they can keep; and anything to check \
-            before buying (for example reading the power supply label). Do not list prices or links: the app shows them \
-            on a card. Explain any technical term in a few words. Never invent prices, stock or products.
+            before buying (for example reading the power supply label). Do not write ANY money amount (no budget, no \
+            prices, no totals) and no links: the app shows them on a card, and sentences with amounts are removed. Never \
+            say to keep a part that the plan replaces. Explain any technical term in a few words. Never invent prices, stock or products.
             """;
 
     private static final List<Map<String, Object>> TOOLS = List.of(
@@ -169,10 +170,6 @@ public class UpgradeService {
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
         volatile Plan plan;
-        /** Các khoản tiền người dùng tự viết trong hội thoại: câu trả lời được nhắc lại, không coi là giá bịa */
-        volatile List<Long> userAmounts = List.of();
-        /** Lời người dùng trong hội thoại: model họ tự nhắc được phép xuất hiện cạnh số tiền của họ */
-        volatile String userText = "";
         /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
         volatile List<String> lastErrors = List.of();
 
@@ -206,10 +203,6 @@ public class UpgradeService {
         if (messages.size() == 1 || !"user".equals(messages.getLast().get("role"))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The final message must be a user question");
         }
-        turn.userAmounts = request.messages().stream().filter(m -> "user".equals(m.role()))
-                .flatMap(m -> amounts(m.content()).stream()).toList();
-        turn.userText = request.messages().stream().filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content)
-                .collect(java.util.stream.Collectors.joining(" "));
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false;
         for (int round = 0; round < MAX_ROUNDS && !Io.expired(); round++) {
@@ -397,6 +390,22 @@ public class UpgradeService {
         if (!warnings.isEmpty() || !unknowns.isEmpty()) {
             ok.put("check_before_buying", java.util.stream.Stream.concat(warnings.stream(), unknowns.stream()).map(Issue::message).toList());
         }
+        // Món thay và món giữ, để câu trả lời không dặn giữ món kế hoạch đã thay (vd mua card mới mà bảo giữ card cũ)
+        Map<String, String> current = new LinkedHashMap<>();
+        current.put("cpu", turn.pc.cpu());
+        current.put("motherboard", turn.pc.motherboard());
+        current.put("ram", turn.pc.ram());
+        current.put("gpu", turn.pc.gpu());
+        current.put("ssd", turn.pc.storage());
+        current.put("psu", turn.pc.psu());
+        List<String> replaced = new ArrayList<>(), kept = new ArrayList<>();
+        current.forEach((cat, name) -> {
+            if (!UpgradeInfo.known(name) || "none".equalsIgnoreCase(name.strip())) return;
+            boolean swapped = picks.stream().anyMatch(p -> p.category().equals(cat) && "replace".equals(p.action()));
+            (swapped ? replaced : kept).add(CATEGORIES.get(cat) + ": " + name.strip());
+        });
+        if (!replaced.isEmpty()) ok.put("replaced_do_not_say_keep", replaced);
+        if (!kept.isEmpty()) ok.put("kept", kept);
         String power = power(turn.pc, picks);
         if (power != null) ok.put("power_check", power + " State this correctly in the answer.");
         ok.put("next", picks.isEmpty() ? "No upgrade card will be shown. Explain why in the answer."
@@ -499,8 +508,19 @@ public class UpgradeService {
         if (fresh != null && fresh < need) {
             errors.add("psu: \"" + psu.product().title() + "\" (" + fresh + "W) is below the " + need + "W this PC's graphics card needs.");
         }
-        boolean newCase = by.containsKey("case");
-        if (psu != null && !newCase && SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find() && !SFX.matcher(psu.product().title()).find()) {
+        Pick caseNew = by.get("case");
+        boolean newCase = caseNew != null;
+        boolean sfxPsu = psu != null && SFX.matcher(psu.product().title()).find();
+        if (psu != null && newCase && !sfxPsu) {
+            String c = caseNew.product().title().toLowerCase(Locale.ROOT);
+            if (c.matches(".*\\b(mini[\\s-]?itx|itx|sff|mini)\\b.*") && !c.matches(".*\\b(m[\\s-]?atx|micro[\\s-]?atx|atx[\\s-]?psu)\\b.*")) {
+                errors.add("psu: the new case \"" + caseNew.product().title() + "\" is a small (ITX / SFF) case that usually takes only SFX "
+                        + "power supplies. Choose an SFX power supply or a case that lists ATX power supply support.");
+            } else if (!c.matches(".*\\b(atx|tower)\\b.*")) {
+                warnings.add(new Issue("PSU_FORM", "Check that the new case takes a standard ATX power supply before buying."));
+            }
+        }
+        if (psu != null && !newCase && SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find() && !sfxPsu) {
             errors.add("psu: the current power supply is the small SFX size, so a standard ATX unit will not fit this case. Choose an SFX "
                     + "power supply.");
         }
@@ -531,7 +551,10 @@ public class UpgradeService {
             }
         }
         Pick ssd = by.get("ssd");
-        if (ssd != null && NVME.matcher(ssd.product().title()).find()) {
+        if (ssd != null && NVME.matcher(ssd.product().title()).find() && !by.containsKey("motherboard") && !UpgradeInfo.known(pc.motherboard())) {
+            errors.add("ssd: the motherboard is unknown, so a free M.2 slot is not confirmed. Choose a 2.5-inch SATA SSD, which fits almost "
+                    + "any desktop.");
+        } else if (ssd != null && NVME.matcher(ssd.product().title()).find()) {
             unknowns.add(new Issue("M2_SLOT", "This SSD needs a free M.2 slot on the motherboard. Look up your motherboard model (Windows: System Information › "
                     + "BaseBoard Product) to see whether it has one; if not, choose a 2.5-inch SATA SSD."));
         }
@@ -683,61 +706,31 @@ public class UpgradeService {
      * món, tổng, tiền còn lại) và không được có link (link nằm trên thẻ, lấy từ kết quả tìm kiếm). Câu nào có số tiền khác
      * thì bỏ cả câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
      */
-    private static final Pattern MODEL = Pattern.compile(
-            "\\b(?:rtx|gtx|rx|arc|gt)\\s*[a-z]?\\d{3,4}(?:\\s*(?:ti|super|xtx|xt|gre))?\\b|\\bi[3579]\\s*-?\\s*\\d{4,5}[a-z]{0,2}\\b"
-                    + "|\\b(?:ryzen|r)\\s*[3579]\\s*\\d{4}[a-z0-9]{0,3}\\b|\\bultra\\s*[579]\\s*\\d{3}[a-z]?\\b", Pattern.CASE_INSENSITIVE);
-
-    /** Mã model nhắc trong câu (card, CPU), viết gọn để so: "RTX 4090" -> "rtx4090" */
-    static List<String> models(String text) {
-        List<String> out = new ArrayList<>();
-        if (text == null) return out;
-        var m = MODEL.matcher(text);
-        while (m.find()) out.add(m.group().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", ""));
-        return out;
-    }
+    /**
+     * Câu trả lời cuối của trợ lý không được có số tiền nào và không có link: giá, tổng và ngân sách chỉ hiện trên thẻ, lấy từ
+     * dữ liệu đã kiểm tra (khớp con số không đủ: trợ lý có thể gắn giá đúng vào sai sản phẩm). Câu nào có số tiền thì bỏ cả
+     * câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
+     */
+    /** Chữ của công cụ bị trợ lý chép lại ("Plan accepted.") không phải lời tư vấn */
+    private static final Pattern TOOL_ECHO = Pattern.compile("^\\s*(the\\s+)?plan\\s+(is\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE);
 
     static String checkedReply(String draft, Turn turn) {
         if (draft == null) return null;
-        // Model được phép đi kèm số tiền: món trong kế hoạch, máy hiện tại và lời người dùng
-        StringBuilder known = new StringBuilder();
-        Plan current = turn.plan;
-        if (current != null) current.items().forEach(p -> known.append(' ').append(p.product().title()));
-        for (String part : new String[] { turn.pc.cpu(), turn.pc.motherboard(), turn.pc.gpu(), turn.pc.purpose() }) {
-            if (part != null) known.append(' ').append(part);
-        }
-        known.append(' ').append(turn.userText);
-        String knownModels = String.join(" ", models(known.toString()));
-        List<Long> allowed = new ArrayList<>(turn.userAmounts);
-        allowed.add(turn.pc.budgetVnd());
-        Plan plan = turn.plan;
-        if (plan != null && !plan.items().isEmpty()) {
-            long total = 0;
-            for (var p : plan.items()) {
-                allowed.add(p.total());
-                allowed.add(p.offer().priceVnd());
-                total += p.total();
-            }
-            allowed.add(total);
-            allowed.add(turn.pc.budgetVnd() - total);
-        }
         StringBuilder out = new StringBuilder();
         for (String line : draft.strip().split("\n", -1)) {
             String kept = java.util.Arrays.stream(LINK.matcher(line).replaceAll(r -> r.group(1) != null ? java.util.regex.Matcher.quoteReplacement(r.group(1)) : "")
                             .split("(?<=[.!?])\\s+"))
+                    .filter(sentence -> !TOOL_ECHO.matcher(sentence).find())
                     .filter(sentence -> {
-                        var money = amounts(sentence);
-                        boolean ok = money.stream().allMatch(a -> allowed.stream()
-                                .anyMatch(v -> Math.abs(a - v) <= Math.max(60_000, v * 0.03)))
-                                // Số tiền đúng nhưng gắn với sản phẩm ngoài kế hoạch (vd "RTX 4090 costs 10 million" = ngân sách): bỏ
-                                && (money.isEmpty() || models(sentence).stream().allMatch(knownModels::contains));
-                        if (!ok) log.info("Upgrade: bỏ câu có số tiền chưa kiểm tra: {} (số được phép {})", sentence, allowed);
+                        boolean ok = amounts(sentence).isEmpty();
+                        if (!ok) log.info("Upgrade: bỏ câu có số tiền: {}", sentence);
                         return ok;
                     })
                     .collect(java.util.stream.Collectors.joining(" "));
             if (!kept.isBlank() || line.isBlank()) out.append(kept.strip()).append('\n');
         }
         String text = out.toString().replaceAll("\n{3,}", "\n\n").strip();
-        return text.isEmpty() ? null : text;
+        return text.isEmpty() || text.matches("(?s)[\\p{Punct}\\s*]*") ? null : text;
     }
 
     /** Câu trả lời khi không chốt được kế hoạch: theo lỗi của lần đề xuất cuối, không đưa giá chưa kiểm tra */

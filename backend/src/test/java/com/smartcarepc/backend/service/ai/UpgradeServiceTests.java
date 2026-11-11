@@ -226,21 +226,6 @@ class UpgradeServiceTests {
     }
 
     @Test
-    void cauTraLoiCuoiChiGiuSoTienDaKiemTraVaBoLink() {
-        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
-        turn.plan = new UpgradeService.Plan("Gaming", List.of(pick("gpu", "replace", RTX4060)), List.of(), List.of());
-        String reply = UpgradeService.checkedReply("""
-                Gaming on 10 million VND. Buy the RTX 4060 for about 6 million VND. See [the store](https://shop.example/x) or www.shop.example/y for details.
-                It costs 7.99 million and leaves 2 million spare. A cheaper RX 6600 is around 5.2M VND.
-                Check your board has 2 M.2 slots and a free M.2 slot.""", turn);
-        assertThat(reply).contains("Gaming on 10 million VND.", "It costs 7.99 million and leaves 2 million spare.", "2 M.2 slots")
-                .contains("See the store or  for details.").doesNotContain("about 6 million", "https://", "www.", "RX 6600", "5.2M");
-        assertThat(UpgradeService.amounts("VND 500,000 or 1.190.000đ, and 8.45M")).containsExactly(8_450_000L, 500_000L, 1_190_000L);
-        // Mã bo mạch / chipset không phải số tiền
-        assertThat(UpgradeService.amounts("Your B450M DS3H, a B760M-A or H610M board, 2 M.2 slots")).isEmpty();
-    }
-
-    @Test
     void keHoachRongVanKhongDuocBiaGia() {
         reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
                 toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
@@ -248,17 +233,6 @@ class UpgradeServiceTests {
         var res = service.reply(ask(pc("450W", 500_000L)), s -> { });
         assertThat(res.build()).isNull();
         assertThat(res.reply()).doesNotContain("8.5 million").contains("Nothing useful fits.");
-    }
-
-    @Test
-    void soTienDungNhungGanSanPhamNgoaiKeHoachThiBo() {
-        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
-        turn.plan = new UpgradeService.Plan("Gaming", List.of(pick("gpu", "replace", RTX4060)), List.of(), List.of());
-        String reply = UpgradeService.checkedReply("Your budget is 10 million VND. An RTX 4090 costs 10 million VND. "
-                + "The RTX 4060 costs 7.99 million. Your i5-10400 stays.", turn);
-        assertThat(reply).contains("Your budget is 10 million VND.", "The RTX 4060 costs 7.99 million.", "Your i5-10400 stays.")
-                .doesNotContain("RTX 4090");
-        assertThat(UpgradeService.models("RTX 4060 Ti, Ryzen 5 5600X and i5-12400F")).containsExactly("rtx4060ti", "ryzen55600x", "i512400f");
     }
 
     @Test
@@ -277,6 +251,42 @@ class UpgradeServiceTests {
                 .isEmpty();
         assertThat(UpgradeService.fit(info, List.of(pick("psu", "replace", PSU650)), new ArrayList<>(), new ArrayList<>()))
                 .anySatisfy(e -> assertThat(e).contains("SFX"));
+    }
+
+    @Test
+    void cauTraLoiCuoiKhongDuocCoSoTienHayLink() {
+        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
+        turn.plan = new UpgradeService.Plan("Gaming", List.of(pick("gpu", "replace", RTX4060)), List.of(), List.of());
+        String reply = UpgradeService.checkedReply("""
+                Gaming on 10 million VND. An RTX 4060 costs 10 million VND. Buy the RTX 4060.
+                See [the store](https://shop.example/x) or www.shop.example/y for details. It leaves 1.190.000đ spare.
+                Check your B450M DS3H board has 2 M.2 slots.""", turn);
+        assertThat(reply).contains("Buy the RTX 4060.", "See the store or  for details.", "B450M DS3H board has 2 M.2 slots.")
+                .doesNotContain("million", "https://", "www.", "1.190.000");
+        assertThat(UpgradeService.amounts("VND 500,000 or 1.190.000đ, and 8.45M")).containsExactly(8_450_000L, 500_000L, 1_190_000L);
+        assertThat(UpgradeService.amounts("Your B450M DS3H, a B760M-A or H610M board, 2 M.2 slots")).isEmpty();
+        assertThat(UpgradeService.checkedReply("Budget 10 million VND.", turn)).isNull();
+    }
+
+    @Test
+    void voMoiNhoChiNhanNguonSfx() {
+        var info = new UpgradeInfo("Intel Core i5-12400", "ASUS ROG STRIX B660-I GAMING WIFI", "16GB DDR4", "RTX 4070 12GB", "", "SFX 450W", "mini",
+                "Gaming", 10_000_000L);
+        var itxCase = product("Vỏ case Jonsbo A4 Mini ITX SFF", 2_000_000L);
+        assertThat(UpgradeService.fit(info, List.of(pick("case", "replace", itxCase), pick("psu", "replace", PSU650)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("SFX"));
+    }
+
+    @Test
+    void khongBietBoMachThiChiNhanSsdSata() {
+        var nothing = new UpgradeInfo("", "", "", "", "", "", "unknown", "Video editing", 8_000_000L);
+        var nvme = product("SSD Samsung 970 EVO Plus 1TB PCIe NVMe M.2 2280", 1_950_000L);
+        var sata = product("SSD SSTC M100 512GB SATA III 2.5 inch", 1_790_000L);
+        assertThat(UpgradeService.fit(nothing, List.of(pick("ssd", "add", nvme)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("2.5-inch SATA");
+        assertThat(UpgradeService.fit(nothing, List.of(pick("ssd", "add", sata)), new ArrayList<>(), new ArrayList<>())).isEmpty();
+        var turn = new UpgradeService.Turn(nothing);
+        assertThat(UpgradeService.checkedReply("Plan accepted. Add a SATA SSD.", turn)).isEqualTo("Add a SATA SSD.");
     }
 
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
