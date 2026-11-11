@@ -239,12 +239,13 @@ public class UpgradeService {
                     ? TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList()
                     : TOOLS);
             if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
-            Map<String, Object> res = Io.await(Io.async(() -> client.complete(body)), Duration.ofSeconds(40), null);
-            // AI chậm một lượt (nhà cung cấp quá tải): còn thời gian thì gọi lại một lần, không báo lỗi ngay
+            var first = Io.async(() -> client.complete(body));
+            Map<String, Object> res = Io.await(first, Duration.ofSeconds(40), null);
+            // AI chậm một lượt (nhà cung cấp quá tải): còn thời gian thì gọi thêm một lần, vẫn giữ lượt đầu, nhận lượt nào xong trước
             if (res == null && turn.plan == null && !retried && Io.remainingNanos(Long.MAX_VALUE) > Duration.ofSeconds(25).toNanos()) {
                 retried = true;
-                log.warn("Upgrade: AI không trả lời trong 40 giây, gọi lại một lần");
-                res = Io.await(Io.async(() -> client.complete(body)), Duration.ofSeconds(40), null);
+                log.warn("Upgrade: AI không trả lời trong 40 giây, gọi thêm một lần");
+                res = Io.await(firstSuccess(first, Io.async(() -> client.complete(body))), Duration.ofSeconds(40), null);
             }
             if (res == null) {
                 if (turn.plan != null) return respond(null, turn);
@@ -301,6 +302,20 @@ public class UpgradeService {
             progress.accept(turn.plan != null ? STAGE_WRITE : STAGE_CHECK);
         }
         return respond(null, turn);
+    }
+
+    /** Kết quả thành công đầu tiên của hai lượt gọi; cả hai lỗi thì báo lỗi của lượt sau */
+    static <T> java.util.concurrent.CompletableFuture<T> firstSuccess(java.util.concurrent.CompletableFuture<T> a,
+            java.util.concurrent.CompletableFuture<T> b) {
+        var out = new java.util.concurrent.CompletableFuture<T>();
+        var failures = new AtomicInteger();
+        for (var f : List.of(a, b)) {
+            f.whenComplete((v, e) -> {
+                if (e == null) out.complete(v);
+                else if (failures.incrementAndGet() == 2) out.completeExceptionally(e);
+            });
+        }
+        return out;
     }
 
     @SuppressWarnings("unchecked")
@@ -512,16 +527,22 @@ public class UpgradeService {
             errors.add("ram: the PC already has " + haveRam + " GB, which is enough for gaming. Remove the RAM line and spend the budget on "
                     + "a part that raises frame rates, or leave the money unspent.");
         }
-        Integer slots = by.containsKey("motherboard") ? null : boardSlots(pc.motherboard());
+        Pick newBoard = by.get("motherboard");
+        Integer slots = newBoard != null ? boardSlots(newBoard.product().title()) : boardSlots(pc.motherboard());
         Integer sticks = sticks(pc.ram());
-        if (ram != null && "add".equals(ram.action()) && slots != null && sticks != null) {
-            int adding = ram.qty() * kitSticks(ram.product().title());
-            if (sticks + adding > slots) {
-                errors.add("ram: this motherboard has " + slots + " RAM slots and " + sticks + (sticks == 1 ? " is" : " are") + " already used, so "
-                        + adding + " more stick" + (adding == 1 ? "" : "s") + " will not fit. Replace the sticks with a larger kit instead.");
+        Integer perProduct = ram == null ? null : kitSticks(ram.product().title());
+        boolean adding = ram != null && "add".equals(ram.action());
+        if (ram != null && slots != null && perProduct != null && (!adding || sticks != null)) {
+            int after = (adding ? sticks : 0) + ram.qty() * perProduct;
+            if (after > slots) {
+                errors.add("ram: the motherboard has " + slots + " RAM slots, but this plan needs " + after + " sticks"
+                        + (adding ? " (" + sticks + " already fitted)" : "") + ". Choose a kit with fewer, larger sticks.");
             }
         }
-        if (ram != null && "add".equals(ram.action()) && (slots == null || sticks == null)) {
+        if (ram != null && slots != null && perProduct == null) {
+            unknowns.add(new Issue("RAM_KIT", "The number of sticks in this RAM kit is not stated. Check it fits the motherboard's " + slots + " slots."));
+        }
+        if (adding && (slots == null || sticks == null)) {
             unknowns.add(new Issue("RAM_SLOTS", "Adding sticks needs free RAM slots, and mixed sticks may run at the slower speed. "
                     + "Open the side panel and count the empty slots before buying."));
         }
@@ -617,10 +638,11 @@ public class UpgradeService {
                         + "PCIe power cable. Read the label on the side of your power supply before buying."));
             }
             Integer fans = ChatService.gpuFans(gpu.product().title());
-            if (!newCase && fans != null && fans >= 3 && "mini".equals(pc.caseSize())) {
-                errors.add("gpu: \"" + gpu.product().title() + "\" is a long 3-fan card (usually 280–330 mm) that rarely fits a mini case. "
-                        + "Choose a short 1–2 fan card.");
-            } else if (!newCase && fans != null && fans >= 3 && "compact".equals(pc.caseSize())) {
+            boolean lowProfile = gpu.product().title().toLowerCase(Locale.ROOT).matches(".*\\b(low[\\s-]?profile|lp|itx|mini|short)\\b.*");
+            if (!newCase && !lowProfile && fans != null && fans >= 3 && "mini".equals(pc.caseSize())) {
+                warnings.add(new Issue("GPU_LENGTH", "Most 3-fan cards are 280–330 mm long and do not fit mini cases. Check this card's length "
+                        + "on its product page against your case's limit, or choose a short card."));
+            } else if (!newCase && !lowProfile && fans != null && fans >= 3 && "compact".equals(pc.caseSize())) {
                 warnings.add(new Issue("GPU_LENGTH", "This is a long 3-fan card (usually 280–330 mm). Compact cases often fit only shorter cards: "
                         + "measure the free length first."));
             }
@@ -655,7 +677,8 @@ public class UpgradeService {
         String oldChipset = UpgradeInfo.known(pc.motherboard()) ? chipsetToken(pc.motherboard()) : null;
         if (ssd != null && NVME.matcher(ssd.product().title()).find() && !by.containsKey("motherboard") && oldChipset != null
                 && NO_M2.contains(oldChipset)) {
-            errors.add("ssd: the " + oldChipset.toUpperCase(Locale.ROOT) + " motherboard has no M.2 slot for an NVMe SSD. Choose a 2.5-inch SATA SSD.");
+            warnings.add(new Issue("M2_OLD_BOARD", "Most " + oldChipset.toUpperCase(Locale.ROOT) + " motherboards have no M.2 slot for an NVMe SSD. "
+                    + "Check your exact model's manual; if it has none, choose a 2.5-inch SATA SSD instead."));
         } else if (ssd != null && NVME.matcher(ssd.product().title()).find() && !by.containsKey("motherboard") && !UpgradeInfo.known(pc.motherboard())) {
             errors.add("ssd: the motherboard is unknown, so a free M.2 slot is not confirmed. Choose a 2.5-inch SATA SSD, which fits almost "
                     + "any desktop.");
@@ -841,13 +864,14 @@ public class UpgradeService {
                 : "The current power supply is unknown: the owner must check its label shows at least " + need + "W before buying.";
     }
 
-    /** Chipset đời cũ không có khe M.2 (Intel 6x/7x/8x, AMD FM2+/AM3+) */
+    /** Chipset đời cũ phần lớn không có khe M.2 (Intel 6x/7x/8x, AMD FM2+/AM3+); vài mẫu có, nên chỉ cảnh báo */
     static final Set<String> NO_M2 = Set.of("h61", "h67", "p67", "z68", "b75", "h77", "z77", "q77", "h81", "b85", "h87", "z87", "q87",
             "a68h", "a78", "a88x", "970", "990fx", "990x");
     private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}[-\\s]?i\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*x\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE);
+    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE);
+    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE);
 
     /** Mã chipset trong tên bo ("ASUS H81M-K" -> "h81"), null nếu không đọc được */
     static String chipsetToken(String board) {
@@ -874,10 +898,13 @@ public class UpgradeService {
         return m.find() ? Integer.parseInt(m.group(1)) : null;
     }
 
-    /** Số thanh trong một sản phẩm RAM ("2x8GB" -> 2), mặc định 1 */
-    static int kitSticks(String title) {
+    /** Số thanh trong một sản phẩm RAM ("2x8GB", "16GB x 2" -> 2); ghi "kit" mà không rõ số thanh thì null; còn lại 1 */
+    static Integer kitSticks(String title) {
         var m = KIT_COUNT.matcher(title);
-        return m.find() ? Integer.parseInt(m.group(1)) : 1;
+        if (m.find()) return Integer.parseInt(m.group(1));
+        var after = KIT_COUNT_AFTER.matcher(title);
+        if (after.find()) return Integer.parseInt(after.group(1));
+        return title.toLowerCase(Locale.ROOT).matches(".*\\b(kit|dual channel|bộ)\\b.*") ? null : 1;
     }
 
     /** Công suất nguồn người dùng ghi, vd "550W", "Cooler Master 650 W"; null nếu không đọc được */

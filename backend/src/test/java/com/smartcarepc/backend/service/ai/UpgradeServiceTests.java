@@ -423,12 +423,17 @@ class UpgradeServiceTests {
         var mini = new UpgradeInfo("Intel Core i5-12400", "ASUS ROG STRIX B660-I GAMING WIFI", "16GB DDR4, 2 sticks", "none", "", "SFX 750W", "mini",
                 "Gaming", 20_000_000L);
         var trio = product("VGA MSI GeForce RTX 4070 SUPER GAMING X TRIO 12G", 17_000_000L);
-        assertThat(UpgradeService.fit(mini, List.of(pick("gpu", "replace", trio)), new ArrayList<>(), new ArrayList<>()))
-                .anySatisfy(e -> assertThat(e).contains("3-fan"));
+        List<Issue> warn = new ArrayList<>();
+        assertThat(UpgradeService.fit(mini, List.of(pick("gpu", "replace", trio)), warn, new ArrayList<>())).isEmpty();
+        assertThat(warn).extracting(Issue::rule).contains("GPU_LENGTH");
+        List<Issue> lpWarn = new ArrayList<>();
+        UpgradeService.fit(mini, List.of(pick("gpu", "replace", product("GIGABYTE RTX 4060 OC Low Profile 8G 3x WINDFORCE fans", 9_000_000L))), lpWarn, new ArrayList<>());
+        assertThat(lpWarn).extracting(Issue::rule).doesNotContain("GPU_LENGTH");
         var haswell = new UpgradeInfo("Intel Core i7-4790", "Gigabyte B85M-D3H", "8GB DDR3", "none", "HDD 1TB", "450W", "standard", "Office", 3_000_000L);
         var nvme = product("SSD Samsung 970 EVO Plus 1TB PCIe NVMe M.2 2280", 1_950_000L);
-        assertThat(UpgradeService.fit(haswell, List.of(pick("ssd", "add", nvme)), new ArrayList<>(), new ArrayList<>()))
-                .singleElement().asString().contains("no M.2 slot");
+        List<Issue> m2 = new ArrayList<>();
+        assertThat(UpgradeService.fit(haswell, List.of(pick("ssd", "add", nvme)), m2, new ArrayList<>())).isEmpty();
+        assertThat(m2).extracting(Issue::rule).contains("M2_OLD_BOARD");
         // Bo ITX 2 khe đã đủ 2 thanh: không thêm được thanh nữa
         var stick = product("RAM Kingston Fury Beast 16GB DDR4 3200", 1_590_000L);
         assertThat(UpgradeService.fit(mini, List.of(pick("ram", "add", stick)), new ArrayList<>(), new ArrayList<>()))
@@ -436,6 +441,26 @@ class UpgradeServiceTests {
         assertThat(UpgradeService.sticks("16GB DDR4, 2 sticks")).isEqualTo(2);
         assertThat(UpgradeService.boardSlots("MSI MAG B550M MORTAR")).isNull();
         assertThat(UpgradeService.kitSticks("Kingston Fury 32GB (2x16GB) DDR4")).isEqualTo(2);
+        assertThat(UpgradeService.kitSticks("RAM Corsair 32GB (16GB x 2) DDR4")).isEqualTo(2);
+        assertThat(UpgradeService.kitSticks("RAM Kingston 32GB kit DDR4")).isNull();
+        // Thay bằng kit 4 thanh trên bo ITX 2 khe: không vừa
+        assertThat(UpgradeService.fit(mini, List.of(pick("ram", "replace", product("RAM G.Skill 32GB (4x8GB) DDR4 3200", 2_900_000L))),
+                new ArrayList<>(), new ArrayList<>())).anySatisfy(e -> assertThat(e).contains("needs 4 sticks"));
+    }
+
+    @Test
+    void goiLaiAiNhanLuotXongTruoc() throws Exception {
+        var slow = new java.util.concurrent.CompletableFuture<String>();
+        var fast = new java.util.concurrent.CompletableFuture<String>();
+        var either = UpgradeService.firstSuccess(slow, fast);
+        slow.complete("first");
+        assertThat(either.get()).isEqualTo("first");
+        var a = new java.util.concurrent.CompletableFuture<String>();
+        var b = new java.util.concurrent.CompletableFuture<String>();
+        var one = UpgradeService.firstSuccess(a, b);
+        a.completeExceptionally(new IllegalStateException("x"));
+        b.complete("second");
+        assertThat(one.get()).isEqualTo("second");
     }
 
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
