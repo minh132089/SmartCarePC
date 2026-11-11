@@ -493,9 +493,10 @@ public class UpgradeService {
         }
         // Chỉ chơi game, đã có từ 16 GB: thêm RAM gần như không thấy khác, tiền nên dành cho món khác
         Integer haveRam = UpgradeInfo.known(pc.ram()) ? ChatService.amount("ram", pc.ram()) : null;
-        // Chỉ khi giữ nền tảng cũ: đổi bo / loại DDR thì RAM mới là bắt buộc, không phải mua thêm
+        // Chỉ khi vẫn dùng loại DDR cũ: lên loại DDR khác (vd DDR4 -> DDR5) thì RAM mới là bắt buộc. Đổi bo cùng loại DDR
+        // (vd B460 -> B560, vẫn DDR4) thì RAM cũ dùng tiếp được, nên vẫn chặn mua thêm
         String oldType = ramType(pc), newRamType = ram == null ? null : ProductRules.read("ram", ram.product().title()).ramType();
-        boolean samePlatform = !by.containsKey("motherboard") && (oldType == null || newRamType == null || oldType.equals(newRamType));
+        boolean samePlatform = oldType == null || newRamType == null || oldType.equals(newRamType);
         if (ram != null && samePlatform && haveRam != null && haveRam >= 16 && GAMING_USE.matcher(pc.purpose()).find()
                 && !HEAVY_USE.matcher(pc.purpose()).find()) {
             errors.add("ram: the PC already has " + haveRam + " GB, which is enough for gaming. Remove the RAM line and spend the budget on "

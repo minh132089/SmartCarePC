@@ -395,6 +395,9 @@ class UpgradeServiceTests {
                 pick("motherboard", "replace", product("Mainboard ASUS TUF GAMING B650M-PLUS", 4_590_000L)),
                 pick("ram", "replace", DDR5));
         assertThat(UpgradeService.fit(game, am5, new ArrayList<>(), new ArrayList<>())).noneSatisfy(e -> assertThat(e).contains("enough for gaming"));
+        // Đổi bo cùng loại DDR4 (B460 -> B560): RAM cũ dùng tiếp được, vẫn chặn mua thêm
+        var b560 = List.of(pick("motherboard", "replace", product("Mainboard MSI MAG B560M BAZOOKA DDR4", 2_490_000L)), pick("ram", "add", ram16));
+        assertThat(UpgradeService.fit(game, b560, new ArrayList<>(), new ArrayList<>())).anySatisfy(e -> assertThat(e).contains("enough for gaming"));
     }
 
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
