@@ -111,7 +111,7 @@ class UpgradeServiceTests {
 
         assertThat(toolResult(2)).contains("could not be confirmed on the store page");
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).contains("could not put together an upgrade");
+        assertThat(res.reply()).contains("could not confirm an upgrade", "store prices or stock could not be confirmed");
     }
 
     @Test
@@ -128,12 +128,81 @@ class UpgradeServiceTests {
         var cpu = product("CPU Intel Core i5-12400F", 2_990_000L);
         var offer = new Offer(cpu.title(), "GEARVN", cpu.priceVnd(), null, cpu.url(), null, true, 36, Instant.now());
         List<Issue> warnings = new ArrayList<>(), unknowns = new ArrayList<>();
-        var info = new UpgradeInfo("i3-10100", "", "", "", "", "", "unknown", "Office work", 5_000_000L);
+        var info = new UpgradeInfo("Intel Core i3-12100", "", "", "", "", "", "unknown", "Office work", 5_000_000L);
         var errors = UpgradeService.fit(info, List.of(new UpgradeService.Pick("cpu", "replace", cpu, offer, 1, null, null)), warnings, unknowns);
 
         assertThat(errors).isEmpty();
         assertThat(unknowns).extracting(Issue::rule).contains("CPU_BOARD_UNKNOWN");
-        assertThat(unknowns.stream().filter(i -> i.rule().equals("CPU_BOARD_UNKNOWN")).findFirst().orElseThrow().message()).contains("LGA1700");
+        assertThat(unknowns.stream().filter(i -> i.rule().equals("CPU_BOARD_UNKNOWN")).findFirst().orElseThrow().message()).contains("BIOS");
+    }
+
+    @Test
+    void boKhongRoThiSocketTheoCpuDangDungVaKhongRoCaHaiThiKhongDeXuat() {
+        var cpu = product("CPU Intel Core i5-12400F", 2_990_000L);
+        var pick = List.of(pick("cpu", "replace", cpu));
+        var oldCpu = new UpgradeInfo("Intel Core i3-10100", "", "", "", "", "", "unknown", "Office work", 5_000_000L);
+        assertThat(UpgradeService.fit(oldCpu, pick, new ArrayList<>(), new ArrayList<>())).singleElement().asString()
+                .contains("LGA1700", "LGA1200");
+        var nothing = new UpgradeInfo("", "", "", "", "", "", "unknown", "Office work", 5_000_000L);
+        assertThat(UpgradeService.fit(nothing, pick, new ArrayList<>(), new ArrayList<>())).singleElement().asString().contains("cannot be matched");
+    }
+
+    @Test
+    void khongBietLoaiRamThiKhongDeXuatRamVaMayDdr3KhongNhanDdr4() {
+        var nothing = new UpgradeInfo("", "", "", "", "", "", "unknown", "Video editing", 8_000_000L);
+        assertThat(UpgradeService.fit(nothing, List.of(pick("ram", "add", DDR4)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("RAM type", "unknown");
+        var ddr3 = new UpgradeInfo("Intel Core i5-4460", "ASUS H81M-K", "8GB DDR3", "GTX 750 Ti", "", "400W", "standard", "Gaming", 6_000_000L);
+        assertThat(UpgradeService.fit(ddr3, List.of(pick("ram", "replace", DDR4)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("DDR3", "DDR4");
+        // Bo AM4 không ghi DDR: suy theo CPU
+        var am4 = new UpgradeInfo("AMD Ryzen 5 5600", "", "", "", "", "", "unknown", "Programming", 3_000_000L);
+        assertThat(UpgradeService.ramType(am4)).isEqualTo("DDR4");
+    }
+
+    @Test
+    void nguonDangCoDuThiKhongMuaThemVaNguonSfxPhaiGiuSfx() {
+        var info = new UpgradeInfo("Intel Core i5-12400", "ASUS ROG STRIX B660-I GAMING WIFI", "16GB DDR4", "none", "", "SFX 450W", "mini",
+                "Gaming", 10_000_000L);
+        var errors = UpgradeService.fit(info, List.of(pick("gpu", "replace", RTX4060), pick("psu", "replace", PSU650)), new ArrayList<>(), new ArrayList<>());
+        assertThat(errors).anySatisfy(e -> assertThat(e).contains("already covers"));
+        assertThat(errors).anySatisfy(e -> assertThat(e).contains("SFX"));
+        assertThat(UpgradeService.fit(info, List.of(pick("gpu", "replace", RTX4060)), new ArrayList<>(), new ArrayList<>())).isEmpty();
+        assertThat(UpgradeService.power(info, List.of(pick("gpu", "replace", RTX4060)))).contains("current 450W", "already covers");
+    }
+
+    @Test
+    void congSuatCardTheoDungMucCuaCardChoMayCu() {
+        assertThat(UpgradeService.gpuNeed("VGA ASUS Dual GeForce RTX 3050 6GB GDDR6")).isEqualTo(300);
+        assertThat(UpgradeService.gpuNeed("MSI GeForce RTX 3050 VENTUS 2X 8G")).isEqualTo(450);
+        assertThat(UpgradeService.gpuNeed("GIGABYTE GeForce GTX 1650 D6 4G")).isEqualTo(300);
+        assertThat(UpgradeService.gpuNeed("GT 1030 2GB")).isEqualTo(300);
+        assertThat(UpgradeService.gpuNeed("ASUS Dual RTX 4070 12GB")).isEqualTo(650);
+        var ddr3 = new UpgradeInfo("Intel Core i5-4460", "ASUS H81M-K", "8GB DDR3", "GTX 750 Ti", "", "400W", "standard", "Gaming", 6_000_000L);
+        assertThat(UpgradeService.fit(ddr3, List.of(pick("gpu", "replace", product("VGA ASUS Dual GeForce RTX 3050 6GB GDDR6", 4_700_000L))),
+                new ArrayList<>(), new ArrayList<>())).isEmpty();
+    }
+
+    @Test
+    void aiCanCardNvidiaTu12GbVram() {
+        var info = new UpgradeInfo("AMD Ryzen 5 5600", "MSI B550M PRO-VDH", "16GB DDR4", "GTX 1660 Super", "", "650W", "standard",
+                "AI and machine learning. Stable Diffusion", 15_000_000L);
+        assertThat(UpgradeService.fit(info, List.of(pick("gpu", "replace", RTX4060)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("12 GB");
+        assertThat(UpgradeService.fit(info, List.of(pick("gpu", "replace", product("VGA MSI GeForce RTX 3060 VENTUS 2X 12G OC", 7_800_000L))),
+                new ArrayList<>(), new ArrayList<>())).isEmpty();
+    }
+
+    @Test
+    void khongChotDuocThiNoiDungLyDo() {
+        var turn = new UpgradeService.Turn(pc("550W", 6_000_000L));
+        turn.lastErrors = List.of("The total 9.08 million VND is over the budget 6 million VND by 3.08 million VND.");
+        assertThat(UpgradeService.noPlan(turn)).contains("cost more than your 6 million VND budget").doesNotContain("9.08");
+    }
+
+    private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
+        return new UpgradeService.Pick(category, action, p, new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()),
+                1, null, null);
     }
 
     @Test

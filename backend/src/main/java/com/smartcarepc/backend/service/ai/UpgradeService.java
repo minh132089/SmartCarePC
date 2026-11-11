@@ -47,7 +47,7 @@ public class UpgradeService {
 
     static final int MAX_ROUNDS = 7;
     static final int MAX_SEARCH_ROUNDS = 2;
-    static final int MAX_PROPOSE_ROUNDS = 3;
+    static final int MAX_PROPOSE_ROUNDS = 4;
     /** Mỗi lượt chỉ chạy từng này lần tìm, tránh trợ lý gọi cả chục từ khoá một lúc */
     static final int MAX_SEARCHES_PER_ROUND = 8;
 
@@ -84,9 +84,17 @@ public class UpgradeService {
             and RAM too), say so plainly and suggest the best single step or saving towards a new PC.
             2. Respect the existing platform. New RAM must match the motherboard's DDR type. A new CPU must fit the current \
             motherboard socket; otherwise the plan also needs a motherboard (and RAM if the DDR type changes). A new \
-            graphics card needs a power supply with enough wattage: if the current one is too small, include a power \
-            supply. Mini cases have limited space for graphics cards, coolers and power supplies (often SFX). When adding \
-            RAM, prefer a matching 2-stick kit that replaces the old sticks unless the old type and size are clear.
+            graphics card needs a power supply with enough wattage. Add a power supply ONLY when the current one is \
+            known and too small for the new card; if it is known and big enough, keep it; if it is unknown, do not buy \
+            one: the app asks the owner to read the label. Count a needed power supply in the card's cost: a card that runs \
+            on the current power supply is often the better buy (for example RTX 4060 needs 450W, RTX 3060 needs 550W). Mini cases have limited space for graphics cards, coolers and \
+            power supplies (usually SFX). Recommend RAM only when the PC's RAM type is known (from the RAM, motherboard or \
+            CPU). When adding sticks, match the size of the current sticks so they stay in pairs; for programming, video \
+            and AI aim for 32 GB in total. If most parts are unknown, suggest only parts that fit almost any desktop (a \
+            graphics card when power allows, a 2.5-inch SATA SSD rather than M.2 when the motherboard is unknown or older \
+            than about 2016) and tell the owner how to find the rest (Windows: \
+            Settings › System › About, Task Manager › Performance). For AI use, only an NVIDIA card with at least 12 GB \
+            of VRAM is worth buying.
             3. In your FIRST round, call search_products for every part you consider, all at once, with short queries \
             ("RAM DDR4 16GB 3200", "RTX 4060 8GB", "SSD NVMe 1TB", "PSU 650W 80 Plus"). Prefer results marked \
             verified = true and in_stock = true from Vietnamese computer stores. Skip used, open-box and tray items.
@@ -161,6 +169,8 @@ public class UpgradeService {
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
         volatile Plan plan;
+        /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
+        volatile List<String> lastErrors = List.of();
 
         Turn(UpgradeInfo pc) {
             this.pc = pc;
@@ -366,6 +376,7 @@ public class UpgradeService {
                     + " by " + ChatService.millions(total - budget) + ". Drop the least useful part or choose cheaper products.");
         }
         if (!errors.isEmpty()) {
+            turn.lastErrors = List.copyOf(errors);
             log.info("Upgrade: đề xuất chưa đạt: {}", errors);
             return Map.of("ok", false, "errors", errors);
         }
@@ -378,6 +389,8 @@ public class UpgradeService {
         if (!warnings.isEmpty() || !unknowns.isEmpty()) {
             ok.put("check_before_buying", java.util.stream.Stream.concat(warnings.stream(), unknowns.stream()).map(Issue::message).toList());
         }
+        String power = power(turn.pc, picks);
+        if (power != null) ok.put("power_check", power + " State this correctly in the answer.");
         ok.put("next", picks.isEmpty() ? "No upgrade card will be shown. Explain why in the answer."
                 : "The plan is accepted. Write the final answer now; do not call tools again.");
         return ok;
@@ -408,32 +421,56 @@ public class UpgradeService {
                 default -> { }
             }
         }
-        // Thêm RAM cạnh thanh cũ: phải cùng loại DDR với thanh đang có
+        // RAM mới (thêm hay thay) giữ bo cũ thì phải đúng loại DDR bo đang chạy; không biết loại thì không đề xuất
         Pick ram = by.get("ram");
-        if (ram != null && "add".equals(ram.action()) && UpgradeInfo.known(pc.ram())) {
-            String oldType = ProductRules.read("ram", pc.ram()).ramType(), newType = ProductRules.read("ram", ram.product().title()).ramType();
-            if (oldType != null && newType != null && !oldType.equals(newType)) {
-                errors.add("ram: the current RAM is " + oldType + " but \"" + ram.product().title() + "\" is " + newType
-                        + ". Different DDR types cannot be used together.");
+        if (ram != null && !by.containsKey("motherboard")) {
+            String type = ramType(pc), newType = ProductRules.read("ram", ram.product().title()).ramType();
+            if (type == null) {
+                errors.add("ram: this PC's RAM type (DDR3, DDR4 or DDR5) is unknown, so RAM cannot be matched. Remove the RAM line and "
+                        + "tell the owner to check the sticker on a RAM stick or the motherboard model first.");
+            } else if (newType != null && !type.equals(newType) && errors.stream().noneMatch(e -> e.contains("DDR"))) {
+                errors.add("ram: this PC uses " + type + " but \"" + ram.product().title() + "\" is " + newType
+                        + ". Choose " + type + " RAM; different DDR types do not fit.");
             }
+        }
+        if (ram != null && "add".equals(ram.action())) {
             unknowns.add(new Issue("RAM_SLOTS", "Adding sticks needs free RAM slots, and mixed sticks may run at the slower speed. "
                     + "Open the side panel and count the empty slots before buying."));
         }
-        // CPU mới mà không biết bo mạch: chưa thể khẳng định lắp được
+        // CPU mới giữ bo cũ: bo không rõ thì socket lấy theo CPU đang dùng (bo đang chạy được CPU đó)
         Pick cpu = by.get("cpu");
         if (cpu != null && !by.containsKey("motherboard") && !UpgradeInfo.known(pc.motherboard())) {
             String socket = ProductRules.read("cpu", cpu.product().title()).socket();
-            unknowns.add(new Issue("CPU_BOARD_UNKNOWN", "Your motherboard model is unknown, so this CPU is not confirmed to fit."
-                    + (socket == null ? "" : " It needs a socket " + socket + " motherboard.")
-                    + " Find the model in Windows (System Information › BaseBoard Product) before buying."));
+            String current = UpgradeInfo.known(pc.cpu()) ? ProductRules.read("cpu", pc.cpu()).socket() : null;
+            if (current == null) {
+                errors.add("cpu: neither the motherboard nor the current CPU's socket is known, so a new CPU cannot be matched. Remove the "
+                        + "CPU line and tell the owner to find the motherboard model first.");
+            } else if (socket != null && !socket.equals(current)) {
+                errors.add("cpu: \"" + cpu.product().title() + "\" uses socket " + socket + ", but the current CPU (and so the motherboard) uses "
+                        + current + ". Choose a " + current + " CPU, or include a matching motherboard.");
+            } else {
+                unknowns.add(new Issue("CPU_BOARD_UNKNOWN", "Your motherboard model is unknown. Its socket matches your current CPU, but it may "
+                        + "need a BIOS update or may not support this CPU. Find the model in Windows (System Information › BaseBoard Product) "
+                        + "and check its CPU support list before buying."));
+            }
         }
         // Card mới: nguồn phải đủ công suất hãng chip khuyên dùng
         Pick gpu = by.get("gpu");
+        Pick psu = by.get("psu");
+        Integer current = watts(pc.psu());
+        // Nguồn cần cho cả máy: theo card mới, không thì theo card đang dùng (không card rời: 300W là đủ)
+        boolean oldGpu = UpgradeInfo.known(pc.gpu()) && !"none".equalsIgnoreCase(pc.gpu().strip());
+        int need = gpu != null ? gpuNeed(gpu.product().title()) : oldGpu ? gpuNeed(pc.gpu()) : 300;
+        if (psu != null && current != null && current >= need) {
+            errors.add("psu: the current " + current + "W power supply already covers the " + need + "W this PC needs. Remove the power "
+                    + "supply line: buying one would waste the budget.");
+        }
+        if (psu != null && SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find() && !SFX.matcher(psu.product().title()).find()) {
+            errors.add("psu: the current power supply is the small SFX size, so a standard ATX unit will not fit this case. Choose an SFX "
+                    + "power supply.");
+        }
         if (gpu != null) {
-            String chip = ChatService.gpuChip(gpu.product().title());
-            int need = Math.max(450, chip == null ? 550 : ChatService.GPU_PSU.getOrDefault(chip, 550));
-            Pick psu = by.get("psu");
-            Integer watts = psu != null ? ChatService.amount("psu", psu.product().title()) : watts(pc.psu());
+            Integer watts = psu != null ? ChatService.amount("psu", psu.product().title()) : current;
             if (watts != null && watts < need) {
                 errors.add(psu != null
                         ? "psu: \"" + psu.product().title() + "\" (" + watts + "W) is below the " + need + "W recommended for this graphics card."
@@ -447,19 +484,81 @@ public class UpgradeService {
                     ? "Mini cases fit only short cards. Measure the free length in your case and compare it with the card's length."
                     : "Measure the free length inside your case and compare it with the card's length before buying."));
         }
-        Pick psu = by.get("psu");
-        if (psu != null && "mini".equals(pc.caseSize()) && !SFX.matcher(psu.product().title()).find()) {
+        if (psu != null && "mini".equals(pc.caseSize()) && !SFX.matcher(psu.product().title()).find()
+                && !SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find()) {
             warnings.add(new Issue("PSU_FORM", "Mini cases often take only small SFX power supplies. Check which size your case needs."));
+        }
+        if (gpu != null && AI_USE.matcher(pc.purpose()).find()) {
+            String t = gpu.product().title().toLowerCase(Locale.ROOT);
+            Integer vram = ChatService.vram(gpu.product().title());
+            boolean nvidia = t.matches(".*\\b(rtx|gtx|geforce|nvidia)\\b.*");
+            if (!nvidia || vram == null || vram < 12) {
+                errors.add("gpu: for AI work choose an NVIDIA card with at least 12 GB of VRAM (for example RTX 3060 12GB or RTX 4060 Ti / "
+                        + "5060 Ti 16GB). \"" + gpu.product().title() + "\" does not qualify. If none fits the budget, send an empty plan and explain.");
+            }
         }
         Pick ssd = by.get("ssd");
         if (ssd != null && NVME.matcher(ssd.product().title()).find()) {
-            unknowns.add(new Issue("M2_SLOT", "This SSD needs a free M.2 slot on the motherboard. If there is none, choose a 2.5-inch SATA SSD."));
+            unknowns.add(new Issue("M2_SLOT", "This SSD needs a free M.2 slot on the motherboard. Look up your motherboard model (Windows: System Information › "
+                    + "BaseBoard Product) to see whether it has one; if not, choose a 2.5-inch SATA SSD."));
         }
         Pick cooler = by.get("cooler");
         if (cooler != null) {
             unknowns.add(new Issue("COOLER_HEIGHT", "Check the cooler height fits your case and that it supports your CPU socket."));
         }
         return errors;
+    }
+
+    private static final Pattern AI_USE = Pattern.compile(
+            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE);
+    /**
+     * Công suất nguồn hãng khuyên cho cả máy, bổ sung GPU_PSU cho card yếu / mạnh mà máy cũ hay có. GPU_PSU của trang lắp máy
+     * mới để mặc định 550W và sàn 450W khi chọn nguồn mới; với nguồn ĐANG CÓ thì phải theo đúng mức của card (GTX 1650,
+     * RTX 3050 6GB chạy với nguồn 300W), không thì chặn oan máy văn phòng nguồn 300 - 400W.
+     */
+    static final Map<String, Integer> MORE_PSU = Map.ofEntries(
+            Map.entry("gtx1630", 300), Map.entry("gtx1050", 300), Map.entry("gtx1050ti", 300), Map.entry("rx6400", 300),
+            Map.entry("rx6500xt", 400), Map.entry("arca380", 300), Map.entry("arca580", 500), Map.entry("arca750", 550),
+            Map.entry("gtx1660", 450), Map.entry("gtx1660super", 450), Map.entry("gtx1660ti", 450), Map.entry("rtx2060", 500),
+            Map.entry("rx580", 500), Map.entry("rx6750xt", 650), Map.entry("rtx3070ti", 750), Map.entry("rtx3080", 750),
+            Map.entry("rtx4080", 750), Map.entry("rtx4080super", 750), Map.entry("rtx5080", 850), Map.entry("rtx4090", 850),
+            Map.entry("rx7900xt", 750), Map.entry("rx7900xtx", 800), Map.entry("rtx5090", 1000));
+
+    /** Nguồn (W) cần cho cả máy khi dùng card này; không đọc được chip thì coi như 550W */
+    static int gpuNeed(String title) {
+        if (title == null) return 550;
+        if (OLD_GT.matcher(title).find()) return 300;
+        String chip = ChatService.gpuChip(title);
+        if (chip == null) return 550;
+        if ("rtx3050".equals(chip) && Integer.valueOf(6).equals(ChatService.vram(title))) return 300;
+        return MORE_PSU.getOrDefault(chip, ChatService.GPU_PSU.getOrDefault(chip, 550));
+    }
+
+    /** Loại RAM máy đang chạy: theo thanh RAM người dùng ghi, không có thì theo bo, rồi theo CPU (AM4 / AM5); null nếu không rõ */
+    static String ramType(UpgradeInfo pc) {
+        if (UpgradeInfo.known(pc.ram())) {
+            String t = ProductRules.read("ram", pc.ram()).ramType();
+            if (t != null) return t;
+        }
+        if (UpgradeInfo.known(pc.motherboard())) {
+            String t = ProductRules.read("motherboard", pc.motherboard()).ramType();
+            if (t != null) return t;
+        }
+        return UpgradeInfo.known(pc.cpu()) ? ProductRules.read("cpu", pc.cpu()).ramType() : null;
+    }
+
+    /** Kết luận về nguồn của kế hoạch đã chốt, gửi cho trợ lý để câu trả lời không nói sai (vd "nguồn 450W quá yếu" khi vẫn đủ) */
+    static String power(UpgradeInfo pc, List<Pick> picks) {
+        Pick gpu = picks.stream().filter(p -> "gpu".equals(p.category())).findFirst().orElse(null);
+        if (gpu == null) return null;
+        int need = gpuNeed(gpu.product().title());
+        Pick psu = picks.stream().filter(p -> "psu".equals(p.category())).findFirst().orElse(null);
+        if (psu != null) return "The new power supply in the plan covers the " + need + "W this graphics card needs.";
+        Integer current = watts(pc.psu());
+        return current != null
+                ? "The current " + current + "W power supply already covers the " + need + "W this graphics card needs, so it is kept."
+                : "The current power supply is unknown: the owner must check its label shows at least " + need + "W before buying.";
     }
 
     /** Công suất nguồn người dùng ghi, vd "550W", "Cooler Master 650 W"; null nếu không đọc được */
@@ -498,10 +597,7 @@ public class UpgradeService {
     private ChatResponse respond(String draft, Turn turn) {
         Plan plan = turn.plan;
         String reply = draft == null ? null : draft.replaceAll("(?s)<think>.*?</think>", "").strip();
-        if (plan == null) {
-            return new ChatResponse("I could not put together an upgrade with confirmed store prices and stock for your PC yet. "
-                    + "Please try again in a few minutes, or adjust the budget.");
-        }
+        if (plan == null) return new ChatResponse(noPlan(turn));
         if (plan.items().isEmpty()) {
             return new ChatResponse(reply == null || reply.isEmpty()
                     ? "I could not find an upgrade within " + ChatService.millions(turn.pc.budgetVnd()) + " that would make a noticeable "
@@ -520,6 +616,27 @@ public class UpgradeService {
         var card = new BuildCard(lines, true, List.of(), plan.warnings(), summary, turn.pc.budgetVnd(), null, null, 1,
                 plan.unknowns(), List.of(), null);
         return new ChatResponse(reply, card);
+    }
+
+    /** Câu trả lời khi không chốt được kế hoạch: theo lỗi của lần đề xuất cuối, không đưa giá chưa kiểm tra */
+    static String noPlan(Turn turn) {
+        List<String> why = new ArrayList<>();
+        var errors = turn.lastErrors;
+        if (errors.stream().anyMatch(e -> e.contains("over the budget"))) {
+            why.add("the parts that would make a real difference cost more than your " + ChatService.millions(turn.pc.budgetVnd()) + " budget");
+        }
+        if (errors.stream().anyMatch(e -> e.contains("could not be confirmed"))) {
+            why.add("store prices or stock could not be confirmed for the parts I found");
+        }
+        if (errors.stream().anyMatch(e -> e.contains("power supply") || e.contains("socket") || e.contains("DDR"))) {
+            why.add("the parts I found would need other changes to fit your PC (power supply, socket or RAM type)");
+        }
+        if (errors.stream().anyMatch(e -> e.contains("is unknown") || e.contains("not known"))) {
+            why.add("some of your current parts are unknown, so I could not match them safely");
+        }
+        String reason = why.isEmpty() ? "store prices and stock could not be confirmed in time" : String.join("; ", why);
+        return "I could not confirm an upgrade for your PC: " + reason + ". You can try again later, raise the budget, or fill in more "
+                + "of your current parts (Windows: Settings › System › About, Task Manager › Performance).";
     }
 
     private static String text(Object o) {
