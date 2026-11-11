@@ -200,8 +200,12 @@ export function GuidePanel() {
         {run?.completed ? <><p className="font-semibold text-ok">Maintenance recorded</p><p className="mt-1 text-[13px] text-ink-2">Your next reminder date has been updated in this browser. Update any calendar events separately.</p><MaintenanceEntry className="mt-3" /></> : <>
           <Question label="Who did the work?"><Choices name="maintenance-who" value={[who]} options={[{ value: 'me-alone', label: 'Me alone' }, { value: 'with-help', label: 'Me with someone’s help' }, { value: 'someone-else', label: 'Someone else did it' }]} onChange={v => setWho(v[0])} /></Question>
           {task === 'check' && <Question label="What did you notice?"><Symptoms value={symptoms} onChange={setSymptoms} /></Question>}
+          {task === 'paste' && <Question label="After 10 minutes of heavy use, what do you notice?" hint="New paste usually lowers temperatures within minutes.">
+            <Symptoms value={symptoms} onChange={setSymptoms} />
+            {symptoms.some(x => x === 'heat' || x === 'shutdown') && <p className="mt-2 text-[13px] text-warn">If it still overheats with fresh paste, a fan or pump may be failing. Ask a technician to check the cooler.</p>}
+          </Question>}
           {task === 'dust' && <label className="mt-3 flex gap-2 text-[13px]"><input type="checkbox" checked={stillHot} onChange={e => setStillHot(e.target.checked)} /> Heat or shutdowns still happen after dust cleaning</label>}
-          <button disabled={!who} onClick={() => finishMaintenance(task, who, stillHot, task === 'check' ? symptoms : undefined)} className={`mt-4 rounded-full bg-accent px-4 py-2 text-[14px] text-white disabled:opacity-40 ${focus}`}>Finish maintenance</button>
+          <button disabled={!who} onClick={() => finishMaintenance(task, who, stillHot, task === 'check' || task === 'paste' ? symptoms : undefined)} className={`mt-4 rounded-full bg-accent px-4 py-2 text-[14px] text-white disabled:opacity-40 ${focus}`}>Finish maintenance</button>
         </>}
       </div>}
 
