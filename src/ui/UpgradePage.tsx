@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowCounterClockwise, House, PencilSimple } from '@phosphor-icons/react'
+import { AutoHeight } from '@animate-ui/react/primitives/effects/auto-height'
 import { useViewer } from '../store'
+import { Rise } from './Rise'
 import { useUpgradeChat, type CaseSize, type UpgradeForm } from './chat/chatStore'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { ProposalView } from './chat/Proposal'
@@ -160,12 +162,14 @@ export function UpgradePage() {
             <label className="mt-2 flex items-center gap-2 text-[14px] text-ink-2">
               <input type="checkbox" checked={draft.laptop} onChange={(e) => update({ laptop: e.target.checked })} /> I use a laptop
             </label>
-            {draft.laptop && (
-              <p role="status" className="mt-2 rounded-xl bg-info-bg p-3 text-[14px] leading-[1.5] text-info">
-                This adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have soldered memory and a single M.2
-                slot, so check the manufacturer's service manual or ask a repair shop.
-              </p>
-            )}
+            <AutoHeight deps={[draft.laptop]}>
+              {draft.laptop && (
+                <p role="status" className="mt-2 rounded-xl bg-info-bg p-3 text-[14px] leading-[1.5] text-info">
+                  This adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have soldered memory and a single M.2
+                  slot, so check the manufacturer's service manual or ask a repair shop.
+                </p>
+              )}
+            </AutoHeight>
             <p className="mt-1 text-[13px] leading-[1.5] text-ink-2">
               Leave a box empty if you do not know. On Windows, <strong>Settings › System › About</strong> shows the processor and RAM.{' '}
               <strong>Task Manager › Performance</strong> shows the graphics card and drives. The power supply wattage is printed on its label.
@@ -253,9 +257,13 @@ export function UpgradePage() {
           </div>
           <aside className="min-w-0 lg:pt-2">
             {latest ? (
-              <div className="rounded-[24px] bg-panel p-5 ring-1 ring-line md:p-6">
-                <ProposalView card={latest} />
-              </div>
+              <Rise key={messages.length} offset={16}>
+                <AutoHeight className="rounded-[24px] bg-panel ring-1 ring-line" deps={[messages.length]}>
+                  <div className="p-5 md:p-6">
+                    <ProposalView card={latest} />
+                  </div>
+                </AutoHeight>
+              </Rise>
             ) : (
               <div className="rounded-[24px] bg-panel p-5 text-[14px] leading-[1.5] text-ink-2 ring-1 ring-line">
                 {busy ? 'Your plan appears here once store prices and fit have been checked.' : 'The latest answer has no upgrade plan to buy. Ask a follow-up or edit your PC details.'}

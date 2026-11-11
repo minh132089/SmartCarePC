@@ -3,6 +3,7 @@ import { ArrowUp, Check, X } from '@phosphor-icons/react'
 import { PARTS, type PartId } from '../../data/parts'
 import { compatText, quantityLabel, totalOf, vndRange, type BuildCard, type Msg } from './chatStore'
 import LatticeLoader from '../../components/LatticeLoader'
+import { Slide } from '@animate-ui/react/primitives/effects/slide'
 
 /** Bong bóng tin nhắn: người dùng bên phải màu xanh, trợ lý bên trái màu trắng */
 export function Bubble({ role, children }: { role: Msg['role']; children: ReactNode }) {
@@ -43,7 +44,8 @@ export function Thread({
   return (
     <>
       {messages.map((m, i) => (
-        <div key={i} className="space-y-2">
+        <Slide key={i} asChild direction="up" offset={12}>
+        <div className="space-y-2">
           <Bubble role={m.role}>{m.role === 'assistant' ? <Rich text={m.content} /> : m.content}</Bubble>
           {(m.options && optionsView?.(m, i)) ??
             (m.build &&
@@ -53,6 +55,7 @@ export function Thread({
               <BuildCardView card={m.build} action={cardAction?.(m.build, i)} />
             )))}
         </div>
+        </Slide>
       ))}
       {busy && <BusyBubble hints={busyHints} stage={stage} />}
       {error && (

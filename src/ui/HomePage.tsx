@@ -1,6 +1,8 @@
 import { ArrowRight, ArrowCircleUp, Desktop, Wrench } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
+import { Tilt, TiltContent } from '@animate-ui/react/primitives/effects/tilt'
 import { useViewer } from '../store'
+import { Rise } from './Rise'
 import { useMaintenance } from './maintenance/maintenanceState'
 import { useStudy } from './study/study'
 import { StudyBar } from './study/StudyBar'
@@ -15,6 +17,8 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  */
 export function HomePage() {
   const setPage = useViewer((s) => s.setPage)
+  // Máy yếu (chất lượng Low) bỏ hiệu ứng nghiêng theo con trỏ cho đỡ tốn sức
+  const tilt = useViewer((s) => s.quality) !== 'low'
   const openStudy = useStudy((s) => s.open)
   const code = useStudy((s) => s.code)
   return (
@@ -31,16 +35,24 @@ export function HomePage() {
         <StudyBar />
 
         <main className="flex flex-1 flex-col justify-center py-10">
-          <p className="font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">Your desktop PC, step by step</p>
-          <h1 className="mt-2 max-w-[640px] text-[clamp(2rem,1.3rem+3vw,3.4rem)] leading-[1.05] font-bold tracking-[-0.035em] text-balance text-ink">
-            What would you like to do with your PC?
-          </h1>
-          <p className="mt-3 max-w-[560px] text-[16px] leading-[1.5] text-ink-2">
-            Choose one. Each path asks only for what it needs, and you can come back here at any time.
-          </p>
+          <Rise offset={10}>
+            <p className="font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">Your desktop PC, step by step</p>
+          </Rise>
+          <Rise delay={80}>
+            <h1 className="mt-2 max-w-[640px] text-[clamp(2rem,1.3rem+3vw,3.4rem)] leading-[1.05] font-bold tracking-[-0.035em] text-balance text-ink">
+              What would you like to do with your PC?
+            </h1>
+          </Rise>
+          <Rise delay={160} offset={10}>
+            <p className="mt-3 max-w-[560px] text-[16px] leading-[1.5] text-ink-2">
+              Choose one. Each path asks only for what it needs, and you can come back here at any time.
+            </p>
+          </Rise>
 
           <ul className="mt-8 grid gap-3 md:grid-cols-3">
             <Choice
+              index={0}
+              tilt={tilt}
               icon={<Desktop size={26} aria-hidden />}
               title="Build a new PC"
               text="Get three component options for your budget, then follow a 3D guide to assemble it yourself."
@@ -48,6 +60,8 @@ export function HomePage() {
               onClick={() => setPage('advice')}
             />
             <Choice
+              index={1}
+              tilt={tilt}
               icon={<Wrench size={26} aria-hidden />}
               title="Maintain my PC"
               text="Clean out dust, replace thermal paste or run a quick health check, with reminders when it is due."
@@ -55,6 +69,8 @@ export function HomePage() {
               onClick={() => useMaintenance.getState().open()}
             />
             <Choice
+              index={2}
+              tilt={tilt}
               icon={<ArrowCircleUp size={26} aria-hidden />}
               title="Upgrade my PC"
               text="Find out which parts to replace for your use, with store prices and checks that they fit your PC."
@@ -69,9 +85,8 @@ export function HomePage() {
   )
 }
 
-function Choice({ icon, title, text, need, onClick }: { icon: ReactNode; title: string; text: string; need: string; onClick: () => void }) {
-  return (
-    <li>
+function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: ReactNode; title: string; text: string; need: string; onClick: () => void; index: number; tilt: boolean }) {
+  const card = (
       <button
         onClick={onClick}
         className={`group flex h-full w-full flex-col rounded-[24px] bg-panel p-5 text-left ring-1 ring-line transition-shadow duration-150 hover:shadow-lg hover:ring-line-strong ${press} ${focus}`}
@@ -88,6 +103,16 @@ function Choice({ icon, title, text, need, onClick }: { icon: ReactNode; title: 
           <ArrowRight size={14} aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5" />
         </span>
       </button>
+  )
+  return (
+    <li>
+      <Rise delay={240 + index * 100} offset={22} className="h-full">
+        {tilt ? (
+          <Tilt maxTilt={5} className="h-full">
+            <TiltContent className="h-full">{card}</TiltContent>
+          </Tilt>
+        ) : card}
+      </Rise>
     </li>
   )
 }

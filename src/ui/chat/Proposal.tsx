@@ -1,4 +1,5 @@
 import { ArrowSquareOut, ImageSquare } from '@phosphor-icons/react'
+import { CountingNumber } from '@animate-ui/react/primitives/texts/counting-number'
 import { useState, type ReactNode } from 'react'
 import { PARTS, type PartId } from '../../data/parts'
 import { compatText, quantityLabel, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue, type Verdict } from './chatStore'
@@ -98,9 +99,21 @@ function Total({ min, max, budget }: { min: number; max: number; budget: number 
   return (
     <div className="mt-5">
       <p className="text-[13px] text-ink-2">Estimated total</p>
-      <p className="text-[30px] leading-tight font-semibold tracking-[-0.025em] text-ink tabular-nums">{vndRange(min, max)}</p>
+      <p className="text-[30px] leading-tight font-semibold tracking-[-0.025em] text-ink tabular-nums">
+        {Math.abs(max - min) < 50_000 && max >= 1e6 ? <AnimatedMillions vnd={max} /> : vndRange(min, max)}
+      </p>
       {verdict && <p className={`mt-1 text-[14px] leading-snug ${verdict.tone}`}>{verdict.text}</p>}
     </div>
+  )
+}
+
+/** "7.4 million VND" với số đếm lên khi hiện ra (cùng cách làm tròn như vnd()); đọc màn hình chỉ đọc số đích một lần */
+function AnimatedMillions({ vnd: amount }: { vnd: number }) {
+  const m = Math.round((amount / 1e6) * 10) / 10
+  return (
+    <>
+      <CountingNumber number={m} decimalPlaces={Number.isInteger(m) ? 0 : 1} fromNumber={m * 0.4} inView transition={{ stiffness: 120, damping: 28 }} /> million VND
+    </>
   )
 }
 

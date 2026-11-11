@@ -1,3 +1,4 @@
+import { Fade } from '@animate-ui/react/primitives/effects/fade'
 import { Scene } from './scene/Scene'
 import { useViewer } from './store'
 import { AdvicePage } from './ui/AdvicePage'
@@ -19,7 +20,9 @@ export default function App() {
   if (page !== 'build')
     return (
       <>
-        {page === 'home' ? <HomePage /> : page === 'upgrade' ? <UpgradePage /> : <AdvicePage />}
+        <Fade key={page} className="h-full">
+          {page === 'home' ? <HomePage /> : page === 'upgrade' ? <UpgradePage /> : <AdvicePage />}
+        </Fade>
         <StudyDialogs />
       </>
     )
