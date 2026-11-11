@@ -94,7 +94,10 @@ public class UpgradeService {
             graphics card when power allows, a 2.5-inch SATA SSD rather than M.2 when the motherboard is unknown or older \
             than about 2016) and tell the owner how to find the rest (Windows: \
             Settings › System › About, Task Manager › Performance). For AI use, only an NVIDIA card with at least 12 GB \
-            of VRAM is worth buying.
+            of VRAM is worth buying. For a gaming CPU upgrade, pick the fastest gaming CPU the budget allows on the \
+            current socket (on AM4 the Ryzen 7 5700X3D or 5800X3D when affordable); if those are unavailable, take the \
+            next fastest one the app accepts rather than recommending nothing. If a part still cannot be confirmed \
+            after one retry, drop it and submit the rest.
             3. In your FIRST round, call search_products for every part you consider, all at once, with short queries \
             ("RAM DDR4 16GB 3200", "RTX 4060 8GB", "SSD NVMe 1TB", "PSU 650W 80 Plus"). Prefer results marked \
             verified = true and in_stock = true from Vietnamese computer stores. Skip used, open-box and tray items.
@@ -170,6 +173,13 @@ public class UpgradeService {
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
         volatile Plan plan;
+        final AtomicInteger proposals = new AtomicInteger();
+        /** Tổng kế hoạch trước (đọc từ "[Previous upgrade plan: ...]" giao diện gửi kèm), null nếu là câu đầu */
+        volatile Long previousTotal;
+        /** Câu mới nhất xin phương án rẻ hơn: kế hoạch mới phải rẻ hơn kế hoạch trước */
+        volatile boolean wantsCheaper;
+        /** Món bị bỏ ở lần đề xuất cuối vì không kiểm tra được giá / còn hàng */
+        volatile List<String> dropped = List.of();
         /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
         volatile List<String> lastErrors = List.of();
 
@@ -189,6 +199,20 @@ public class UpgradeService {
     private ChatResponse run(ChatRequest request, Consumer<String> progress) {
         progress.accept(STAGE_READ);
         Turn turn = new Turn(request.upgrade());
+        if (laptop(turn.pc)) {
+            return new ChatResponse("This upgrade adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have "
+                    + "soldered memory and a single M.2 slot, so check the manufacturer's service manual for your model or ask a repair "
+                    + "shop before buying parts.");
+        }
+        var history = request.messages();
+        var lastAssistant = history.stream().filter(m -> "assistant".equals(m.role())).reduce((a, b) -> b).orElse(null);
+        if (lastAssistant != null && lastAssistant.content().contains("[Previous upgrade plan:")) {
+            var m = PREVIOUS_PRICE.matcher(lastAssistant.content().substring(lastAssistant.content().indexOf("[Previous upgrade plan:")));
+            long sum = 0;
+            while (m.find()) sum += Long.parseLong(m.group(1));
+            if (sum > 0) turn.previousTotal = sum;
+        }
+        turn.wantsCheaper = !history.isEmpty() && "user".equals(history.getLast().role()) && CHEAPER.matcher(history.getLast().content()).find();
         if (!search.enabled()) {
             return new ChatResponse("Store price search is not available right now, so I cannot suggest upgrade parts with real prices "
                     + "and links. Please try again later.");
@@ -324,6 +348,7 @@ public class UpgradeService {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> propose(Map<String, Object> input, Turn turn) {
+        boolean lastChance = turn.proposals.incrementAndGet() >= MAX_PROPOSE_ROUNDS;
         var raw = (List<Map<String, Object>>) input.getOrDefault("items", List.of());
         List<String> errors = new ArrayList<>();
         List<Pick> picks = new ArrayList<>();
@@ -369,6 +394,12 @@ public class UpgradeService {
             picks.add(new Pick(category, action, p, offer, qty, text(item.get("spec")), text(item.get("reason"))));
         }
         List<Issue> warnings = new ArrayList<>(), unknowns = new ArrayList<>();
+        List<String> dropped = List.of();
+        if (lastChance && !errors.isEmpty() && !picks.isEmpty() && errors.stream().allMatch(e -> e.contains("could not be confirmed"))) {
+            dropped = errors.stream().map(e -> e.substring(0, e.indexOf(':'))).toList();
+            log.info("Upgrade: lần đề xuất cuối, bỏ món chưa kiểm tra được giá {} và xét phần còn lại", dropped);
+            errors.clear();
+        }
         if (errors.isEmpty()) errors.addAll(fit(turn.pc, picks, warnings, unknowns));
         long total = picks.stream().mapToLong(Pick::total).sum();
         long budget = turn.pc.budgetVnd();
@@ -376,10 +407,20 @@ public class UpgradeService {
             errors.add("The total " + ChatService.millions(total) + " is over the budget " + ChatService.millions(budget)
                     + " by " + ChatService.millions(total - budget) + ". Drop the least useful part or choose cheaper products.");
         }
+        if (errors.isEmpty() && turn.wantsCheaper && turn.previousTotal != null && !picks.isEmpty() && total >= turn.previousTotal) {
+            errors.add("The owner asked for a cheaper option, but this plan costs " + ChatService.millions(total) + ", not less than the "
+                    + "previous plan (" + ChatService.millions(turn.previousTotal) + "). Count any extra power supply too, and choose parts that "
+                    + "cost less in total.");
+        }
         if (!errors.isEmpty()) {
             turn.lastErrors = List.copyOf(errors);
             log.info("Upgrade: đề xuất chưa đạt: {}", errors);
             return Map.of("ok", false, "errors", errors);
+        }
+        turn.dropped = dropped;
+        if (!dropped.isEmpty()) {
+            unknowns.add(new Issue("DROPPED", "Some parts were left out because their store price or stock could not be confirmed ("
+                    + String.join(", ", dropped) + "). Ask again later to include them."));
         }
         turn.plan = new Plan(text(input.get("summary")), List.copyOf(picks), warnings, unknowns);
         log.info("Upgrade: chốt {} món, tổng {}", picks.size(), total);
@@ -449,6 +490,12 @@ public class UpgradeService {
                 errors.add("ram: this PC uses " + type + " but \"" + ram.product().title() + "\" is " + newType
                         + ". Choose " + type + " RAM; different DDR types do not fit.");
             }
+        }
+        // Chỉ chơi game, đã có từ 16 GB: thêm RAM gần như không thấy khác, tiền nên dành cho món khác
+        Integer haveRam = UpgradeInfo.known(pc.ram()) ? ChatService.amount("ram", pc.ram()) : null;
+        if (ram != null && haveRam != null && haveRam >= 16 && GAMING_USE.matcher(pc.purpose()).find() && !HEAVY_USE.matcher(pc.purpose()).find()) {
+            errors.add("ram: the PC already has " + haveRam + " GB, which is enough for gaming. Remove the RAM line and spend the budget on "
+                    + "a part that raises frame rates, or leave the money unspent.");
         }
         if (ram != null && "add".equals(ram.action())) {
             unknowns.add(new Issue("RAM_SLOTS", "Adding sticks needs free RAM slots, and mixed sticks may run at the slower speed. "
@@ -591,6 +638,10 @@ public class UpgradeService {
             "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern GAMING_USE = Pattern.compile(
             "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE);
+    /** Việc cần nhiều RAM ngoài game: có thì không chặn mua thêm RAM */
+    private static final Pattern HEAVY_USE = Pattern.compile(
+            "\\b(stream(ing)?|video|edit(ing)?|premiere|resolve|render|3d|blender|program(ming)?|docker|android studio|virtual machine|vm|ai|"
+                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE);
     private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE);
     /**
      * Công suất nguồn hãng khuyên cho cả máy, bổ sung GPU_PSU cho card yếu / mạnh mà máy cũ hay có. GPU_PSU của trang lắp máy
@@ -623,7 +674,7 @@ public class UpgradeService {
             Map.entry("ryzen3-3100", 88), Map.entry("ryzen3-3300x", 98), Map.entry("ryzen5-3500x", 92), Map.entry("ryzen5-3600", 100),
             Map.entry("ryzen5-3600x", 102), Map.entry("ryzen7-3700x", 104), Map.entry("ryzen5-4500", 90), Map.entry("ryzen5-5500", 104),
             Map.entry("ryzen5-5600g", 105), Map.entry("ryzen5-5600", 118), Map.entry("ryzen5-5600x", 122), Map.entry("ryzen7-5700x", 125),
-            Map.entry("ryzen7-5800x", 128), Map.entry("ryzen7-5700x3d", 140), Map.entry("ryzen7-5800x3d", 148),
+            Map.entry("ryzen7-5800x", 128), Map.entry("ryzen7-5700", 120), Map.entry("ryzen5-5600x3d", 138), Map.entry("ryzen7-5700x3d", 140), Map.entry("ryzen7-5800x3d", 148),
             Map.entry("ryzen5-7500f", 140), Map.entry("ryzen5-7600", 140), Map.entry("ryzen5-7600x", 145), Map.entry("ryzen7-7700", 150),
             Map.entry("ryzen7-7800x3d", 180), Map.entry("ryzen5-9600x", 155), Map.entry("ryzen7-9700x", 160), Map.entry("ryzen7-9800x3d", 200));
 
@@ -743,7 +794,7 @@ public class UpgradeService {
         }
         List<Line> lines = plan.items().stream().map(p -> new Line("upgrade_" + p.category(), p.category(),
                 ("add".equals(p.action()) ? "Extra " : "New ") + CATEGORIES.get(p.category()).toLowerCase(Locale.ROOT), p.qty(),
-                ChatService.purchasedSpec(p.category(), p.product().title(), p.spec()), p.reason(), p.total(), p.total(),
+                spec(p), p.reason(), p.total(), p.total(),
                 p.offer().imageUrl() != null ? p.offer().imageUrl() : p.product().imageUrl(), p.product().url(), p.product().title(),
                 p.product().shop(), p.offer().inStock(), p.offer().warrantyMonths(), p.offer().checkedAt(), List.of(), true)).toList();
         String summary = plan.summary() == null || plan.summary().isBlank() ? "Your upgrade plan" : plan.summary();
@@ -839,6 +890,33 @@ public class UpgradeService {
         String reason = why.isEmpty() ? "store prices and stock could not be confirmed in time" : String.join("; ", why);
         return "I could not confirm an upgrade for your PC: " + reason + ". You can try again later, raise the budget, or fill in more "
                 + "of your current parts (Windows: Settings › System › About, Task Manager › Performance).";
+    }
+
+    /** Thông số trên thẻ; RAM mua nhiều sản phẩm thì ghi đúng số lượng (trợ lý hay ghi "single stick" cho từng sản phẩm) */
+    static String spec(Pick p) {
+        if ("ram".equals(p.category()) && p.qty() > 1) {
+            Integer size = ChatService.amount("ram", p.product().title());
+            String type = ProductRules.read("ram", p.product().title()).ramType();
+            return p.qty() + " × " + (size == null ? "" : size + " GB ") + (type == null ? "" : type) + (size == null ? "" : " (" + p.qty() * size + " GB)");
+        }
+        return ChatService.purchasedSpec(p.category(), p.product().title(), p.spec());
+    }
+
+    private static final Pattern PREVIOUS_PRICE = Pattern.compile("\\((\\d{4,12}) VND\\)");
+    private static final Pattern CHEAPER = Pattern.compile(
+            "\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern LAPTOP_WORDS = Pattern.compile(
+            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MOBILE_CPU = Pattern.compile(
+            "\\bi[3579][\\s-]*\\d{4,5}(u|h|hs|hx|hk|g[1-7]|p|y)\\b|\\bryzen\\s*[3579]\\s*\\d{4}(u|h|hs|hx)\\b|\\bultra\\s*[579]\\s*\\d{3}(h|u|v)\\b",
+            Pattern.CASE_INSENSITIVE);
+
+    /** Laptop (theo lời người dùng hay mã CPU di động như i5-1135G7, Ryzen 5 5500U): app chỉ tư vấn máy để bàn */
+    static boolean laptop(UpgradeInfo pc) {
+        String all = String.join(" ", Objects.requireNonNullElse(pc.cpu(), ""), Objects.requireNonNullElse(pc.motherboard(), ""),
+                Objects.requireNonNullElse(pc.gpu(), ""), pc.purpose());
+        return LAPTOP_WORDS.matcher(all).find() || MOBILE_CPU.matcher(Objects.requireNonNullElse(pc.cpu(), "")).find();
     }
 
     private static String text(Object o) {

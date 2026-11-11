@@ -95,7 +95,7 @@ function CompactCard({ card, action }: { card: BuildCard; action?: ReactNode }) 
         {compatText(card).short}
       </p>
       <p className="mt-0.5 text-[14px] text-ink">
-        {card.items.length} components{total && `, estimated ${vndRange(total.min, total.max)}`}
+        {card.items.length} {card.items.length === 1 ? 'component' : 'components'}{total && `, estimated ${vndRange(total.min, total.max)}`}
       </p>
       {action && <div className="mt-3">{action}</div>}
     </div>

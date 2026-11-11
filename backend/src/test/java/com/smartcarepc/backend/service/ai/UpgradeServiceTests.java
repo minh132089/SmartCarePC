@@ -330,6 +330,68 @@ class UpgradeServiceTests {
         assertThat(UpgradeService.gpuRank("GTX 750 Ti 2GB")).isEqualTo(4);
     }
 
+    @Test
+    void laptopThiKhongTuVan() {
+        var laptop = new UpgradeInfo("Intel Core i5-1135G7", "", "8GB", "Intel Iris Xe", "", "", "unknown", "Study. It is slow", 4_000_000L);
+        var res = service.reply(ask(laptop), s -> { });
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("desktop PCs");
+        assertThat(UpgradeService.laptop(new UpgradeInfo("Ryzen 5 5500U", "", "", "", "", "", null, "Office", 2_000_000L))).isTrue();
+        assertThat(UpgradeService.laptop(new UpgradeInfo("", "", "", "", "", "", null, "Học bài trên máy tính xách tay", 2_000_000L))).isTrue();
+        assertThat(UpgradeService.laptop(pc("450W", 2_000_000L))).isFalse();
+    }
+
+    @Test
+    void hoiReHonThiKeHoachMoiPhaiReHon() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-1\"},{\"category\":\"psu\",\"product_id\":\"s1-3\"}]}"),
+                toolCall("p2", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}"),
+                answer("The RTX 4060 is the cheaper pick."));
+        var history = List.of(new Message("user", "Please suggest an upgrade for my PC."),
+                new Message("assistant", "Buy an RTX 4060.\n\n[Previous upgrade plan: gpu: VGA GIGABYTE GeForce RTX 4060 WINDFORCE OC 8GB (8450000 VND)]"),
+                new Message("user", "Is there a cheaper graphics card?"));
+        var res = service.reply(new ChatRequest(history, null, null, "upgrade", pc("450W", 20_000_000L)), s -> { });
+        assertThat(toolResult(2)).contains("cheaper option");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.priceMaxVnd()).isLessThan(8_450_000L));
+    }
+
+    @Test
+    void lanDeXuatCuoiBoMonChuaKiemTraDuocGia() {
+        var hdd = new UpgradeInfo("Intel Core i5-9400F", "ASUS PRIME B365M-K", "8GB DDR4", "GTX 1050 2GB", "HDD 1TB", "350W", "standard",
+                "Gaming. League of Legends", 5_000_000L);
+        var sata = product("SSD SSTC M100 512GB SATA III 2.5 inch", 1_790_000L);
+        when(search.offer(sata.url())).thenReturn(new Offer(sata.title(), sata.shop(), sata.priceVnd(), null, sata.url(), null, true, 36, Instant.now()));
+        when(search.pageChecked(RTX4060.url())).thenReturn(false);
+        when(search.search(any())).thenReturn(List.of(RTX4060, sata));
+        String both = "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-1\"},{\"category\":\"ssd\",\"product_id\":\"s1-2\"}]}";
+        reply(toolCall("s", "search_products", "{\"query\":\"x\"}"), toolCall("p1", "propose_upgrade", both), toolCall("p2", "propose_upgrade", both),
+                toolCall("p3", "propose_upgrade", both), toolCall("p4", "propose_upgrade", both), answer("Add the SSD now."));
+        var res = service.reply(ask(hdd), s -> { });
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.category()).isEqualTo("ssd"));
+        assertThat(res.build().unknowns()).extracting(Issue::rule).contains("DROPPED");
+    }
+
+    @Test
+    void thongSoRamGhiDungSoThanh() {
+        var stick = product("RAM PC Kingmax Blade X 8GB DDR4 3200MHz", 1_430_000L);
+        var p = new UpgradeService.Pick("ram", "add", stick, new Offer(stick.title(), "GEARVN", stick.priceVnd(), null, stick.url(), null, true, 36, Instant.now()),
+                2, "8 GB DDR4 3200, single stick", null);
+        assertThat(UpgradeService.spec(p)).isEqualTo("2 × 8 GB DDR4 (16 GB)");
+    }
+
+    @Test
+    void chiChoiGameDaCo16GbThiKhongMuaThemRam() {
+        var ram16 = product("Ram SSTC 16GB DDR4 3200MHz", 2_990_000L);
+        var game = new UpgradeInfo("Intel Core i5-10400F", "ASUS PRIME B460M-A", "16GB DDR4", "GTX 1650", "", "450W", "standard",
+                "Gaming. Cyberpunk 2077", 12_000_000L);
+        assertThat(UpgradeService.fit(game, List.of(pick("ram", "add", ram16)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("enough for gaming"));
+        var stream = new UpgradeInfo("Intel Core i5-10400F", "ASUS PRIME B460M-A", "16GB DDR4", "GTX 1650", "", "450W", "standard",
+                "Gaming and streaming on Twitch", 12_000_000L);
+        assertThat(UpgradeService.fit(stream, List.of(pick("ram", "add", ram16)), new ArrayList<>(), new ArrayList<>()))
+                .noneSatisfy(e -> assertThat(e).contains("enough for gaming"));
+    }
+
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
         return new UpgradeService.Pick(category, action, p, new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()),
                 1, null, null);

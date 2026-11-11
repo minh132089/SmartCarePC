@@ -46,8 +46,9 @@ type Draft = {
   uses: string[]
   details: string
   budget: string
+  laptop: boolean
 }
-const EMPTY: Draft = { cpu: '', motherboard: '', ramSize: '', ramType: '', gpu: '', noGpu: false, storage: '', psu: '', caseSize: '', uses: [], details: '', budget: '' }
+const EMPTY: Draft = { cpu: '', motherboard: '', ramSize: '', ramType: '', gpu: '', noGpu: false, storage: '', psu: '', caseSize: '', uses: [], details: '', budget: '', laptop: false }
 
 /** Bản nháp chỉ lưu trong trình duyệt này để quay lại không phải gõ lại; bị chặn lưu thì vẫn dùng được trong phiên */
 function loadDraft(): Draft {
@@ -97,7 +98,7 @@ export function UpgradePage() {
   const form = toForm(draft)
   const budget = budgetOf(draft.budget)
   const budgetError = draft.budget.trim() && (budget == null || budget < 300_000 || budget > 200_000_000)
-  const ready = form.purpose.length > 0 && budget != null && !budgetError
+  const ready = form.purpose.length > 0 && budget != null && !budgetError && !draft.laptop
   // Thẻ theo câu trả lời mới nhất: câu đó kết luận không nên mua gì thì không còn trưng thẻ mua hàng cũ
   const latest = messages.findLast((m) => m.role === 'assistant')?.build ?? null
 
@@ -155,6 +156,15 @@ export function UpgradePage() {
 
           <section className="mt-7 rounded-[24px] bg-panel p-5 ring-1 ring-line md:p-6">
             <h2 className="text-[17px] font-semibold text-ink">Your current PC</h2>
+            <label className="mt-2 flex items-center gap-2 text-[14px] text-ink-2">
+              <input type="checkbox" checked={draft.laptop} onChange={(e) => update({ laptop: e.target.checked })} /> I use a laptop
+            </label>
+            {draft.laptop && (
+              <p role="status" className="mt-2 rounded-xl bg-info-bg p-3 text-[14px] leading-[1.5] text-info">
+                This adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have soldered memory and a single M.2
+                slot, so check the manufacturer's service manual or ask a repair shop.
+              </p>
+            )}
             <p className="mt-1 text-[13px] leading-[1.5] text-ink-2">
               Leave a box empty if you do not know. On Windows, <strong>Settings › System › About</strong> shows the processor and RAM.{' '}
               <strong>Task Manager › Performance</strong> shows the graphics card and drives. The power supply wattage is printed on its label.
@@ -218,7 +228,7 @@ export function UpgradePage() {
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <PrimaryButton onClick={submit} disabled={!ready || busy}>Get my upgrade plan</PrimaryButton>
-            {!ready && <span className="text-[13px] text-ink-3">Choose at least one use and enter your budget.</span>}
+            {!ready && !draft.laptop && <span className="text-[13px] text-ink-3">Choose at least one use and enter your budget.</span>}
             {messages.length > 0 && <button onClick={() => setEditing(false)} className={`text-[14px] font-medium text-link hover:underline ${focus}`}>Back to my plan</button>}
           </div>
           <p className="mt-3 text-[12px] text-ink-3">This takes about a minute while we check store prices. Your answers stay in this browser.</p>

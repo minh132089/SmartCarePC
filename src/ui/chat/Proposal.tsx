@@ -80,7 +80,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       )}
       {total && (
         <p className="mt-3 text-[12px] leading-snug text-ink-3">
-          Store prices were checked during the search and may have changed. Unverified prices are references from Google; open the store link to confirm. Estimated prices are based on general specifications. Monitor, keyboard and mouse are not included.
+          Store prices were checked during the search and may have changed. Unverified prices are references from Google; open the store link to confirm. Estimated prices are based on general specifications.{card.items.every((i) => i.code.startsWith('upgrade_')) ? '' : ' Monitor, keyboard and mouse are not included.'}
         </p>
       )}
     </div>
@@ -91,7 +91,7 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
 function Total({ min, max, budget }: { min: number; max: number; budget: number | null }) {
   let verdict: { text: string; tone: string } | null = null
   if (budget != null) {
-    if (max <= budget) verdict = { text: `Within your budget of ${vnd(budget)}, with at least ${vnd(budget - max)}.`, tone: 'text-ok' }
+    if (max <= budget) verdict = { text: `Within your budget of ${vnd(budget)}, with at least ${vnd(budget - max)} to spare.`, tone: 'text-ok' }
     else if (min <= budget) verdict = { text: `Budget ${vnd(budget)}: may exceed it by up to ${vnd(max - budget)} at the upper price estimate.`, tone: 'text-warn' }
     else verdict = { text: `Exceeds your budget of ${vnd(budget)} by approximately ${vnd(min - budget)}.`, tone: 'text-bad' }
   }
