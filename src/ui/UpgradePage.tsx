@@ -98,7 +98,8 @@ export function UpgradePage() {
   const budget = budgetOf(draft.budget)
   const budgetError = draft.budget.trim() && (budget == null || budget < 300_000 || budget > 200_000_000)
   const ready = form.purpose.length > 0 && budget != null && !budgetError
-  const latest = messages.findLast((m) => m.build)?.build ?? null
+  // Thẻ theo câu trả lời mới nhất: câu đó kết luận không nên mua gì thì không còn trưng thẻ mua hàng cũ
+  const latest = messages.findLast((m) => m.role === 'assistant')?.build ?? null
 
   useEffect(() => saveDraft(draft), [draft])
   useEffect(() => {
@@ -242,7 +243,7 @@ export function UpgradePage() {
               </div>
             ) : (
               <div className="rounded-[24px] bg-panel p-5 text-[14px] leading-[1.5] text-ink-2 ring-1 ring-line">
-                {busy ? 'Your plan appears here once store prices and fit have been checked.' : 'No upgrade plan with confirmed prices yet. Ask a follow-up or edit your PC details.'}
+                {busy ? 'Your plan appears here once store prices and fit have been checked.' : 'The latest answer has no upgrade plan to buy. Ask a follow-up or edit your PC details.'}
               </div>
             )}
           </aside>

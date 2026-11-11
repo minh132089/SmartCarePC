@@ -200,6 +200,56 @@ class UpgradeServiceTests {
         assertThat(UpgradeService.noPlan(turn)).contains("cost more than your 6 million VND budget").doesNotContain("9.08");
     }
 
+    @Test
+    void boDoiCuKhongDocDuocSocketThiKhongDeXuatCpu() {
+        var ddr3 = new UpgradeInfo("Intel Core i5-4460", "ASUS H81M-K", "8GB DDR3", "GTX 750 Ti", "", "400W", "standard", "Gaming", 6_000_000L);
+        assertThat(UpgradeService.fit(ddr3, List.of(pick("cpu", "replace", product("CPU Intel Core i5-12400", 3_500_000L))),
+                new ArrayList<>(), new ArrayList<>())).singleElement().asString().contains("could not be identified");
+    }
+
+    @Test
+    void cpuKhongCoDoHoaTichHopMaMayKhongCoCardThiChan() {
+        var info = new UpgradeInfo("Intel Core i3-12100", "ASUS PRIME H610M-K D4", "16GB DDR4", "none", "", "450W", "standard", "Office work", 5_000_000L);
+        assertThat(UpgradeService.fit(info, List.of(pick("cpu", "replace", product("CPU Intel Core i5-12400F", 2_990_000L))),
+                new ArrayList<>(), new ArrayList<>())).singleElement().asString().contains("no built-in graphics");
+        assertThat(UpgradeService.fit(info, List.of(pick("cpu", "replace", product("CPU Intel Core i5-12400", 3_490_000L))),
+                new ArrayList<>(), new ArrayList<>())).isEmpty();
+    }
+
+    @Test
+    void nguonMoiPhaiDuChoCardDangGiu() {
+        var info = new UpgradeInfo("AMD Ryzen 7 5700X", "MSI B550M PRO-VDH", "32GB DDR4", "RTX 4070 12GB", "", "450W", "standard", "Gaming", 3_000_000L);
+        var psu500 = product("Nguồn Xigmatek X-Power III 500W", 900_000L);
+        assertThat(UpgradeService.fit(info, List.of(pick("psu", "replace", psu500)), new ArrayList<>(), new ArrayList<>()))
+                .singleElement().asString().contains("below the 650W");
+        assertThat(UpgradeService.fit(info, List.of(pick("psu", "replace", PSU650)), new ArrayList<>(), new ArrayList<>())).isEmpty();
+    }
+
+    @Test
+    void cauTraLoiCuoiChiGiuSoTienDaKiemTraVaBoLink() {
+        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
+        turn.plan = new UpgradeService.Plan("Gaming", List.of(pick("gpu", "replace", RTX4060)), List.of(), List.of());
+        String reply = UpgradeService.checkedReply("""
+                Gaming on 10 million VND. Buy the RTX 4060 for about 6 million VND. See [the store](https://shop.example/x) or www.shop.example/y for details.
+                It costs 7.99 million and leaves 2 million spare. A cheaper RX 6600 is around 5.2M VND.
+                Check your board has 2 M.2 slots and a free M.2 slot.""", turn);
+        assertThat(reply).contains("Gaming on 10 million VND.", "It costs 7.99 million and leaves 2 million spare.", "2 M.2 slots")
+                .contains("See the store or  for details.").doesNotContain("about 6 million", "https://", "www.", "RX 6600", "5.2M");
+        assertThat(UpgradeService.amounts("VND 500,000 or 1.190.000đ, and 8.45M")).containsExactly(8_450_000L, 500_000L, 1_190_000L);
+        // Mã bo mạch / chipset không phải số tiền
+        assertThat(UpgradeService.amounts("Your B450M DS3H, a B760M-A or H610M board, 2 M.2 slots")).isEmpty();
+    }
+
+    @Test
+    void keHoachRongVanKhongDuocBiaGia() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
+                answer("Nothing useful fits. An RTX 4060 costs 8.5 million VND, so save up."));
+        var res = service.reply(ask(pc("450W", 500_000L)), s -> { });
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).doesNotContain("8.5 million").contains("Nothing useful fits.");
+    }
+
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
         return new UpgradeService.Pick(category, action, p, new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()),
                 1, null, null);
@@ -212,7 +262,7 @@ class UpgradeServiceTests {
         var errors = UpgradeService.fit(pc("550W", 5_000_000L), List.of(new UpgradeService.Pick("cpu", "replace", cpu, offer, 1, null, null)),
                 new ArrayList<>(), new ArrayList<>());
 
-        assertThat(errors).singleElement().asString().contains("LGA1700").contains("LGA1200");
+        assertThat(errors).anySatisfy(e -> assertThat(e).contains("LGA1700", "LGA1200"));
     }
 
     @Test

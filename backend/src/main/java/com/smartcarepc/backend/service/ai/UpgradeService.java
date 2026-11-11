@@ -169,6 +169,8 @@ public class UpgradeService {
         final Map<String, ProductSearch.Product> results = new ConcurrentHashMap<>();
         final AtomicInteger searches = new AtomicInteger();
         volatile Plan plan;
+        /** Các khoản tiền người dùng tự viết trong hội thoại: câu trả lời được nhắc lại, không coi là giá bịa */
+        volatile List<Long> userAmounts = List.of();
         /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
         volatile List<String> lastErrors = List.of();
 
@@ -202,6 +204,8 @@ public class UpgradeService {
         if (messages.size() == 1 || !"user".equals(messages.getLast().get("role"))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The final message must be a user question");
         }
+        turn.userAmounts = request.messages().stream().filter(m -> "user".equals(m.role()))
+                .flatMap(m -> amounts(m.content()).stream()).toList();
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false;
         for (int round = 0; round < MAX_ROUNDS && !Io.expired(); round++) {
@@ -437,21 +441,43 @@ public class UpgradeService {
             unknowns.add(new Issue("RAM_SLOTS", "Adding sticks needs free RAM slots, and mixed sticks may run at the slower speed. "
                     + "Open the side panel and count the empty slots before buying."));
         }
-        // CPU mới giữ bo cũ: bo không rõ thì socket lấy theo CPU đang dùng (bo đang chạy được CPU đó)
+        // CPU mới giữ bo cũ: socket theo bo (nếu đọc được tên), không thì theo CPU đang dùng (bo đang chạy được CPU đó).
+        // Không xác định được socket nào (vd bo H81 đời cũ app không có trong bảng) thì không đề xuất CPU.
         Pick cpu = by.get("cpu");
-        if (cpu != null && !by.containsKey("motherboard") && !UpgradeInfo.known(pc.motherboard())) {
+        if (cpu != null && !by.containsKey("motherboard")) {
             String socket = ProductRules.read("cpu", cpu.product().title()).socket();
-            String current = UpgradeInfo.known(pc.cpu()) ? ProductRules.read("cpu", pc.cpu()).socket() : null;
+            String board = UpgradeInfo.known(pc.motherboard()) ? ProductRules.read("motherboard", pc.motherboard()).socket() : null;
+            String current = board != null ? board : UpgradeInfo.known(pc.cpu()) ? ProductRules.read("cpu", pc.cpu()).socket() : null;
             if (current == null) {
-                errors.add("cpu: neither the motherboard nor the current CPU's socket is known, so a new CPU cannot be matched. Remove the "
-                        + "CPU line and tell the owner to find the motherboard model first.");
-            } else if (socket != null && !socket.equals(current)) {
-                errors.add("cpu: \"" + cpu.product().title() + "\" uses socket " + socket + ", but the current CPU (and so the motherboard) uses "
-                        + current + ". Choose a " + current + " CPU, or include a matching motherboard.");
-            } else {
+                errors.add("cpu: this PC's CPU socket could not be identified from the motherboard or the current CPU, so a new CPU cannot be "
+                        + "matched. Remove the CPU line and tell the owner to check the motherboard model first.");
+            } else if (socket == null) {
+                errors.add("cpu: the socket of \"" + cpu.product().title() + "\" could not be read. Choose a CPU listed with its exact model.");
+            } else if (!socket.equals(current)) {
+                if (errors.stream().noneMatch(e -> e.contains("socket"))) {
+                    errors.add("cpu: \"" + cpu.product().title() + "\" uses socket " + socket + ", but this PC's motherboard uses " + current
+                            + ". Choose a " + current + " CPU, or include a matching motherboard.");
+                }
+            } else if (board == null) {
                 unknowns.add(new Issue("CPU_BOARD_UNKNOWN", "Your motherboard model is unknown. Its socket matches your current CPU, but it may "
                         + "need a BIOS update or may not support this CPU. Find the model in Windows (System Information › BaseBoard Product) "
                         + "and check its CPU support list before buying."));
+            }
+        }
+        // CPU mới không có đồ họa tích hợp (đuôi F) mà máy không có card rời: lắp xong màn hình không lên
+        Pick newGpu = by.get("gpu");
+        if (cpu != null && newGpu == null) {
+            Boolean igpu = ProductRules.hasIgpu(cpu.product().title());
+            boolean noCard = "none".equalsIgnoreCase(Objects.requireNonNullElse(pc.gpu(), "").strip());
+            if (noCard && Boolean.FALSE.equals(igpu)) {
+                errors.add("cpu: \"" + cpu.product().title() + "\" has no built-in graphics and this PC has no graphics card, so the screen "
+                        + "would stay black. Choose a CPU with built-in graphics (not an F model) or add a graphics card.");
+            } else if (noCard && igpu == null) {
+                unknowns.add(new Issue("CPU_IGPU", "Your PC has no graphics card, so the new CPU must have built-in graphics. Check this on "
+                        + "the CPU's product page before buying."));
+            } else if (!UpgradeInfo.known(pc.gpu()) && Boolean.FALSE.equals(igpu)) {
+                unknowns.add(new Issue("CPU_IGPU", "This CPU has no built-in graphics and works only with a separate graphics card. "
+                        + "Check that your PC has one."));
             }
         }
         // Card mới: nguồn phải đủ công suất hãng chip khuyên dùng
@@ -465,17 +491,19 @@ public class UpgradeService {
             errors.add("psu: the current " + current + "W power supply already covers the " + need + "W this PC needs. Remove the power "
                     + "supply line: buying one would waste the budget.");
         }
+        Integer fresh = psu == null ? null : ChatService.amount("psu", psu.product().title());
+        if (fresh != null && fresh < need) {
+            errors.add("psu: \"" + psu.product().title() + "\" (" + fresh + "W) is below the " + need + "W this PC's graphics card needs.");
+        }
         if (psu != null && SFX.matcher(Objects.requireNonNullElse(pc.psu(), "")).find() && !SFX.matcher(psu.product().title()).find()) {
             errors.add("psu: the current power supply is the small SFX size, so a standard ATX unit will not fit this case. Choose an SFX "
                     + "power supply.");
         }
         if (gpu != null) {
-            Integer watts = psu != null ? ChatService.amount("psu", psu.product().title()) : current;
-            if (watts != null && watts < need) {
-                errors.add(psu != null
-                        ? "psu: \"" + psu.product().title() + "\" (" + watts + "W) is below the " + need + "W recommended for this graphics card."
-                        : "gpu: the current " + watts + "W power supply is below the " + need + "W recommended for \"" + gpu.product().title()
-                                + "\". Add a power supply of at least " + need + "W, or choose a card that needs less power.");
+            Integer watts = psu != null ? fresh : current;
+            if (psu == null && watts != null && watts < need) {
+                errors.add("gpu: the current " + watts + "W power supply is below the " + need + "W recommended for \"" + gpu.product().title()
+                        + "\". Add a power supply of at least " + need + "W, or choose a card that needs less power.");
             } else if (watts == null) {
                 unknowns.add(new Issue("PSU_UNKNOWN", "This graphics card needs a power supply of at least " + need + "W with the right "
                         + "PCIe power cable. Read the label on the side of your power supply before buying."));
@@ -596,13 +624,15 @@ public class UpgradeService {
     /** Câu trả lời và thẻ kế hoạch. Không có kế hoạch đã kiểm tra thì không đưa giá nào. */
     private ChatResponse respond(String draft, Turn turn) {
         Plan plan = turn.plan;
-        String reply = draft == null ? null : draft.replaceAll("(?s)<think>.*?</think>", "").strip();
+        String reply = draft == null ? null : checkedReply(draft.replaceAll("(?s)<think>.*?</think>", ""), turn);
         if (plan == null) return new ChatResponse(noPlan(turn));
         if (plan.items().isEmpty()) {
-            return new ChatResponse(reply == null || reply.isEmpty()
-                    ? "I could not find an upgrade within " + ChatService.millions(turn.pc.budgetVnd()) + " that would make a noticeable "
-                            + "difference for your use."
-                    : reply);
+            // Câu của trợ lý bị bỏ hết (toàn số tiền chưa kiểm tra): có lỗi đề xuất trước đó thì nói đúng lý do đó
+            if (reply == null || reply.isEmpty()) {
+                return new ChatResponse(!turn.lastErrors.isEmpty() ? noPlan(turn) : "I could not find an upgrade within "
+                        + ChatService.millions(turn.pc.budgetVnd()) + " that would make a noticeable difference for your use.");
+            }
+            return new ChatResponse(reply);
         }
         if (reply == null || reply.isEmpty()) {
             reply = "Here is an upgrade plan for your PC. The card lists each part, its store price and what to check before buying.";
@@ -616,6 +646,67 @@ public class UpgradeService {
         var card = new BuildCard(lines, true, List.of(), plan.warnings(), summary, turn.pc.budgetVnd(), null, null, 1,
                 plan.unknowns(), List.of(), null);
         return new ChatResponse(reply, card);
+    }
+
+    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DONG = Pattern.compile(
+            "(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
+                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LINK = Pattern.compile("\\[([^\\]]*)\\]\\(\\s*https?://[^)]*\\)|https?://\\S+|www\\.\\S+");
+
+    /** Mọi khoản tiền (đồng) viết trong câu: "8.45 million", "1.2M", "VND 500,000", "1.190.000đ" */
+    static List<Long> amounts(String text) {
+        List<Long> out = new ArrayList<>();
+        if (text == null) return out;
+        var m = MILLIONS.matcher(text);
+        while (m.find()) {
+            try {
+                out.add(Math.round(Double.parseDouble(m.group(1).replace(',', '.')) * 1_000_000));
+            } catch (NumberFormatException ignored) { }
+        }
+        var d = DONG.matcher(text);
+        while (d.find()) {
+            String n = d.group(1) != null ? d.group(1) : d.group(2);
+            out.add(Long.parseLong(n.replaceAll("[.,]", "")));
+        }
+        return out;
+    }
+
+    /**
+     * Câu trả lời cuối của trợ lý chỉ được nêu số tiền có trong dữ liệu đã kiểm tra (ngân sách, số người dùng viết, giá từng
+     * món, tổng, tiền còn lại) và không được có link (link nằm trên thẻ, lấy từ kết quả tìm kiếm). Câu nào có số tiền khác
+     * thì bỏ cả câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
+     */
+    static String checkedReply(String draft, Turn turn) {
+        if (draft == null) return null;
+        List<Long> allowed = new ArrayList<>(turn.userAmounts);
+        allowed.add(turn.pc.budgetVnd());
+        Plan plan = turn.plan;
+        if (plan != null && !plan.items().isEmpty()) {
+            long total = 0;
+            for (var p : plan.items()) {
+                allowed.add(p.total());
+                allowed.add(p.offer().priceVnd());
+                total += p.total();
+            }
+            allowed.add(total);
+            allowed.add(turn.pc.budgetVnd() - total);
+        }
+        StringBuilder out = new StringBuilder();
+        for (String line : draft.strip().split("\n", -1)) {
+            String kept = java.util.Arrays.stream(LINK.matcher(line).replaceAll(r -> r.group(1) != null ? java.util.regex.Matcher.quoteReplacement(r.group(1)) : "")
+                            .split("(?<=[.!?])\\s+"))
+                    .filter(sentence -> {
+                        boolean ok = amounts(sentence).stream().allMatch(a -> allowed.stream()
+                                .anyMatch(known -> Math.abs(a - known) <= Math.max(60_000, known * 0.03)));
+                        if (!ok) log.info("Upgrade: bỏ câu có số tiền chưa kiểm tra: {} (số được phép {})", sentence, allowed);
+                        return ok;
+                    })
+                    .collect(java.util.stream.Collectors.joining(" "));
+            if (!kept.isBlank() || line.isBlank()) out.append(kept.strip()).append('\n');
+        }
+        String text = out.toString().replaceAll("\n{3,}", "\n\n").strip();
+        return text.isEmpty() ? null : text;
     }
 
     /** Câu trả lời khi không chốt được kế hoạch: theo lỗi của lần đề xuất cuối, không đưa giá chưa kiểm tra */
