@@ -1487,27 +1487,32 @@ public class ChatService {
             "(?:card|gpu|vga|vram|rtx|gtx|radeon|rx|arc)(?:(?!\\b(?:ram|ssd|cpu)\\b)[^.!?]){0,35}\\b(6|8|10|12|16|20|24)\\s*g(?:b)?\\b|"
                     + "\\b(6|8|10|12|16|20|24)\\s*g(?:b)?\\s*(?:vram|card|gpu|vga)");
 
-    /**
-     * Mức tối thiểu theo nhu cầu người dùng kể: đồ họa / dựng video và game giữ RAM 16GB, SSD 512GB; học, văn phòng hạ được
-     * tới RAM 8GB, SSD 256GB. Người dùng nói rõ dung lượng (vd "RAM 16GB", "SSD 1TB") thì không hạ dưới mức đó. Không nhận
-     * ra nhu cầu thì null (không tự hạ).
-     */
-    static Needs needs(List<String> userTexts) {
-        String all = String.join(" ", userTexts.stream().filter(Objects::nonNull).toList()).toLowerCase();
-        Integer ram = null, ssd = null;
+    /** Explicit memory capacity, newest request first; shared by build and upgrade advice. */
+    static Integer requestedRam(List<String> userTexts) {
         for (String raw : userTexts) {
             if (raw == null) continue;
-            String layout = ramLayout(List.of(raw));
-            var kit = layout == null ? null : java.util.regex.Pattern.compile("(\\d+)x(\\d+)GB").matcher(layout);
-            var r = RAM_ASKED.matcher(raw);
-            if (kit != null && kit.find()) { ram = Integer.parseInt(kit.group(1)) * Integer.parseInt(kit.group(2)); break; }
-            if (r.find()) { ram = Integer.parseInt(r.group(1) != null ? r.group(1) : r.group(2)); break; }
-            // Follow-up "muốn sử dụng 16GB, vẫn dùng RTX": dung lượng không gắn với GPU/SSD là RAM.
-            var bare = java.util.regex.Pattern.compile("(?iu)\\b(?:muốn|cần)\\s+(?:(?:sử dụng|dùng)\\s+)?(8|16|32|64|128)\\s*gb\\b(?!\\s*(?:vram|card|gpu|vga|ssd|ổ))").matcher(raw);
-            if (bare.find() && !GPU_VRAM_ASKED.matcher(raw.toLowerCase(java.util.Locale.ROOT)).find()) {
-                ram = Integer.parseInt(bare.group(1)); break;
-            }
+            try {
+                String layout = ramLayout(List.of(raw));
+                var kit = layout == null ? null : java.util.regex.Pattern.compile("(\\d+)x(\\d+)GB").matcher(layout);
+                var r = RAM_ASKED.matcher(raw);
+                long ram = 0;
+                if (kit != null && kit.find()) ram = Math.multiplyExact(Long.parseLong(kit.group(1)), Long.parseLong(kit.group(2)));
+                else if (r.find()) ram = Long.parseLong(r.group(1) != null ? r.group(1) : r.group(2));
+                // Follow-up "muốn sử dụng 16GB, vẫn dùng RTX": dung lượng không gắn với GPU/SSD là RAM.
+                var bare = java.util.regex.Pattern.compile("(?iu)\\b(?:muốn|cần)\\s+(?:(?:sử dụng|dùng)\\s+)?(8|16|32|64|128)\\s*gb\\b(?!\\s*(?:vram|card|gpu|vga|ssd|ổ))").matcher(raw);
+                if (ram == 0 && bare.find() && !GPU_VRAM_ASKED.matcher(raw.toLowerCase(java.util.Locale.ROOT)).find()) {
+                    ram = Long.parseLong(bare.group(1));
+                }
+                if (ram > 0 && ram <= 4096) return (int) ram;
+            } catch (NumberFormatException | ArithmeticException ignored) { }
         }
+        return null;
+    }
+
+    /** Default capacity floors follow the workload; explicit capacities override those defaults. */
+    static Needs needs(List<String> userTexts) {
+        String all = String.join(" ", userTexts.stream().filter(Objects::nonNull).toList()).toLowerCase();
+        Integer ram = requestedRam(userTexts), ssd = null;
         for (String raw : userTexts) {
             if (raw == null) continue;
             var d = SSD_ASKED.matcher(raw);

@@ -12,7 +12,7 @@ class UpgradeLiveGateTests(unittest.TestCase):
                              oldRamSticks=2, oldRamGb=16, minRamGb=32)
 
     def result(self, **changes):
-        return {'reply': 'Replace the old RAM with this kit.', 'build': {'items': [self.line | changes]}}
+        return {'reply': 'Replace the old RAM with this kit.', 'build': {'items': [self.line | changes], 'budgetVnd': 5_000_000}}
 
     def test_two_module_replacement_within_budget(self):
         self.assertEqual(check(self.case, self.result(), self.expected)['issues'], [])
@@ -36,6 +36,21 @@ class UpgradeLiveGateTests(unittest.TestCase):
 
     def test_refusal_allowed_only_when_case_explicitly_allows_it(self):
         self.assertEqual(check(self.case, {'reply': 'No result'}, self.expected | {'allowNoCard': True})['issues'], [])
+
+    def test_followup_budget_overrides_the_original_form_in_the_oracle(self):
+        issues = check(self.case, self.result(), self.expected | {'budgetVnd': 3_000_000})['issues']
+        self.assertIn('Exceeded upgrade budget', issues)
+        self.assertIn('Card does not use the current requested budget', issues)
+
+    def test_raised_budget_does_not_fail_against_the_stale_form(self):
+        result = self.result(priceMaxVnd=6_000_000)
+        result['build']['budgetVnd'] = 7_000_000
+        self.assertEqual(check(self.case, result, self.expected | {'budgetVnd': 7_000_000})['issues'], [])
+
+    def test_adding_32gb_to_16gb_cannot_pass_an_exact_32gb_request(self):
+        result = self.result(name='Extra memory')
+        expected = self.expected | {'maxRamSticks': 4, 'maxRamGb': 32}
+        self.assertIn('RAM plan buys more capacity than requested', check(self.case, result, expected)['issues'])
 
 
 if __name__ == '__main__':

@@ -1,0 +1,26 @@
+{
+  "status": "SCOPED_VALIDATION_PASSED",
+  "baseCommit": "6008a5eaa07d371be8ca26abda89b93a4104b468",
+  "branch": "feature/ui-motion",
+  "evidence": "/Users/yuuki2/Documents/PCsmartcare-testloop/upgrade-live-20261111-followup-final",
+  "backend": {
+    "tests": 372,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "upgradeTests": 57,
+  "evaluatorTests": 33,
+  "liveSteps": 12,
+  "livePassed": 12,
+  "uniqueProductPages": 6,
+  "priceObservations": 7,
+  "maxPriceErrorVnd": 0,
+  "maxCaptureGapSeconds": 138.249265,
+  "runtimeAndSourceMatch": true,
+  "guiTestedThisRound": false,
+  "pushedOrDeployed": false,
+  "testBackendStopped": true,
+  "universalZeroIssueGuarantee": false,
+  "rejectedEarlierRound": "/Users/yuuki2/Documents/PCsmartcare-testloop/upgrade-live-20261111-followup-round1/manual-rejection.json"
+}

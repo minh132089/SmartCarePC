@@ -19,8 +19,11 @@ def check(case, result, expected, previous_total=None):
     elif not lines and not expected.get('allowNoCard'):
         issues.append('Expected a useful purchasable upgrade, got no card')
     total = sum(l.get('priceMaxVnd') or 0 for l in lines)
-    if total > case['upgrade']['budgetVnd']:
+    budget = expected.get('budgetVnd', case['upgrade']['budgetVnd'])
+    if total > budget:
         issues.append('Exceeded upgrade budget')
+    if lines and card.get('budgetVnd') != budget:
+        issues.append('Card does not use the current requested budget')
     if expected.get('cheaper') and (previous_total is None or total >= previous_total):
         issues.append('Follow-up did not reduce the total cost')
     categories = {l['category'] for l in lines}
@@ -50,6 +53,8 @@ def check(case, result, expected, previous_total=None):
                 total_gb = per_module * l['quantity'] + (expected.get('oldRamGb', 0) if old_sticks else 0)
                 if total_gb < expected.get('minRamGb', 0):
                     issues.append('RAM plan does not reach required capacity')
+                if total_gb > expected.get('maxRamGb', float('inf')):
+                    issues.append('RAM plan buys more capacity than requested')
         if l['category'] == 'ram' and expected.get('ramType'):
             if expected['ramType'] not in l.get('productName', '').upper():
                 issues.append('Wrong RAM generation')
@@ -74,7 +79,7 @@ def main():
         outcomes = []
         for step, spec in enumerate([{'expected': case['expected']}] + case.get('followups', [])):
             if step:
-                wire = '; '.join(f"{l['category']}: {l.get('productName')} ({l['priceMaxVnd']} VND)" for l in previous.get('build', {}).get('items', []))
+                wire = '; '.join(f"{l['category']}: {l.get('productName')} ({l['priceMaxVnd']} VND)" for l in (previous.get('build') or {}).get('items', []))
                 messages.append({'role': 'assistant', 'content': previous['reply'] + '\n[Previous upgrade plan: ' + wire + ']'})
                 messages.append({'role': 'user', 'content': spec['message']})
             label = f"{case['id']}-{step}"
@@ -90,13 +95,14 @@ def main():
                 job = request_json(args.base + '/api/chat/jobs/' + job['id'])
                 (args.output / f'{label}-job.json').write_text(json.dumps(job, ensure_ascii=False, indent=2))
             result = job.get('result') or {}
+            (args.output / f'{label}-job.json').write_text(json.dumps(job, ensure_ascii=False, indent=2))
             prior_total = outcomes[-1]['totalVnd'] if outcomes else None
             verdict = check(case, result, spec['expected'], prior_total) if job['status'] == 'done' else {'issues': [job.get('error') or 'Job failed'], 'totalVnd': 0}
             verdict.update({'id': label, 'status': job['status'], 'seconds': round(time.monotonic()-start), 'reply': result.get('reply')})
             outcomes.append(verdict)
             print(json.dumps(verdict, ensure_ascii=False), flush=True)
             previous = result
-            if not result or not result.get('build'):
+            if not result:
                 break
         return outcomes
 

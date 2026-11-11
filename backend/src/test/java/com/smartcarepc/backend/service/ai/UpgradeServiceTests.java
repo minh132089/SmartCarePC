@@ -1,8 +1,10 @@
 package com.smartcarepc.backend.service.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -13,11 +15,13 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 import com.smartcarepc.backend.dto.ChatRequest;
 import com.smartcarepc.backend.dto.ChatRequest.Message;
 import com.smartcarepc.backend.dto.CompatibilityResponse.Issue;
 import com.smartcarepc.backend.dto.UpgradeInfo;
+import com.smartcarepc.backend.exception.AiUnavailableException;
 import com.smartcarepc.backend.service.price.Offer;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -54,6 +58,163 @@ class UpgradeServiceTests {
 
     private ChatRequest ask(UpgradeInfo info) {
         return new ChatRequest(List.of(new Message("user", "Please suggest an upgrade for my PC.")), null, null, "upgrade", info);
+    }
+
+    private ChatRequest followUp(long formBudget, String... questions) {
+        var history = new ArrayList<Message>();
+        history.add(new Message("user", "Upgrade my PC"));
+        for (String question : questions) {
+            history.add(new Message("assistant", "Here is an option."));
+            history.add(new Message("user", question));
+        }
+        return new ChatRequest(history, null, null, "upgrade", pc("650W", formBudget));
+    }
+
+    @Test
+    void followUpLowerBudgetOverridesTheUnchangedForm() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}"),
+                answer("Buy the RTX card."), answer("Buy the RTX card."));
+        var res = service.reply(followUp(12_000_000L, "My total budget is now 3 million VND."), s -> { });
+        assertThat(toolResult(2)).contains("over the budget");
+        assertThat(res.build()).isNull();
+    }
+
+    @Test
+    void newestExplicitBudgetPersistsAcrossUnrelatedFollowUps() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}"),
+                answer("Use this card."));
+        var res = service.reply(followUp(3_000_000L, "Ngân sách còn 2 triệu.",
+                "Tăng ngân sách lên 9.000.000 đồng.", "The old card cost 2 million. Keep NVIDIA."), s -> { });
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().budgetVnd()).isEqualTo(9_000_000L);
+    }
+
+    @Test
+    void budgetParserDoesNotTreatQuotedPricesOrNegatedChangesAsANewTotal() {
+        assertThat(UpgradeService.followUpBudget(followUp(12_000_000L,
+                "The GPU costs 3 million; my PSU budget is 1 million.").messages())).isNull();
+        assertThat(UpgradeService.followUpBudget(followUp(12_000_000L,
+                "Don't change my budget to 3 million.").messages())).isNull();
+        assertThat(UpgradeService.followUpBudget(followUp(12_000_000L,
+                "Total budget: VND 300,000").messages())).isEqualTo(300_000L);
+        assertThat(UpgradeService.followUpBudget(followUp(12_000_000L,
+                "Ngân sách còn 0,1 triệu.").messages())).isEqualTo(100_000L);
+    }
+
+    @Test
+    void followUpMemoryTargetCannotBeReplacedByASmallerKit() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM DDR4 32GB\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[{\"category\":\"ram\",\"product_id\":\"s1-5\"}]}"),
+                toolCall("p2", "propose_upgrade", "{\"items\":[{\"category\":\"ram\",\"product_id\":\"s1-5\",\"buy_qty\":2}]}"),
+                answer("Use these kits."));
+        var res = service.reply(followUp(12_000_000L, "Upgrade RAM to 32GB, keep the other parts."), s -> { });
+        assertThat(toolResult(2)).contains("requested 32 GB");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.quantity()).isEqualTo(4));
+        assertThat(res.reply()).contains("32 GB");
+    }
+
+    @Test
+    void explicitMemoryTargetOverridesTheDefaultGamingSixteenGbRule() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM DDR4 32GB\"}"),
+                toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"ram\",\"product_id\":\"s1-5\",\"buy_qty\":2}]}"),
+                answer("Use these kits."), answer("Use these kits."));
+        var request = followUp(12_000_000L, "Upgrade RAM to 32GB, keep the other parts.");
+        var old = request.upgrade();
+        var pc = new UpgradeInfo(old.cpu(), old.motherboard(), "16GB DDR4, 2 sticks", old.gpu(), old.storage(), old.psu(),
+                old.caseSize(), old.purpose(), old.budgetVnd());
+        var res = service.reply(new ChatRequest(request.messages(), null, null, "upgrade", pc), s -> { });
+        assertThat(res.build()).isNotNull();
+        assertThat(res.reply()).contains("32 GB");
+    }
+
+    @Test
+    void exactRamTargetDoesNotBuyFortyEightGbOrRepeatTheModelsWrongCount() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RAM DDR4\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[{\"category\":\"ram\",\"action\":\"add\",\"product_id\":\"s1-5\",\"buy_qty\":2}]}"),
+                toolCall("p2", "propose_upgrade", "{\"summary\":\"48GB upgrade\",\"items\":[{\"category\":\"ram\",\"action\":\"add\",\"product_id\":\"s1-5\",\"reason\":\"48GB after upgrading\"}]}"),
+                answer("Upgrade to 48GB."));
+        var request = followUp(12_000_000L, "Upgrade RAM to 32GB only.");
+        var old = request.upgrade();
+        var pc = new UpgradeInfo(old.cpu(), old.motherboard(), "16GB DDR4, 2 sticks", old.gpu(), old.storage(), old.psu(),
+                old.caseSize(), old.purpose(), old.budgetVnd());
+        var res = service.reply(new ChatRequest(request.messages(), null, null, "upgrade", pc), s -> { });
+        assertThat(toolResult(2)).contains("requested 32 GB");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.reason()).contains("32 GB").doesNotContain("48"));
+        assertThat(res.build().summary()).doesNotContain("48");
+        assertThat(res.reply()).contains("32 GB").doesNotContain("48");
+    }
+
+    @Test
+    void explicitlyMinimumRamTargetStillAllowsMoreCapacity() {
+        var pc = new UpgradeInfo("i5-10400", "ASUS PRIME B460M-A", "16GB DDR4, 2 sticks", "none", "SSD SATA 1TB", "650W",
+                "standard", "Programming; RAM at least 32GB", 12_000_000L);
+        var turn = new UpgradeService.Turn(pc);
+        turn.results.put("ram", DDR4);
+        var result = service.runTool(Map.of("name", "propose_upgrade", "arguments",
+                "{\"items\":[{\"category\":\"ram\",\"action\":\"add\",\"product_id\":\"ram\",\"buy_qty\":2}]}"), turn);
+        assertThat(result).contains("\"ok\":true");
+    }
+
+    @Test
+    void sharedRamTargetKeepsTheNewestRequestAndRejectsOverflow() {
+        assertThat(ChatService.requestedRam(List.of("RAM to 16GB", "RAM to 32GB"))).isEqualTo(16);
+        assertThat(ChatService.requestedRam(List.of("RTX with 16GB VRAM"))).isNull();
+        assertThat(ChatService.requestedRam(List.of("RAM to 99999999999999999999GB"))).isNull();
+    }
+
+    @Test
+    void providerFailureAfterAcceptanceKeepsTheCheckedPlan() {
+        // The provider disconnects while writing, after both successful tool turns.
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var searchReply = toolCall("s", "search_products", "{\"query\":\"RTX\"}");
+        var planReply = toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}");
+        when(client.complete(any())).thenAnswer(inv -> switch (calls.getAndIncrement()) {
+            case 0 -> searchReply;
+            case 1 -> planReply;
+            default -> throw new AiUnavailableException(HttpStatus.BAD_GATEWAY, "Provider disconnected");
+        });
+        var res = service.reply(ask(pc("650W", 12_000_000L)), s -> { });
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.productName()).contains("RTX 4060"));
+    }
+
+    @Test
+    void providerFailureBeforeAcceptanceCannotInventAPurchase() {
+        when(client.complete(any())).thenThrow(new AiUnavailableException(HttpStatus.BAD_GATEWAY, "Provider disconnected"));
+        assertThatThrownBy(() -> service.reply(ask(pc("650W", 12_000_000L)), s -> { }))
+                .isInstanceOf(AiUnavailableException.class);
+    }
+
+    @Test
+    void latestOfferIsUsedBeforeReturningTheCard() {
+        for (long changedPrice : List.of(8_200_000L, 13_000_000L)) {
+            reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                    toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}"),
+                    answer("Use this card."));
+            var initial = new Offer(RTX4060.title(), RTX4060.shop(), RTX4060.priceVnd(), null, RTX4060.url(), null, true, 36, Instant.now());
+            var changed = new Offer(RTX4060.title(), RTX4060.shop(), changedPrice, null, RTX4060.url(), null, true, 36, Instant.now());
+            when(search.offer(RTX4060.url())).thenReturn(initial);
+            var res = service.reply(ask(pc("650W", 12_000_000L)), stage -> {
+                if (stage.equals(UpgradeService.STAGE_WRITE)) when(search.offer(RTX4060.url())).thenReturn(changed);
+            });
+            if (changedPrice > 12_000_000L) assertThat(res.build()).isNull();
+            else assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.priceMaxVnd()).isEqualTo(changedPrice));
+        }
+    }
+
+    @Test
+    void stockLostWhileWritingCannotBeSoldAsInStock() {
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
+                toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}"),
+                answer("Use this card."));
+        var res = service.reply(ask(pc("650W", 12_000_000L)), stage -> {
+            if (stage.equals(UpgradeService.STAGE_WRITE)) when(search.offer(RTX4060.url())).thenReturn(
+                    new Offer(RTX4060.title(), RTX4060.shop(), RTX4060.priceVnd(), null, RTX4060.url(), null, false, 36, Instant.now()));
+        });
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).containsIgnoringCase("stock");
     }
 
     @Test
@@ -643,13 +804,13 @@ class UpgradeServiceTests {
     @SuppressWarnings("unchecked")
     private void reply(Map<String, Object>... responses) {
         var queue = new ArrayList<>(List.of(responses));
-        when(client.complete(any())).thenAnswer(inv -> {
+        doAnswer(inv -> {
             Map<String, Object> body = inv.getArgument(0);
             var copy = new LinkedHashMap<>(body);
             copy.put("messages", new ArrayList<>((List<Object>) body.get("messages")));
             sent.add(copy);
             return queue.removeFirst();
-        });
+        }).when(client).complete(any());
     }
 
     /** Nội dung kết quả công cụ cuối cùng mà AI nhận được ở lần gọi thứ call */
