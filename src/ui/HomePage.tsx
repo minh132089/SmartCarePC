@@ -22,8 +22,10 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
  */
 export function HomePage() {
   const setPage = useViewer((s) => s.setPage)
-  // Máy yếu (chất lượng Low) bỏ hiệu ứng nghiêng theo con trỏ cho đỡ tốn sức
-  const tilt = useViewer((s) => s.quality) !== 'low'
+  // Nghiêng theo con trỏ chỉ khi có chuột thật (màn cảm ứng không rê được, và 3D dễ làm lệch vùng chạm); máy yếu (Low) cũng bỏ
+  const lowQuality = useViewer((s) => s.quality) === 'low'
+  const finePointer = useFinePointer()
+  const tilt = !lowQuality && finePointer
   const openStudy = useStudy((s) => s.open)
   const code = useStudy((s) => s.code)
   return (
@@ -90,6 +92,20 @@ export function HomePage() {
   )
 }
 
+/** Có chuột / bàn di chuột thật (rê được), khác với màn cảm ứng */
+function useFinePointer() {
+  const query = '(hover: hover) and (pointer: fine)'
+  const [fine, setFine] = useState(() => typeof matchMedia === 'function' && matchMedia(query).matches)
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return
+    const m = matchMedia(query)
+    const on = () => setFine(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  return fine
+}
+
 function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: ReactNode; title: string; text: string; need: string; onClick: () => void; index: number; tilt: boolean }) {
   // Sau khi thẻ hiện ra, icon "chào" một lần lần lượt từng cái; sau đó chỉ chuyển động khi rê chuột hoặc chạm vào thẻ
   const reduce = useReducedMotion()
@@ -104,7 +120,7 @@ function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: React
   const card = (
     <AnimateIcon animate={greet} animateOnHover animateOnTap asChild>
       <button
-        onClick={onClick}
+        type="button"
         className={`group flex h-full w-full flex-col rounded-[24px] bg-panel p-5 text-left ring-1 ring-line transition-shadow duration-150 hover:shadow-lg hover:ring-line-strong ${press} ${focus}`}
       >
         <span className="grid size-12 place-items-center rounded-2xl bg-fill text-accent">{icon}</span>
@@ -121,11 +137,13 @@ function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: React
       </button>
     </AnimateIcon>
   )
+  // Cả ô thẻ nhận click (nút bên trong không tự xử lý), nên bấm lệch ra ngoài nút một chút vẫn mở được; phím Enter / Space
+  // trên nút vẫn sinh click nổi lên đây
   return (
-    <li>
+    <li onClick={onClick} className="cursor-pointer">
       <Rise delay={240 + index * 100} offset={22} className="h-full">
         {tilt ? (
-          <Tilt maxTilt={5} className="h-full">
+          <Tilt maxTilt={5} className="h-full" style={{ transformStyle: 'flat' }}>
             <TiltContent className="h-full">{card}</TiltContent>
           </Tilt>
         ) : card}
