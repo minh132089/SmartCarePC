@@ -390,6 +390,11 @@ class UpgradeServiceTests {
                 "Gaming and streaming on Twitch", 12_000_000L);
         assertThat(UpgradeService.fit(stream, List.of(pick("ram", "add", ram16)), new ArrayList<>(), new ArrayList<>()))
                 .noneSatisfy(e -> assertThat(e).contains("enough for gaming"));
+        // Đổi sang nền tảng DDR5 (CPU + bo + RAM): RAM mới là bắt buộc, không bị chặn
+        var am5 = List.of(pick("cpu", "replace", product("CPU AMD Ryzen 5 7600", 4_990_000L)),
+                pick("motherboard", "replace", product("Mainboard ASUS TUF GAMING B650M-PLUS", 4_590_000L)),
+                pick("ram", "replace", DDR5));
+        assertThat(UpgradeService.fit(game, am5, new ArrayList<>(), new ArrayList<>())).noneSatisfy(e -> assertThat(e).contains("enough for gaming"));
     }
 
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
