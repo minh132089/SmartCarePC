@@ -37,12 +37,15 @@ export function maintenancePlan(a: MaintenanceAnswers, today = day()): Record<Ma
   const last = a.lastCleanedDate || addMonths(today, a.lastCleaned === 'recent' ? -6 : a.lastCleaned === 'six-twelve' ? -12 : -18)
   const dustDate = addMonths(last, months)
   const dustDue = never || dustDate <= today || a.symptoms.length > 0
-  const pasteDue = ((a.age === 'two-three' || a.age === 'over-three') && a.paste === 'never') || a.cleanedButStillHot
+  // Lần thay keo gần nhất đã quá 30 tháng thì đến hạn ngay (không hẹn vào một ngày đã qua)
+  const pasteReview = addMonths(a.lastPasteDate || today, 30)
+  const pasteOverdue = a.paste === 'changed' && !!a.lastPasteDate && pasteReview <= today
+  const pasteDue = ((a.age === 'two-three' || a.age === 'over-three') && a.paste === 'never') || a.cleanedButStillHot || pasteOverdue
   return {
     dust: { due: dustDue, date: dustDue ? nextWeekend(today) : dustDate, months,
       reason: `${never ? 'The last clean is unknown or your PC has never been cleaned.' : a.symptoms.length ? 'You reported a change in how your PC runs.' : dustDue ? 'Your last clean is outside the suggested interval.' : 'Your last clean is still within the suggested interval.'} ${months === 3 ? 'Your environment calls for cleaning every 3 months.' : 'Plan to clean every 6 months.'}` },
-    paste: { due: pasteDue, date: pasteDue ? nextWeekend(today) : addMonths(a.lastPasteDate || today, 30), months: 30,
-      reason: pasteDue ? a.cleanedButStillHot ? 'Heat or shutdowns continue after dust cleaning. Check cooling contact and consider fresh paste.' : 'Your PC is over 2 years old and its paste has never been replaced.' : a.paste === 'unknown' ? 'Paste history is unknown. Check temperatures first; age alone does not confirm a paste problem.' : 'There is no current reason to replace paste early. Review it in 2–3 years.' },
+    paste: { due: pasteDue, date: pasteDue ? nextWeekend(today) : pasteReview, months: 30,
+      reason: pasteDue ? a.cleanedButStillHot ? 'Heat or shutdowns continue after dust cleaning. Check cooling contact and consider fresh paste.' : pasteOverdue ? 'The paste was last replaced more than 2½ years ago.' : 'Your PC is over 2 years old and its paste has never been replaced.' : a.paste === 'unknown' ? 'Paste history is unknown. Check temperatures first; age alone does not confirm a paste problem.' : 'There is no current reason to replace paste early. Review it in 2–3 years.' },
     check: { due: a.symptoms.length > 0, date: a.symptoms.length ? nextWeekend(today) : addMonths(today, 1), months: 1, reason: 'A short monthly check helps you notice new noise, dust or instability.' },
   }
 }

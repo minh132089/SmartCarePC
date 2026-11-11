@@ -73,5 +73,17 @@ try {
   assert.equal(m.useMaintenance.getState().run.alone.safe, true)
   assert.equal(requests.length, 0)
   globalThis.localStorage = workingStorage
+  // Thay keo xong thì bỏ cờ "vẫn nóng sau vệ sinh", không bắt thay keo lại ngay
+  m.useMaintenance.setState({ answers: { lastCleaned: 'recent', lastCleanedDate: '2026-11-01', age: 'over-three', environment: [], symptoms: ['heat'], paste: 'never', cleanedButStillHot: true } })
+  m.startMaintenance(pc, 'paste'); m.useMaintenance.getState().finish('paste', 'alone', false, ['heat']); await tick()
+  assert.equal(m.useMaintenance.getState().answers.cleanedButStillHot, false)
+  assert.equal(m.useMaintenance.getState().answers.paste, 'changed')
+  // Vào bảo dưỡng đúng máy đã chọn ở trang tư vấn: giữ cấu hình đã chọn (máy không card rời không hiện bước lắp card)
+  const card = { items: [{ category: 'case', code: 'case_mini_sff', name: 'Case', quantity: 1 }], compatible: true, errors: [], warnings: [] }
+  useViewer.getState().setFamily('mini_sff'); useViewer.getState().setAdvisedBuild(card)
+  m.startMaintenance({ machine: 'mini_sff', cooler: 'lowprofile', hasGpu: false }, 'dust')
+  assert.equal(useViewer.getState().advisedBuild, card, 'Keep the advised build when maintaining the same PC')
+  m.startMaintenance({ machine: 'full_tower', cooler: 'air', hasGpu: true }, 'dust')
+  assert.equal(useViewer.getState().advisedBuild, null, 'A different PC clears the advised build')
   console.log('Maintenance guide, research-only events, offline replay, independence and abandonment checks passed.')
 } finally { await server.close() }

@@ -51,7 +51,7 @@ export const useMaintenance = create<MaintenanceState>((set, get) => ({
   snooze: (task) => { const date = addDays(day(), 7); set({ dates: { ...get().dates, [task]: date } }); persist(); recordEvent('reminder_snoozed', task, { scheduledFor: date }) },
   finish: (task, who, stillHot, symptoms) => {
     const s = get(), interval = task === 'dust' && s.answers?.environment.length ? 3 : TASKS[task].months
-    const answers = { ...(s.answers ?? EMPTY_ANSWERS), ...(task === 'dust' ? { lastCleanedDate: day(), lastCleaned: 'recent' as const, cleanedButStillHot: stillHot } : {}), ...(task === 'paste' ? { paste: 'changed' as const, lastPasteDate: day() } : {}), ...(symptoms ? { symptoms, cleanedButStillHot: symptoms.some(x => x === 'heat' || x === 'shutdown') && (s.answers?.cleanedButStillHot ?? false) } : {}) }
+    const answers = { ...(s.answers ?? EMPTY_ANSWERS), ...(task === 'dust' ? { lastCleanedDate: day(), lastCleaned: 'recent' as const, cleanedButStillHot: stillHot } : {}), ...(symptoms ? { symptoms, cleanedButStillHot: symptoms.some(x => x === 'heat' || x === 'shutdown') && (s.answers?.cleanedButStillHot ?? false) } : {}), ...(task === 'paste' ? { paste: 'changed' as const, lastPasteDate: day(), cleanedButStillHot: false } : {}) }
     const dates = { ...s.dates, [task]: addMonths(day(), interval) }
     if (answers && (task === 'check' || task === 'dust')) {
       const plan = maintenancePlan(answers)
@@ -78,7 +78,10 @@ export function startMaintenance(pc: MaintenancePC, task: MaintenanceTask) {
   if (!resume) saveDone(key, new Set())
   useMaintenance.setState({ pc, run, dialog: null }); persist()
   const v = useViewer.getState()
-  if (pc.machine === 'gaming') v.setBuild('gaming'); else v.setFamily(pc.machine)
+  // Cùng máy đang xem (vd máy vừa chọn ở trang tư vấn) thì giữ nguyên, không xoá cấu hình đã chọn (advisedBuild):
+  // quay lại hướng dẫn lắp vẫn đúng các món của cấu hình đó (máy không card rời không hiện bước lắp card)
+  const same = (v.familyId ?? 'gaming') === pc.machine && (pc.machine !== 'gaming' || v.buildId === 'gaming')
+  if (!same) { if (pc.machine === 'gaming') v.setBuild('gaming'); else v.setFamily(pc.machine) }
   const steps = maintenanceSteps(task, pc.machine === 'gaming' ? null : pc.machine, 'gaming', pc.hasGpu, pc.cooler)
   const done = loadDone(key), first = steps.findIndex(s => !done.has(s.id))
   useViewer.setState({ page: 'build', guide: true, guideKind: 'maintenance', maintenanceTask: task, maintenanceRunId: run.id, maintenanceCooler: pc.cooler, maintenanceHasGpu: pc.hasGpu, maintenanceLift: false, guideIndex: first < 0 ? 0 : first, guidePart: null, guideFull: false, exploded: false, step: 0, powered: false, selected: null, inspecting: null, sideOpen: false })
