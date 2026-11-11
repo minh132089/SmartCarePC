@@ -178,6 +178,7 @@ public class UpgradeService {
         volatile Long previousTotal;
         /** Câu mới nhất xin phương án rẻ hơn: kế hoạch mới phải rẻ hơn kế hoạch trước */
         volatile boolean wantsCheaper;
+        String requiredGpuVendor;
         /** Món bị bỏ ở lần đề xuất cuối vì không kiểm tra được giá / còn hàng */
         volatile List<String> dropped = List.of();
         /** Lỗi của lần propose_upgrade gần nhất chưa đạt: không chốt được thì nói đúng lý do cho người dùng */
@@ -185,6 +186,7 @@ public class UpgradeService {
 
         Turn(UpgradeInfo pc) {
             this.pc = pc;
+            this.requiredGpuVendor = ChatService.gpuVendor(List.of(pc.purpose()));
         }
     }
 
@@ -206,6 +208,16 @@ public class UpgradeService {
         }
         var history = request.messages();
         var lastAssistant = history.stream().filter(m -> "assistant".equals(m.role())).reduce((a, b) -> b).orElse(null);
+        // The first user message describes existing hardware, not a requested GPU brand.
+        // Only follow-up requests and the stated purpose impose a purchasing preference.
+        List<String> preferences = new ArrayList<>();
+        boolean followUp = false;
+        for (var message : history) {
+            if ("assistant".equals(message.role())) followUp = true;
+            else if (followUp && "user".equals(message.role())) preferences.addFirst(message.content());
+        }
+        preferences.add(turn.pc.purpose());
+        turn.requiredGpuVendor = ChatService.gpuVendor(preferences);
         if (lastAssistant != null && lastAssistant.content().contains("[Previous upgrade plan:")) {
             var m = PREVIOUS_PRICE.matcher(lastAssistant.content().substring(lastAssistant.content().indexOf("[Previous upgrade plan:")));
             long sum = 0;
@@ -406,7 +418,23 @@ public class UpgradeService {
                         + "Choose a result with verified = true and in_stock = true.");
                 continue;
             }
-            int qty = item.get("buy_qty") instanceof Number q ? Math.max(1, Math.min(4, q.intValue())) : 1;
+            Object rawQty = item.get("buy_qty");
+            if (rawQty != null && (!(rawQty instanceof Number q) || !Double.isFinite(q.doubleValue())
+                    || q.doubleValue() != q.intValue() || q.intValue() < 1 || q.intValue() > 4)) {
+                errors.add(category + ": quantity must be a whole number between 1 and 4.");
+                continue;
+            }
+            int qty = rawQty instanceof Number q ? q.intValue() : 1;
+            if (qty > 1 && !Set.of("ram", "ssd", "fans").contains(category)) {
+                errors.add(category + ": quantity must be 1 for a single desktop upgrade. Choose one replacement part.");
+                continue;
+            }
+            if ("gpu".equals(category) && turn.requiredGpuVendor != null
+                    && !turn.requiredGpuVendor.equals(ChatService.vendorOf(ChatService.gpuChip(p.title())))) {
+                errors.add("gpu: the owner requested " + turn.requiredGpuVendor.toUpperCase(Locale.ROOT)
+                        + ". Choose that GPU brand or explain that no matching upgrade fits the budget.");
+                continue;
+            }
             if (!ChatService.plausible(category, offer.priceVnd())) {
                 errors.add(category + ": the price of \"" + p.title() + "\" looks wrong. Choose another result.");
                 continue;
@@ -422,6 +450,18 @@ public class UpgradeService {
             errors.clear();
         }
         if (errors.isEmpty()) errors.addAll(fit(turn.pc, picks, warnings, unknowns));
+        if (errors.isEmpty() && lastChance && picks.stream().mapToLong(Pick::total).sum() > turn.pc.budgetVnd()) {
+            // A smaller checked plan can still solve the bottleneck when the optional extras exceed the budget.
+            List<Pick> reduced = affordableSubset(turn.pc, picks);
+            if (!reduced.isEmpty()) {
+                picks.clear();
+                picks.addAll(reduced);
+                warnings.clear();
+                unknowns.clear();
+                errors.addAll(fit(turn.pc, picks, warnings, unknowns));
+                warnings.add(new Issue("BUDGET_TRIM", "Optional parts were left out to keep this upgrade within your budget."));
+            }
+        }
         long total = picks.stream().mapToLong(Pick::total).sum();
         long budget = turn.pc.budgetVnd();
         if (errors.isEmpty() && total > budget) {
@@ -479,6 +519,38 @@ public class UpgradeService {
         return ok;
     }
 
+    /** At most nine categories: check the subsets, preserving coupled CPU/board/RAM/PSU requirements through fit. */
+    static List<Pick> affordableSubset(UpgradeInfo pc, List<Pick> picks) {
+        List<Pick> best = List.of();
+        int bestScore = 0;
+        long bestCost = Long.MAX_VALUE;
+        boolean gaming = GAMING_USE.matcher(pc.purpose()).find();
+        boolean hdd = Objects.requireNonNullElse(pc.storage(), "").toLowerCase(Locale.ROOT).contains("hdd");
+        for (int mask = 1; mask < (1 << picks.size()); mask++) {
+            List<Pick> candidate = new ArrayList<>();
+            int score = 0;
+            for (int i = 0; i < picks.size(); i++) if ((mask & (1 << i)) != 0) {
+                Pick p = picks.get(i);
+                candidate.add(p);
+                score += switch (p.category()) {
+                    case "ssd" -> !gaming && hdd ? 100 : 30;
+                    case "gpu" -> gaming || AI_USE.matcher(pc.purpose()).find() ? 100 : 20;
+                    case "ram" -> 50;
+                    case "cpu" -> 60;
+                    default -> 0;
+                };
+            }
+            long cost = candidate.stream().mapToLong(Pick::total).sum();
+            if (score == 0 || cost > pc.budgetVnd() || !fit(pc, candidate, new ArrayList<>(), new ArrayList<>()).isEmpty()) continue;
+            if (score > bestScore || score == bestScore && cost < bestCost) {
+                best = candidate;
+                bestScore = score;
+                bestCost = cost;
+            }
+        }
+        return best;
+    }
+
     /**
      * Lắp được với máy cũ không. Trả về lỗi (phải đổi món); cảnh báo và điểm cần tự kiểm tra ghi vào warnings / unknowns.
      * Chỉ báo những gì liên quan tới món mới: máy cũ của người dùng không phải việc của kế hoạch này.
@@ -521,7 +593,17 @@ public class UpgradeService {
         // Chỉ khi vẫn dùng loại DDR cũ: lên loại DDR khác (vd DDR4 -> DDR5) thì RAM mới là bắt buộc. Đổi bo cùng loại DDR
         // (vd B460 -> B560, vẫn DDR4) thì RAM cũ dùng tiếp được, nên vẫn chặn mua thêm
         String oldType = ramType(pc), newRamType = ram == null ? null : ProductRules.read("ram", ram.product().title()).ramType();
+        if (ram != null && "add".equals(ram.action()) && oldType != null && newRamType != null && !oldType.equals(newRamType)) {
+            errors.add("ram: adding " + newRamType + " would keep the existing " + oldType
+                    + " sticks, which cannot share a motherboard. Use replace for a platform change and remove the old RAM.");
+        }
         boolean samePlatform = oldType == null || newRamType == null || oldType.equals(newRamType);
+        Integer newRamGb = ram == null ? null : ChatService.amount("ram", ram.product().title());
+        if (ram != null && "replace".equals(ram.action()) && samePlatform && haveRam != null && newRamGb != null
+                && newRamGb * ram.qty() <= haveRam) {
+            errors.add("ram: replacing the current " + haveRam + " GB with " + newRamGb * ram.qty()
+                    + " GB does not increase capacity. Keep the old RAM or choose a larger total capacity.");
+        }
         if (ram != null && samePlatform && haveRam != null && haveRam >= 16 && GAMING_USE.matcher(pc.purpose()).find()
                 && !HEAVY_USE.matcher(pc.purpose()).find()) {
             errors.add("ram: the PC already has " + haveRam + " GB, which is enough for gaming. Remove the RAM line and spend the budget on "
@@ -790,9 +872,6 @@ public class UpgradeService {
         return UpgradeInfo.known(pc.cpu()) ? ProductRules.read("cpu", pc.cpu()).ramType() : null;
     }
 
-    private static final Pattern WANTS_NVIDIA = Pattern.compile("\\b(nvidia|geforce|rtx|gtx|cuda)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern WANTS_AMD = Pattern.compile("\\b(radeon|amd gpu|amd card|rx \\d{3,4})\\b", Pattern.CASE_INSENSITIVE);
-
     /**
      * Trong các kết quả tìm kiếm đã kiểm tra giá, có card (hoặc CPU, khi chơi game) mạnh hơn mà tổng không đắt hơn, hay ngang
      * sức mà rẻ hơn rõ (từ 5%) không. Tính cả nguồn: card chạy được với nguồn đang có thì không phải mua nguồn kèm. Phương án
@@ -819,8 +898,7 @@ public class UpgradeService {
                 if (r == null || r < rank) continue;
                 if ("gpu".equals(cat)) {
                     String vendor = ChatService.vendorOf(ChatService.gpuChip(p.title()));
-                    if (WANTS_NVIDIA.matcher(pc.purpose()).find() && !"nvidia".equals(vendor)) continue;
-                    if (WANTS_AMD.matcher(pc.purpose()).find() && !"amd".equals(vendor)) continue;
+                    if (turn.requiredGpuVendor != null && !turn.requiredGpuVendor.equals(vendor)) continue;
                 }
                 Offer o = checked(p);
                 if (o == null || !ChatService.plausible(cat, o.priceVnd())) continue;
@@ -869,7 +947,7 @@ public class UpgradeService {
             "a68h", "a78", "a88x", "970", "990fx", "990x");
     private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}[-\\s]?i\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE);
     private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE);
 
@@ -945,18 +1023,24 @@ public class UpgradeService {
         String reply = draft == null ? null : checkedReply(draft.replaceAll("(?s)<think>.*?</think>", ""), turn);
         if (plan == null) return new ChatResponse(noPlan(turn));
         if (plan.items().isEmpty()) {
-            // Câu của trợ lý bị bỏ hết (toàn số tiền chưa kiểm tra): có lỗi đề xuất trước đó thì nói đúng lý do đó
-            if (reply == null || reply.isEmpty()) {
-                return new ChatResponse(!turn.lastErrors.isEmpty() ? noPlan(turn) : "I could not find an upgrade within "
-                        + ChatService.millions(turn.pc.budgetVnd()) + " that would make a noticeable difference for your use.");
+            if (!turn.lastErrors.isEmpty()) return new ChatResponse(noPlan(turn));
+            if (ramType(turn.pc) == null && turn.pc.purpose().toLowerCase(Locale.ROOT).matches(".*\\b(ram|memory)\\b.*")) {
+                return new ChatResponse("Before choosing RAM, check its DDR generation and the number of free memory slots. "
+                        + "Read the label on a memory module, or find the motherboard model in Windows System Information "
+                        + "(BaseBoard Product) and check its manual. Update your PC details with that information and ask again.");
             }
-            return new ChatResponse(reply);
+            return new ChatResponse("I am not recommending a purchase for this budget and request. Keep your current parts for now. "
+                    + "If something still feels slow, describe that symptom and confirm your motherboard and power supply details "
+                    + "so the next upgrade can target the problem.");
         }
         if (reply == null || reply.isEmpty()) {
             reply = "Here is an upgrade plan for your PC. The card lists each part, its store price and what to check before buying.";
         }
+        // RAM descriptions must use total capacity and physical module counts from the checked plan,
+        // not the model's interpretation of e.g. "16GB, 2 sticks" as two 16GB modules.
+        if (plan.items().stream().anyMatch(p -> "ram".equals(p.category()))) reply = memoryReply(turn.pc, plan.items());
         List<Line> lines = plan.items().stream().map(p -> new Line("upgrade_" + p.category(), p.category(),
-                ("add".equals(p.action()) ? "Extra " : "New ") + CATEGORIES.get(p.category()).toLowerCase(Locale.ROOT), p.qty(),
+                ("add".equals(p.action()) ? "Extra " : "New ") + CATEGORIES.get(p.category()).toLowerCase(Locale.ROOT), physicalQuantity(p),
                 spec(p), p.reason(), p.total(), p.total(),
                 p.offer().imageUrl() != null ? p.offer().imageUrl() : p.product().imageUrl(), p.product().url(), p.product().title(),
                 p.product().shop(), p.offer().inStock(), p.offer().warrantyMonths(), p.offer().checkedAt(), List.of(), true)).toList();
@@ -964,6 +1048,25 @@ public class UpgradeService {
         var card = new BuildCard(lines, true, List.of(), plan.warnings(), summary, turn.pc.budgetVnd(), null, null, 1,
                 plan.unknowns(), List.of(), null);
         return new ChatResponse(reply, card);
+    }
+
+    static String memoryReply(UpgradeInfo pc, List<Pick> picks) {
+        Pick ram = picks.stream().filter(p -> "ram".equals(p.category())).findFirst().orElseThrow();
+        Integer gb = ChatService.amount("ram", ram.product().title());
+        Integer old = UpgradeInfo.known(pc.ram()) ? ChatService.amount("ram", pc.ram()) : null;
+        String change = "add".equals(ram.action()) ? "Add " : "Replace the existing RAM with ";
+        StringBuilder out = new StringBuilder(change);
+        if (ram.qty() > 1) out.append(ram.qty()).append(" × ");
+        out.append(ram.product().title()).append('.');
+        if (gb != null && (!"add".equals(ram.action()) || old != null)) {
+            int total = gb * ram.qty() + ("add".equals(ram.action()) ? old : 0);
+            out.append(" The resulting memory capacity is ").append(total).append(" GB.");
+        }
+        out.append(" More RAM helps when your applications run out of memory.");
+        var others = picks.stream().filter(p -> !"ram".equals(p.category())).map(p -> p.product().title()).toList();
+        if (!others.isEmpty()) out.append(" Also buy: ").append(String.join("; ", others)).append('.');
+        out.append(" Keep the other current parts. Check the fit and installation conditions on the card before buying.");
+        return out.toString();
     }
 
     private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE);
@@ -1063,6 +1166,12 @@ public class UpgradeService {
             return p.qty() + " × " + (size == null ? "" : size + " GB ") + (type == null ? "" : type) + (size == null ? "" : " (" + p.qty() * size + " GB)");
         }
         return ChatService.purchasedSpec(p.category(), p.product().title(), p.spec());
+    }
+
+    /** Card quantities count physical RAM modules; prices still count purchased kits. */
+    static int physicalQuantity(Pick p) {
+        Integer modules = "ram".equals(p.category()) ? kitSticks(p.product().title()) : 1;
+        return p.qty() * (modules == null ? 1 : modules);
     }
 
     private static final Pattern PREVIOUS_PRICE = Pattern.compile("\\((\\d{4,12}) VND\\)");

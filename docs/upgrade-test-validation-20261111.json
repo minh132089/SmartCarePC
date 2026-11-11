@@ -1,0 +1,23 @@
+{
+  "status": "SCOPED_VALIDATION_PASSED",
+  "baseCommit": "b7963d4",
+  "evidence": "/Users/yuuki2/Documents/PCsmartcare-testloop/upgrade-live-20261111-accepted",
+  "backend": {
+    "tests": 360,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "upgradeTests": 45,
+  "evaluatorTests": 30,
+  "liveSteps": 9,
+  "livePassed": 9,
+  "uniqueProductPages": 4,
+  "priceObservations": 5,
+  "maxPriceErrorVnd": 0,
+  "maxCaptureGapSeconds": 46.762436,
+  "runtimeAndSourceMatch": true,
+  "frontendBuild": "passed",
+  "pushedOrDeployed": false,
+  "universalZeroIssueGuarantee": false
+}

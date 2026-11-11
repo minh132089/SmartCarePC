@@ -1,0 +1,261 @@
+[
+  {
+    "id": "laptop",
+    "upgrade": {
+      "cpu": "Intel Core i5-1135G7",
+      "motherboard": "ASUS PRIME B460M-A",
+      "ram": "16GB DDR4, 2 sticks",
+      "gpu": "GTX 1650 4GB",
+      "storage": "SSD NVMe 1TB",
+      "psu": "550W",
+      "caseSize": "standard",
+      "purpose": "Programming on laptop",
+      "budgetVnd": 12000000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Upgrade my laptop please"
+      }
+    ],
+    "expected": {
+      "noCard": true,
+      "replyPattern": "desktop|laptop"
+    }
+  },
+  {
+    "id": "gaming-rtx",
+    "upgrade": {
+      "cpu": "Intel Core i5-10400",
+      "motherboard": "ASUS PRIME B460M-A",
+      "ram": "16GB DDR4, 2 sticks",
+      "gpu": "GTX 1650 4GB",
+      "storage": "SSD NVMe 1TB",
+      "psu": "550W",
+      "caseSize": "standard",
+      "purpose": "Gaming: Valorant at Full HD; only NVIDIA RTX graphics cards",
+      "budgetVnd": 12000000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Upgrade the GPU for Valorant. Keep the other parts if possible."
+      }
+    ],
+    "expected": {
+      "require": [
+        "gpu"
+      ],
+      "forbid": [
+        "ram",
+        "cpu",
+        "motherboard"
+      ],
+      "gpuPattern": "RTX"
+    },
+    "followups": [
+      {
+        "message": "Can you find a cheaper RTX graphics card? Keep the other parts.",
+        "expected": {
+          "require": [
+            "gpu"
+          ],
+          "forbid": [
+            "ram",
+            "cpu",
+            "motherboard"
+          ],
+          "gpuPattern": "RTX",
+          "cheaper": true
+        }
+      }
+    ]
+  },
+  {
+    "id": "office-hdd",
+    "upgrade": {
+      "cpu": "Intel Core i5-6500",
+      "motherboard": "ASUS H110M-K",
+      "ram": "8GB DDR4, 1 stick",
+      "gpu": "none",
+      "storage": "HDD 1TB",
+      "psu": "300W",
+      "caseSize": "standard",
+      "purpose": "Office work: Word Excel and web; Windows takes two minutes to start",
+      "budgetVnd": 3500000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "I want a faster Windows startup. Upgrade storage first, keep CPU and motherboard."
+      }
+    ],
+    "expected": {
+      "require": [
+        "ssd"
+      ],
+      "forbid": [
+        "cpu",
+        "motherboard",
+        "gpu"
+      ]
+    }
+  },
+  {
+    "id": "ddr5-memory",
+    "upgrade": {
+      "cpu": "AMD Ryzen 5 7600",
+      "motherboard": "ASUS ROG STRIX B650E-I GAMING WIFI",
+      "ram": "16GB DDR5, 2 sticks",
+      "gpu": "RTX 4060 8GB",
+      "storage": "NVMe SSD 1TB",
+      "psu": "SFX 650W",
+      "caseSize": "mini",
+      "purpose": "Programming Android Studio Docker; memory is full, need 32GB",
+      "budgetVnd": 12000000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Please upgrade only my RAM to 32GB. I have two memory slots, both occupied."
+      }
+    ],
+    "expected": {
+      "require": [
+        "ram"
+      ],
+      "forbid": [
+        "cpu",
+        "motherboard",
+        "gpu",
+        "psu",
+        "ssd"
+      ],
+      "ramType": "DDR5",
+      "allowNoCard": true,
+      "maxRamSticks": 2,
+      "oldRamSticks": 2,
+      "oldRamGb": 16,
+      "minRamGb": 32
+    }
+  },
+  {
+    "id": "unknown-ram",
+    "upgrade": {
+      "cpu": "",
+      "motherboard": "",
+      "ram": "",
+      "gpu": "none",
+      "storage": "SSD NVMe 1TB",
+      "psu": "550W",
+      "caseSize": "standard",
+      "purpose": "Office work, RAM upgrade only",
+      "budgetVnd": 2000000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "I only want RAM, but do not know the DDR generation or my motherboard. What should I check?"
+      }
+    ],
+    "expected": {
+      "noCard": true,
+      "replyPattern": "RAM|memory|motherboard|DDR"
+    }
+  },
+  {
+    "id": "ddr5-memory-sufficient-budget",
+    "upgrade": {
+      "cpu": "AMD Ryzen 5 7600",
+      "motherboard": "ASUS ROG STRIX B650E-I GAMING WIFI",
+      "ram": "16GB DDR5, 2 sticks",
+      "gpu": "RTX 4060 8GB",
+      "storage": "NVMe SSD 1TB",
+      "psu": "SFX 650W",
+      "caseSize": "mini",
+      "purpose": "Programming Android Studio Docker; memory is full, need 32GB",
+      "budgetVnd": 16000000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Please upgrade only my RAM to 32GB. I have two memory slots, both occupied."
+      }
+    ],
+    "expected": {
+      "require": [
+        "ram"
+      ],
+      "forbid": [
+        "cpu",
+        "motherboard",
+        "gpu",
+        "psu",
+        "ssd"
+      ],
+      "ramType": "DDR5",
+      "allowNoCard": false,
+      "maxRamSticks": 2,
+      "oldRamSticks": 2,
+      "oldRamGb": 16,
+      "minRamGb": 32
+    }
+  },
+  {
+    "id": "ai-vram",
+    "upgrade": {
+      "cpu": "Intel Core i5-10400",
+      "motherboard": "ASUS PRIME B460M-A",
+      "ram": "32GB DDR4, 2 sticks",
+      "gpu": "GTX 1650 4GB",
+      "storage": "SSD NVMe 1TB",
+      "psu": "650W",
+      "caseSize": "standard",
+      "purpose": "AI machine learning CUDA PyTorch: upgrade only GPU, need at least 12GB VRAM",
+      "budgetVnd": 10000000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Upgrade only the GPU for CUDA and PyTorch. I need at least 12GB VRAM, keep the other parts."
+      }
+    ],
+    "expected": {
+      "require": [
+        "gpu"
+      ],
+      "forbid": [
+        "ram",
+        "psu",
+        "cpu",
+        "motherboard",
+        "ssd"
+      ],
+      "gpuPattern": "RTX.*(?:12|16|24|32)\\s*(?:GB|G)\\b"
+    }
+  },
+  {
+    "id": "gpu-budget-unfeasible",
+    "upgrade": {
+      "cpu": "Intel Core i5-10400",
+      "motherboard": "ASUS PRIME B460M-A",
+      "ram": "16GB DDR4, 2 sticks",
+      "gpu": "GTX 1650 4GB",
+      "storage": "SSD NVMe 1TB",
+      "psu": "550W",
+      "caseSize": "standard",
+      "purpose": "Gaming: Valorant at Full HD; only NVIDIA RTX graphics cards",
+      "budgetVnd": 300000
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "I only have VND 300,000 for a GPU upgrade. Do not buy other parts."
+      }
+    ],
+    "expected": {
+      "noCard": true,
+      "replyPattern": "budget|cannot|could not|save|afford"
+    }
+  }
+]

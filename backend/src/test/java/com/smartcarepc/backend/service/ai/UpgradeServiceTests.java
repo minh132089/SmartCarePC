@@ -232,7 +232,7 @@ class UpgradeServiceTests {
                 answer("Nothing useful fits. An RTX 4060 costs 8.5 million VND, so save up."));
         var res = service.reply(ask(pc("450W", 500_000L)), s -> { });
         assertThat(res.build()).isNull();
-        assertThat(res.reply()).doesNotContain("8.5 million").contains("Nothing useful fits.");
+        assertThat(res.reply()).doesNotContain("8.5 million").contains("not recommending a purchase");
     }
 
     @Test
@@ -377,6 +377,10 @@ class UpgradeServiceTests {
         var p = new UpgradeService.Pick("ram", "add", stick, new Offer(stick.title(), "GEARVN", stick.priceVnd(), null, stick.url(), null, true, 36, Instant.now()),
                 2, "8 GB DDR4 3200, single stick", null);
         assertThat(UpgradeService.spec(p)).isEqualTo("2 × 8 GB DDR4 (16 GB)");
+        var kits = new UpgradeService.Pick("ram", "replace", DDR4, pick("ram", "replace", DDR4).offer(), 2, null, null);
+        assertThat(UpgradeService.physicalQuantity(kits)).isEqualTo(4);
+        assertThat(UpgradeService.physicalQuantity(pick("ram", "replace", DDR4))).isEqualTo(2);
+        assertThat(kits.total()).isEqualTo(DDR4.priceVnd() * 2);
     }
 
     @Test
@@ -461,6 +465,134 @@ class UpgradeServiceTests {
         a.completeExceptionally(new IllegalStateException("x"));
         b.complete("second");
         assertThat(one.get()).isEqualTo("second");
+    }
+
+    @Test
+    void themRamKhacDdrKhongDuocGiuThanhCuKhiDoiBo() {
+        var old = new UpgradeInfo("Ryzen 5 3600", "ASUS B450M", "16GB DDR4, 2 sticks", "GTX 1650", "SSD 1TB", "650W",
+                "standard", "Programming", 20_000_000L);
+        var parts = List.of(pick("cpu", "replace", product("CPU AMD Ryzen 5 7600", 4_990_000L)),
+                pick("motherboard", "replace", product("Mainboard ASUS TUF B650M-PLUS DDR5", 4_500_000L)),
+                pick("ram", "add", DDR5));
+        assertThat(UpgradeService.fit(old, parts, new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("ram", "replace", "DDR4"));
+        var replaced = new ArrayList<>(parts);
+        replaced.set(2, pick("ram", "replace", DDR5));
+        assertThat(UpgradeService.fit(old, replaced, new ArrayList<>(), new ArrayList<>())).isEmpty();
+    }
+
+    @Test
+    void khongMuaHaiCardChoMotMay() {
+        var turn = new UpgradeService.Turn(pc("650W", 30_000_000L));
+        turn.results.put("gpu1", RTX4060);
+        var result = service.runTool(Map.of("name", "propose_upgrade", "arguments",
+                "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"gpu1\",\"buy_qty\":2}]}"), turn);
+        assertThat(result).contains("false", "quantity");
+        assertThat(turn.plan).isNull();
+    }
+
+    @Test
+    void followUpRtxKhongDuocDoiSangAmd() {
+        var rx = product("VGA ASUS Dual Radeon RX 7600 8GB", 6_990_000L);
+        when(search.search(any())).thenReturn(List.of(rx, RTX4060));
+        when(search.offer(rx.url())).thenReturn(new Offer(rx.title(), rx.shop(), rx.priceVnd(), null, rx.url(), null, true, 36, Instant.now()));
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX 4060\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-1\"}]}"),
+                toolCall("p2", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-2\"}]}"),
+                answer("Use the RTX card."));
+        var request = new ChatRequest(List.of(new Message("user", "Upgrade my PC"), new Message("assistant", "Here is an option."),
+                new Message("user", "Please use RTX, not AMD.")), null, null, "upgrade", pc("650W", 12_000_000L));
+        var res = service.reply(request, s -> { });
+        assertThat(toolResult(2)).contains("NVIDIA");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.productName()).contains("RTX"));
+    }
+
+    @Test
+    void soLuongMuaKhongDuocTuLamTronHoacCatBot() {
+        for (String qty : List.of("0", "-1", "1.5", "5", "4294967297", "\"two\"")) {
+            var turn = new UpgradeService.Turn(pc("650W", 30_000_000L));
+            turn.results.put("ram1", DDR4);
+            var result = service.runTool(Map.of("name", "propose_upgrade", "arguments",
+                    "{\"items\":[{\"category\":\"ram\",\"product_id\":\"ram1\",\"buy_qty\":" + qty + "}]}"), turn);
+            assertThat(result).as("quantity %s", qty).contains("false", "quantity");
+            assertThat(turn.plan).isNull();
+        }
+    }
+
+    @Test
+    void followUpChoPhepMoiHangThiGoYeuCauRtxCu() {
+        var rx = product("VGA ASUS Dual Radeon RX 7600 8GB", 6_990_000L);
+        when(search.search(any())).thenReturn(List.of(rx));
+        when(search.offer(rx.url())).thenReturn(new Offer(rx.title(), rx.shop(), rx.priceVnd(), null, rx.url(), null, true, 36, Instant.now()));
+        reply(toolCall("s", "search_products", "{\"query\":\"RX 7600\"}"),
+                toolCall("p", "propose_upgrade", "{\"items\":[{\"category\":\"gpu\",\"product_id\":\"s1-1\"}]}"),
+                answer("Use the Radeon card."));
+        var request = new ChatRequest(List.of(new Message("user", "Upgrade my PC"), new Message("assistant", "Which brand?"),
+                new Message("user", "RTX please"), new Message("assistant", "Here is an RTX option."),
+                new Message("user", "Any brand is fine now.")), null, null, "upgrade", pc("650W", 12_000_000L));
+        var res = service.reply(request, s -> { });
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.productName()).contains("RX 7600"));
+    }
+
+    @Test
+    void lanCuoiChiMuaSsdNeuThemRamLamVuotNganSach() {
+        var office = new UpgradeInfo("Intel Core i5-6500", "ASUS H110M-K", "8GB DDR4, 1 stick", "none", "HDD 1TB", "300W",
+                "standard", "Office Word Excel; Windows starts slowly", 3_500_000L);
+        var ssd = product("SSD Kingston A400 480GB 2.5 inch SATA", 2_500_000L);
+        when(search.offer(ssd.url())).thenReturn(new Offer(ssd.title(), ssd.shop(), ssd.priceVnd(), null, ssd.url(), null, true, 36, Instant.now()));
+        var turn = new UpgradeService.Turn(office);
+        turn.proposals.set(UpgradeService.MAX_PROPOSE_ROUNDS - 1);
+        turn.results.put("ssd", ssd);
+        turn.results.put("ram", DDR4);
+        var result = service.runTool(Map.of("name", "propose_upgrade", "arguments",
+                "{\"items\":[{\"category\":\"ssd\",\"product_id\":\"ssd\",\"action\":\"add\"},"
+                + "{\"category\":\"ram\",\"product_id\":\"ram\"}]}"), turn);
+        assertThat(result).contains("\"ok\":true");
+        assertThat(turn.plan.items()).singleElement().satisfies(p -> assertThat(p.category()).isEqualTo("ssd"));
+        assertThat(turn.plan.warnings()).extracting(Issue::rule).contains("BUDGET_TRIM");
+    }
+
+    @Test
+    void b650eITwoOccupiedSlotsCannotTakeAThirdStickOrReplaceWithLessMemory() {
+        var pc = new UpgradeInfo("AMD Ryzen 5 7600", "ASUS ROG STRIX B650E-I GAMING WIFI", "16GB DDR5, 2 sticks",
+                "RTX 4060 8GB", "NVMe 1TB", "SFX 650W", "mini", "Programming Docker Android Studio", 12_000_000L);
+        assertThat(UpgradeService.boardSlots(pc.motherboard())).isEqualTo(2);
+        assertThat(UpgradeService.fit(pc, List.of(pick("ram", "add", DDR5)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("2 RAM slots", "3 sticks"));
+        assertThat(UpgradeService.fit(pc, List.of(pick("ram", "replace", DDR5)), new ArrayList<>(), new ArrayList<>()))
+                .anySatisfy(e -> assertThat(e).contains("does not increase capacity"));
+    }
+
+    @Test
+    void affordableSubsetStillRequiresTheMatchingCpuBoardAndPowerSupply() {
+        var cpu = pick("cpu", "replace", product("CPU Intel Core i5-12400F", 2_990_000L));
+        assertThat(UpgradeService.affordableSubset(pc("300W", 4_000_000L), List.of(cpu, pick("psu", "replace", PSU650)))).isEmpty();
+        assertThat(UpgradeService.affordableSubset(pc("300W", 9_000_000L), List.of(pick("gpu", "replace", RTX4070), pick("psu", "replace", PSU650)))).isEmpty();
+    }
+
+    @Test
+    void betterChoiceRespectsTheSameVendorConstraintAsThePurchaseGate() {
+        var rx = product("VGA ASUS Dual Radeon RX 7600 XT 16GB", 6_990_000L);
+        when(search.offer(rx.url())).thenReturn(new Offer(rx.title(), rx.shop(), rx.priceVnd(), null, rx.url(), null, true, 36, Instant.now()));
+        var turn = new UpgradeService.Turn(pc("650W", 12_000_000L));
+        turn.results.put("rx", rx);
+        turn.requiredGpuVendor = "nvidia";
+        assertThat(service.betterChoice(turn, List.of(pick("gpu", "replace", RTX4060)))).isNull();
+        turn.requiredGpuVendor = null;
+        assertThat(service.betterChoice(turn, List.of(pick("gpu", "replace", RTX4060)))).contains("RX 7600");
+    }
+
+    @Test
+    void memoryExplanationUsesTotalCapacityNotSixteenGbPerOldStick() {
+        var old = new UpgradeInfo("Ryzen 5 7600", "ASUS B650E-I", "16GB DDR5, 2 sticks", "RTX 4060", "SSD 1TB", "650W",
+                "mini", "Programming", 16_000_000L);
+        var kit = pick("ram", "replace", product("RAM Kingston 32GB (2x16GB) DDR5 6000", 13_000_000L));
+        assertThat(UpgradeService.memoryReply(old, List.of(kit))).contains("Replace the existing RAM", "32 GB")
+                .doesNotContain("two 16GB", "64 GB");
+        var one = pick("ram", "add", DDR5);
+        assertThat(UpgradeService.memoryReply(old, List.of(one))).contains("Add ", "32 GB");
+        var pair = new UpgradeService.Pick("ram", "replace", DDR5, one.offer(), 2, null, null);
+        assertThat(UpgradeService.memoryReply(old, List.of(pair))).contains("2 × ", "32 GB");
     }
 
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {

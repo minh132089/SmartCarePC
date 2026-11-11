@@ -1345,7 +1345,8 @@ public class ChatService {
         }
     }
 
-    private static final java.util.regex.Pattern ANY_VENDOR = java.util.regex.Pattern.compile("hãng nào cũng (được|ok)");
+    private static final java.util.regex.Pattern ANY_VENDOR = java.util.regex.Pattern.compile(
+            "hãng nào cũng (được|ok)|\\b(?:any (?:brand|vendor)|no (?:brand|vendor) preference)\\b");
     private static final java.util.regex.Pattern AMD_GPU = java.util.regex.Pattern.compile(
             "(card|vga|gpu|đồ họa|đồ hoạ)[^.,;!?]{0,20}\\b(amd|radeon|radeo)\\b|\\bradeon\\b|\\brx\\s?\\d{4}");
     /** Cả cách viết sai hay gặp (ca thật 23/10: "card NVIDA" không nhận ra, app đổi sang card AMD) */
