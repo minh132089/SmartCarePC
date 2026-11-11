@@ -513,7 +513,9 @@ public class UpgradeService {
         boolean sfxPsu = psu != null && SFX.matcher(psu.product().title()).find();
         if (psu != null && newCase && !sfxPsu) {
             String c = caseNew.product().title().toLowerCase(Locale.ROOT);
-            if (c.matches(".*\\b(mini[\\s-]?itx|itx|sff|mini)\\b.*") && !c.matches(".*\\b(m[\\s-]?atx|micro[\\s-]?atx|atx[\\s-]?psu)\\b.*")) {
+            boolean atxPsu = c.matches(".*\\batx\\s*(psu|power|nguồn)\\b.*|.*\\bps2\\b.*") && !c.matches(".*\\bsfx\\b.*\\bonly\\b.*");
+            boolean small = c.matches(".*\\b(itx|sff|sfx)\\b.*") || c.matches(".*\\bmini\\b(?!\\s*-?\\s*tower).*");
+            if (small && !atxPsu) {
                 errors.add("psu: the new case \"" + caseNew.product().title() + "\" is a small (ITX / SFF) case that usually takes only SFX "
                         + "power supplies. Choose an SFX power supply or a case that lists ATX power supply support.");
             } else if (!c.matches(".*\\b(atx|tower)\\b.*")) {
@@ -680,7 +682,18 @@ public class UpgradeService {
     private static final Pattern DONG = Pattern.compile(
             "(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
                     + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE);
+    /** Số kiểu hàng nghìn ("10,000,000", "1.190.000") hoặc từ 6 chữ số (mã CPU như 12400 có 5), không kèm đơn vị đo (MHz, GB, W, mm...) */
+    private static final Pattern BARE = Pattern.compile(
+            "(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
+            Pattern.CASE_INSENSITIVE);
+    /** Chữ "giá / costs / priced" đi kèm một con số ngay sau: coi là báo giá */
+    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE);
     private static final Pattern LINK = Pattern.compile("\\[([^\\]]*)\\]\\(\\s*https?://[^)]*\\)|https?://\\S+|www\\.\\S+");
+
+    /** Câu có nhắc tiền: số có đơn vị tiền, số kiểu hàng nghìn / từ 5 chữ số không đơn vị đo, hay chữ "giá / costs" kèm số */
+    static boolean mentionsMoney(String text) {
+        return text != null && (!amounts(text).isEmpty() || BARE.matcher(text).find() || PRICE_WORD.matcher(text).find());
+    }
 
     /** Mọi khoản tiền (đồng) viết trong câu: "8.45 million", "1.2M", "VND 500,000", "1.190.000đ" */
     static List<Long> amounts(String text) {
@@ -722,7 +735,7 @@ public class UpgradeService {
                             .split("(?<=[.!?])\\s+"))
                     .filter(sentence -> !TOOL_ECHO.matcher(sentence).find())
                     .filter(sentence -> {
-                        boolean ok = amounts(sentence).isEmpty();
+                        boolean ok = !mentionsMoney(sentence);
                         if (!ok) log.info("Upgrade: bỏ câu có số tiền: {}", sentence);
                         return ok;
                     })

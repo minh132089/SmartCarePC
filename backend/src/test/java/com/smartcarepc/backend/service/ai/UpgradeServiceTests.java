@@ -289,6 +289,29 @@ class UpgradeServiceTests {
         assertThat(UpgradeService.checkedReply("Plan accepted. Add a SATA SSD.", turn)).isEqualTo("Add a SATA SSD.");
     }
 
+    @Test
+    void soTienKhongDonViVanBiBo() {
+        var turn = new UpgradeService.Turn(pc("450W", 10_000_000L));
+        assertThat(UpgradeService.checkedReply("RTX 4060 costs 10,000,000. The card is priced at 8.45. Keep your DDR4 3200 RAM, "
+                + "it runs at 3200MHz with 16GB at 1080p and 240Hz. Buy it.", turn))
+                .isEqualTo("Keep your DDR4 3200 RAM, it runs at 3200MHz with 16GB at 1080p and 240Hz. Buy it.");
+        assertThat(UpgradeService.checkedReply("Keep your i5-12400 and Core i5 13400 with a 120mm fan. It costs 8450000.", turn))
+                .isEqualTo("Keep your i5-12400 and Core i5 13400 with a 120mm fan.");
+    }
+
+    @Test
+    void tenVoGhiSfxHoacSffThiCanNguonSfx() {
+        var info = new UpgradeInfo("Intel Core i5-12400", "MSI PRO B760M-A DDR4", "16GB DDR4", "RTX 4060", "", "SFX 450W", "mini", "Gaming", 10_000_000L);
+        for (String name : List.of("Vỏ case SFF Micro ATX, SFX PSU only", "Case Mini ITX nhôm")) {
+            assertThat(UpgradeService.fit(info, List.of(pick("case", "replace", product(name, 1_500_000L)), pick("psu", "replace", PSU650)),
+                    new ArrayList<>(), new ArrayList<>())).as(name).anySatisfy(e -> assertThat(e).contains("SFX"));
+        }
+        for (String name : List.of("Vỏ case Xigmatek NYX Air mATX Mini Tower", "Case Mini ITX hỗ trợ ATX PSU")) {
+            assertThat(UpgradeService.fit(info, List.of(pick("case", "replace", product(name, 900_000L)), pick("psu", "replace", PSU650)),
+                    new ArrayList<>(), new ArrayList<>())).as(name).noneSatisfy(e -> assertThat(e).contains("SFX"));
+        }
+    }
+
     private static UpgradeService.Pick pick(String category, String action, ProductSearch.Product p) {
         return new UpgradeService.Pick(category, action, p, new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()),
                 1, null, null);
