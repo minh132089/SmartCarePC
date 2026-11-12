@@ -1,8 +1,18 @@
-import { ArrowRight, CheckCircle, Cpu, Eye, EyeSlash, Sparkle } from '@phosphor-icons/react'
-import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react'
+import { AnimateIcon } from '@animate-ui/react/icons'
+import GlassSurface from '@/components/GlassSurface'
+import { ArrowRight } from '@/components/animate-ui/icons/arrow-right'
+import { CircuitBoard } from '@/components/animate-ui/icons/circuit-board'
+import { Eye } from '@/components/animate-ui/icons/eye'
+import { EyeOff } from '@/components/animate-ui/icons/eye-off'
+import { LockKeyhole } from '@/components/animate-ui/icons/lock-keyhole'
+import { Mail } from '@/components/animate-ui/icons/mail'
 
 const SESSION_KEY = 'smartcare-session-v2'
+const GOOGLE_CLIENT_ID = '666308491003-lasilr6p89lq8b06q6v87tmi2bb29o84.apps.googleusercontent.com'
+/** Lò xo không nảy (damping 1): form chỉ hiện ra hay đổi chế độ, không có cú vuốt nào nên không cần nảy */
+const SPRING = { type: 'spring', bounce: 0, duration: 0.4 } as const
 
 export type Session = { email: string; name: string }
 
@@ -19,8 +29,13 @@ export function clearSession() {
   localStorage.removeItem(SESSION_KEY)
 }
 
+/**
+ * Màn đăng nhập / đăng ký: một tấm kính (GlassSurface của React Bits) nằm trên ảnh máy thật.
+ * Chrome có khúc xạ thật qua bộ lọc SVG; Safari và Firefox tự lùi về kính mờ.
+ */
 export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (session: Session) => void; onClose?: () => void; required?: boolean }) {
   const googleButton = useRef<HTMLDivElement>(null)
+  const reduce = useReducedMotion()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -37,7 +52,7 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
     const initialize = () => {
       if (cancelled || !googleButton.current || !window.google) return
       window.google.accounts.id.initialize({
-        client_id: '666308491003-lasilr6p89lq8b06q6v87tmi2bb29o84.apps.googleusercontent.com',
+        client_id: GOOGLE_CLIENT_ID,
         callback: async ({ credential }) => {
           try {
             const response = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }) })
@@ -49,7 +64,9 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
         },
       })
       googleButton.current.replaceChildren()
-      window.google.accounts.id.renderButton(googleButton.current, { theme: 'outline', size: 'large', text: 'signin_with', width: 320 })
+      // Nút của Google có bề rộng cố định: lấy đúng bề rộng ô chứa để không tràn trên điện thoại
+      const width = Math.min(400, Math.max(200, Math.floor(googleButton.current.clientWidth)))
+      window.google.accounts.id.renderButton(googleButton.current, { theme: 'filled_black', size: 'large', text: register ? 'signup_with' : 'continue_with', shape: 'pill', width })
     }
     if (window.google) initialize()
     else {
@@ -62,7 +79,7 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
       return () => { cancelled = true; script.remove() }
     }
     return () => { cancelled = true }
-  }, [onLogin, remember])
+  }, [onLogin, remember, register])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -101,50 +118,107 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
   }
 
   return (
-    <main className="auth-page">
-      <div className="auth-layout">
-        <section className="auth-story" aria-label="About SmartCare PC">
-          <div className="auth-brand"><span className="auth-brand-icon"><Cpu size={21} weight="bold" /></span><span>PC <strong>SmartCare</strong></span></div>
-          <div className="auth-story-copy">
-            <div className="auth-eyebrow"><Sparkle size={14} weight="fill" /> EXPLORE THE WORLD OF PCS</div>
-            <h1>Your PC.<br /><span>Your journey.</span></h1>
-            <p>From choosing parts to a finished build, it all starts here.</p>
-          </div>
-          <div className="auth-visual"><img src="/hero/advice-showcase-dark.jpg" alt="A PC model with its components visible inside" /><span className="auth-visual-label"><span className="auth-status" /> INTERACTIVE 3D <span> / </span> EASY ASSEMBLY</span></div>
-          <div className="auth-benefits"><span><CheckCircle size={17} /> Smart advice</span><span><CheckCircle size={17} /> Visual guides</span></div>
-          <div className="auth-story-footer">PC SMARTCARE <span>•</span> FOR PEOPLE WHO LOVE TECH</div>
-        </section>
-        <section className="auth-form-panel" aria-label={register ? 'Create account' : 'Sign in'}>
-          <div className="auth-mobile-brand"><span className="auth-brand-icon"><Cpu size={19} weight="bold" /></span> PC <strong>SmartCare</strong></div>
-          <div className="auth-form-content">
-            <div className="auth-form-kicker"><span /> SMARTCARE PC ACCOUNT</div>
-            <h2>{register ? 'Create an account' : 'Welcome back'}<span>.</span></h2>
-            <p className="auth-intro">{register ? 'Start building a PC of your own.' : 'Sign in to explore and build your own PC with confidence.'}</p>
-            {required && <p className="auth-intro">Please sign in or create an account to use the app. Your name and email are saved with the feedback you send, and only the research team can see them.</p>}
-            <div className="auth-tabs" role="group" aria-label="Sign in or create an account"><button type="button" aria-pressed={!register} onClick={() => changeMode(false)}>Sign in</button><button type="button" aria-pressed={register} onClick={() => changeMode(true)}>Create account</button></div>
-            <div ref={googleButton} className="auth-google" />
-            <div className="auth-divider"><span />or continue with email<span /></div>
-            <form onSubmit={submit} className="auth-form" noValidate>
-              <label>Email<input value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} type="email" autoComplete="email" placeholder="you@example.com" /></label>
-              <label>Password<span className="auth-password"><input value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} type={showPassword ? 'text' : 'password'} autoComplete={register ? 'new-password' : 'current-password'} placeholder={register ? 'At least 8 characters' : 'Enter your password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeSlash size={19} /> : <Eye size={19} />}</button></span></label>
-              {register && <label>Confirm password<input value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setError('') }} type="password" autoComplete="new-password" placeholder="Enter your password again" /></label>}
-              {error && <p role="alert" className="auth-error">{error}</p>}
-              {notice && <p role="status" className="auth-notice">{notice}</p>}
-              {!register && <label className="auth-remember"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Keep me signed in on this device</label>}
-              <button type="submit" disabled={busy} className="auth-submit">{busy ? 'Working…' : register ? 'Create account' : 'Sign in'} <ArrowRight size={18} /></button>
-              <p className="auth-demo">{register ? 'Already have an account?' : 'New here?'} <button type="button" onClick={() => changeMode(!register)}>{register ? 'Sign in' : 'Create an account'}</button></p>
-              {onClose && <button type="button" onClick={onClose} className="auth-skip">Not now, back to the page</button>}
-            </form>
-          </div>
-          <p className="auth-footer">© {new Date().getFullYear()} PC SmartCare <span>Made for people who love tech.</span></p>
-        </section>
-      </div>
-    </main>
+    <MotionConfig reducedMotion="user" transition={SPRING}>
+      <main className="auth-page">
+        <img className="auth-backdrop" src="/hero/advice-showcase-dark.jpg" alt="" aria-hidden />
+        <motion.div
+          className="auth-card-wrap"
+          // Tấm kính "hiện hình": phóng nhẹ và hết mờ cùng lúc, thay vì chỉ hiện dần (giảm chuyển động thì chỉ hiện dần)
+          initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, filter: 'blur(8px)' }}
+          // filter phải về 'none' khi xong: còn filter (kể cả blur(0px)) thì khung này thành "backdrop root" và tấm kính bên trong
+          // không nhìn thấy ảnh phía sau nữa
+          animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+        >
+          <GlassSurface width="100%" height="auto" borderRadius={28} borderWidth={0.04} distortionScale={-90} frostBlur={22} backgroundOpacity={0.4} blur={10} brightness={45} saturation={1.3} className="auth-card">
+            <div className="auth-card-body">
+              <AnimateIcon animateOnHover asChild>
+                <div className="auth-brand"><CircuitBoard size={20} aria-hidden /> PC SmartCare</div>
+              </AnimateIcon>
+
+              <h1>{register ? 'Create an account' : 'Sign in'}</h1>
+              <p className="auth-lead">
+                {required
+                  ? 'You need an account to use the app. Your name and email are saved with any feedback you send, and only the research team can see them.'
+                  : register ? 'All you need is an email and a password of 8 characters or more.' : 'Use your Google account or the email you registered with.'}
+              </p>
+
+              <div className="auth-segment" role="group" aria-label="Sign in or create an account">
+                {[false, true].map((mode) => (
+                  <button key={String(mode)} type="button" aria-pressed={register === mode} onClick={() => changeMode(mode)}>
+                    {register === mode && <motion.span layoutId="auth-segment-pill" className="auth-segment-pill" aria-hidden />}
+                    <span className="relative">{mode ? 'Create account' : 'Sign in'}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div ref={googleButton} className="auth-google" />
+              <div className="auth-divider"><span />or with email<span /></div>
+
+              <form onSubmit={submit} className="auth-form" noValidate>
+                <Field label="Email" icon={(on) => <Mail size={17} animate={on} aria-hidden />}>
+                  {(focus) => <input {...focus} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} type="email" autoComplete="email" placeholder="you@example.com" />}
+                </Field>
+                <Field
+                  label="Password"
+                  icon={(on) => <LockKeyhole size={17} animate={on} aria-hidden />}
+                  trailing={
+                    <button type="button" className="auth-reveal" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>
+                      {showPassword ? <EyeOff size={18} animateOnHover aria-hidden /> : <Eye size={18} animateOnHover aria-hidden />}
+                    </button>
+                  }
+                >
+                  {(focus) => <input {...focus} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} type={showPassword ? 'text' : 'password'} autoComplete={register ? 'new-password' : 'current-password'} placeholder={register ? 'At least 8 characters' : 'Your password'} />}
+                </Field>
+                <AnimatePresence initial={false}>
+                  {register && (
+                    <motion.div key="confirm" className="auth-collapse" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                      <Field label="Confirm password" icon={(on) => <LockKeyhole size={17} animate={on} aria-hidden />}>
+                        {(focus) => <input {...focus} value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setError('') }} type="password" autoComplete="new-password" placeholder="Type it again" />}
+                      </Field>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {error && <p role="alert" className="auth-error">{error}</p>}
+                {notice && <p role="status" className="auth-notice">{notice}</p>}
+                {!register && <label className="auth-remember"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Keep me signed in on this device</label>}
+
+                <AnimateIcon animateOnHover asChild>
+                  <button type="submit" disabled={busy} className="auth-submit">
+                    {busy ? 'One moment…' : register ? 'Create account' : 'Sign in'}
+                    {!busy && <ArrowRight size={18} aria-hidden />}
+                  </button>
+                </AnimateIcon>
+              </form>
+
+              {onClose && <button type="button" onClick={onClose} className="auth-skip">Not now</button>}
+            </div>
+          </GlassSurface>
+        </motion.div>
+      </main>
+    </MotionConfig>
+  )
+}
+
+type FocusProps = { onFocus: () => void; onBlur: () => void }
+
+/** Một ô nhập có icon ở đầu: icon chạy hoạt ảnh khi ô đang được chọn, để thấy rõ mình đang gõ vào đâu */
+function Field({ label, icon, trailing, children }: { label: string; icon: (active: boolean) => ReactNode; trailing?: ReactNode; children: (focus: FocusProps) => ReactNode }) {
+  const [active, setActive] = useState(false)
+  return (
+    <label className="auth-field">
+      <span className="auth-label">{label}</span>
+      <span className="auth-input" data-active={active || undefined}>
+        <span className="auth-input-icon">{icon(active)}</span>
+        {children({ onFocus: () => setActive(true), onBlur: () => setActive(false) })}
+        {trailing}
+      </span>
+    </label>
   )
 }
 
 declare global {
   interface Window {
-    google?: { accounts: { id: { initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void; renderButton: (element: HTMLElement, options: { theme: string; size: string; text: string; width: number }) => void } } }
+    google?: { accounts: { id: { initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void; renderButton: (element: HTMLElement, options: { theme: string; size: string; text: string; shape?: string; width: number }) => void } } }
   }
 }
