@@ -11,11 +11,14 @@ const SESSION_KEY = 'smartcare-session-v2'
 const GOOGLE_CLIENT_ID = '666308491003-lasilr6p89lq8b06q6v87tmi2bb29o84.apps.googleusercontent.com'
 /** Lò xo không nảy (damping 1): chỉ là đổi chế độ / đổi ảnh, không có cú vuốt nào nên không cần nảy */
 const SPRING = { type: 'spring', bounce: 0, duration: 0.4 } as const
-/** Ba ảnh Unsplash (xem public/auth/CREDITS.txt), mỗi ảnh ứng với một việc app làm được */
+/**
+ * Ba ảnh Unsplash (xem public/auth/CREDITS.txt), mỗi ảnh ứng với một việc app làm được.
+ * hue là sắc màu chính của ánh đèn trong ảnh (đo trên ảnh: xanh 230, đỏ cam 5, xanh 217); nền trang và thẻ đổi theo nó.
+ */
 const SLIDES = [
-  { src: '/auth/build.jpg', caption: 'Choose parts that fit,\nthen build it step by step' },
-  { src: '/auth/maintain.jpg', caption: 'Keep it clean and cool,\nwith a reminder when it is due' },
-  { src: '/auth/upgrade.jpg', caption: 'Know which upgrade\nis worth the money' },
+  { src: '/auth/build.jpg', hue: 230, caption: 'Choose parts that fit,\nthen build it step by step' },
+  { src: '/auth/maintain.jpg', hue: 8, caption: 'Keep it clean and cool,\nwith a reminder when it is due' },
+  { src: '/auth/upgrade.jpg', hue: 217, caption: 'Know which upgrade\nis worth the money' },
 ]
 const SLIDE_MS = 5000
 
@@ -51,6 +54,8 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
   const [showPassword, setShowPassword] = useState(false)
   const [register, setRegister] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [slide, setSlide] = useState(0)
+  const hue = SLIDES[slide].hue
   const changeMode = (next: boolean) => { if (busy) return; setRegister(next); setError(''); setNotice(''); setPassword(''); setShowPassword(false) }
 
   useEffect(() => {
@@ -72,7 +77,7 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
       googleButton.current.replaceChildren()
       // Nút của Google có bề rộng cố định: lấy đúng bề rộng ô chứa để không tràn trên điện thoại
       const width = Math.min(400, Math.max(200, Math.floor(googleButton.current.clientWidth)))
-      window.google.accounts.id.renderButton(googleButton.current, { theme: 'filled_black', size: 'large', text: register ? 'signup_with' : 'continue_with', shape: 'rectangular', width })
+      window.google.accounts.id.renderButton(googleButton.current, { theme: 'filled_black', size: 'large', text: register ? 'signup_with' : 'signin_with', shape: 'rectangular', width, locale: 'vi' })
     }
     if (window.google) initialize()
     else {
@@ -129,9 +134,10 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
 
   return (
     <MotionConfig reducedMotion="user" transition={SPRING}>
-      <main className="auth-page">
-        <div className="auth-card">
-          <Showcase onClose={onClose} />
+      {/* Nền trang và thẻ ngả theo màu đèn của ảnh đang hiện, chuyển màu chậm cùng lúc ảnh mờ dần sang ảnh mới */}
+      <main className="auth-page" style={{ backgroundColor: `hsl(${hue} 22% 40%)` }}>
+        <div className="auth-card" style={{ backgroundColor: `hsl(${hue} 14% 13%)` }}>
+          <Showcase index={slide} onChange={setSlide} onClose={onClose} />
 
           <section className="auth-form-side" aria-label={register ? 'Create an account' : 'Log in'}>
             <div className="auth-mobile-brand"><CircuitBoard size={20} aria-hidden /> PC SmartCare</div>
@@ -186,15 +192,14 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
 }
 
 /** Cột ảnh bên trái: ba ảnh đổi dần mỗi 5 giây, chấm bên dưới để chọn ảnh. Rê chuột vào thì dừng đổi. */
-function Showcase({ onClose }: { onClose?: () => void }) {
+function Showcase({ index, onChange, onClose }: { index: number; onChange: (index: number) => void; onClose?: () => void }) {
   const reduce = useReducedMotion()
-  const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   useEffect(() => {
     if (paused) return
-    const timer = setTimeout(() => setIndex((i) => (i + 1) % SLIDES.length), SLIDE_MS)
+    const timer = setTimeout(() => onChange((index + 1) % SLIDES.length), SLIDE_MS)
     return () => clearTimeout(timer)
-  }, [index, paused])
+  }, [index, paused, onChange])
   const slide = SLIDES[index]
 
   return (
@@ -233,7 +238,7 @@ function Showcase({ onClose }: { onClose?: () => void }) {
         </AnimatePresence>
         <div className="auth-dots" role="group" aria-label="Choose a picture">
           {SLIDES.map((s, i) => (
-            <button key={s.src} type="button" aria-label={`Picture ${i + 1} of ${SLIDES.length}`} aria-pressed={i === index} onClick={() => setIndex(i)}>
+            <button key={s.src} type="button" aria-label={`Picture ${i + 1} of ${SLIDES.length}`} aria-pressed={i === index} onClick={() => onChange(i)}>
               <span />
             </button>
           ))}
@@ -245,6 +250,6 @@ function Showcase({ onClose }: { onClose?: () => void }) {
 
 declare global {
   interface Window {
-    google?: { accounts: { id: { initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void; renderButton: (element: HTMLElement, options: { theme: string; size: string; text: string; shape?: string; width: number }) => void } } }
+    google?: { accounts: { id: { initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void; renderButton: (element: HTMLElement, options: { theme: string; size: string; text: string; shape?: string; width: number; locale?: string }) => void } } }
   }
 }
