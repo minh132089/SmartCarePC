@@ -16,7 +16,8 @@ export type StudyQuestion = {
   key: string
   text: string
   hint?: string
-  type: 'single' | 'multi' | 'scale' | 'text'
+  /** number: ô nhập số (tuổi). line: ô một dòng, options là gợi ý chọn nhanh nhưng vẫn gõ tự do được (nghề) */
+  type: 'single' | 'multi' | 'scale' | 'text' | 'number' | 'line'
   options?: StudyOption[]
   low?: string
   high?: string
@@ -218,13 +219,41 @@ const sources = (extra: StudyOption[] = []): StudyQuestion => ({
 /** Nền kỹ thuật (Q4): hai mức đầu là "không có nền kỹ thuật" */
 export const TECH_GROUP: Record<string, 'non_tech' | 'tech'> = { never: 'non_tech', watched: 'non_tech', part: 'tech', built: 'tech', it: 'tech' }
 
+/** Gợi ý nghề, giống danh sách của form hồ sơ cũ. Lưu chữ tiếng Anh (value) để biểu đồ nghề không bị tách đôi theo ngôn ngữ */
+const OCCUPATIONS: StudyOption[] = [
+  { value: 'School student', label: 'School student', vi: 'Học sinh' },
+  { value: 'University student', label: 'University student', vi: 'Sinh viên' },
+  { value: 'Office worker', label: 'Office worker', vi: 'Nhân viên văn phòng' },
+  { value: 'Information technology', label: 'Information technology', vi: 'Công nghệ thông tin' },
+  { value: 'Design / creative work', label: 'Design / creative work', vi: 'Thiết kế / sáng tạo' },
+  { value: 'Teacher / lecturer', label: 'Teacher / lecturer', vi: 'Giáo viên / giảng viên' },
+  { value: 'Business / self-employed', label: 'Business / self-employed', vi: 'Kinh doanh / tự do' },
+  { value: 'Not currently employed', label: 'Not currently employed', vi: 'Chưa đi làm' },
+]
+
 export const BASELINE: StudyQuestion[] = [
   ...CONFIDENCE,
   ...INDEPENDENCE,
   ...DECISIONS,
   {
-    key: 'tech_bg',
+    key: 'participant_age',
     section: "About you",
+    text: "How old are you?",
+    type: 'number',
+    placeholder: "e.g. 21",
+    vi: { section: 'Về bạn', text: 'Bạn bao nhiêu tuổi?', placeholder: 'Ví dụ 21' },
+  },
+  {
+    key: 'participant_occupation',
+    text: "What is your occupation?",
+    hint: "Choose one or type your own",
+    type: 'line',
+    placeholder: "e.g. University student",
+    options: OCCUPATIONS,
+    vi: { text: 'Nghề nghiệp của bạn là gì?', hint: 'Chọn một gợi ý hoặc tự gõ', placeholder: 'Ví dụ Sinh viên' },
+  },
+  {
+    key: 'tech_bg',
     text: "Which of these describes you best?",
     type: 'single',
     options: [
@@ -234,7 +263,7 @@ export const BASELINE: StudyQuestion[] = [
       { value: 'built', label: "I have built a complete PC myself", vi: 'Tôi đã tự lắp trọn một bộ máy' },
       { value: 'it', label: "I study or work in hardware or IT", vi: 'Tôi học hoặc làm nghề về phần cứng, IT' },
     ],
-    vi: { section: 'Về bạn', text: 'Điều nào đúng nhất với bạn?' },
+    vi: { text: 'Điều nào đúng nhất với bạn?' },
   },
   {
     key: 'own_pc',

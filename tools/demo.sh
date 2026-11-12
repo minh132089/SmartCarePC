@@ -10,7 +10,7 @@ PIDS=""
 MYSQL_STARTED=""
 DATADIR="$(brew --prefix)/var/mysql"
 PAGES_PROJECT=smartcarepc
-PAGES_BRANCH=ai
+PAGES_BRANCH=main
 # SearXNG cho engine so giá (backend/service/price). Ghim đúng phiên bản đã thử.
 SEARXNG_IMAGE=searxng/searxng:2026.10.19-81371861f
 SEARXNG_NAME=smartcarepc-searxng
@@ -100,7 +100,8 @@ say "6/6 Cập nhật link ngắn trên Cloudflare Pages"
 printf "// Ghi lại bởi tools/demo.sh, không commit\nexport const BACKEND = '%s'\n" "$URL" >functions/_backend.js
 SHORT=""
 if $WRANGLER pages deploy dist --project-name "$PAGES_PROJECT" --branch "$PAGES_BRANCH" --commit-dirty=true >"$LOG/pages.log" 2>&1; then
-  SHORT="https://$PAGES_BRANCH.$PAGES_PROJECT.pages.dev"
+  # main là nhánh production: link chính smartcarepc.pages.dev (địa chỉ Google cho đăng nhập), không có tiền tố nhánh
+  SHORT="https://$PAGES_PROJECT.pages.dev"
 else
   echo "Không cập nhật được link ngắn (xem $LOG/pages.log). Vẫn dùng được link tạm bên dưới."
 fi

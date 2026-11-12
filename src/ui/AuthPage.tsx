@@ -19,7 +19,7 @@ export function clearSession() {
   localStorage.removeItem(SESSION_KEY)
 }
 
-export function AuthPage({ onLogin, onClose }: { onLogin: (session: Session) => void; onClose?: () => void }) {
+export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (session: Session) => void; onClose?: () => void; required?: boolean }) {
   const googleButton = useRef<HTMLDivElement>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -120,6 +120,7 @@ export function AuthPage({ onLogin, onClose }: { onLogin: (session: Session) => 
             <div className="auth-form-kicker"><span /> SMARTCARE PC ACCOUNT</div>
             <h2>{register ? 'Create an account' : 'Welcome back'}<span>.</span></h2>
             <p className="auth-intro">{register ? 'Start building a PC of your own.' : 'Sign in to explore and build your own PC with confidence.'}</p>
+            {required && <p className="auth-intro">Please sign in or create an account to use the app. Your name and email are saved with the feedback you send, and only the research team can see them.</p>}
             <div className="auth-tabs" role="group" aria-label="Sign in or create an account"><button type="button" aria-pressed={!register} onClick={() => changeMode(false)}>Sign in</button><button type="button" aria-pressed={register} onClick={() => changeMode(true)}>Create account</button></div>
             <div ref={googleButton} className="auth-google" />
             <div className="auth-divider"><span />or continue with email<span /></div>

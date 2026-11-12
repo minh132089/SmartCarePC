@@ -1,5 +1,5 @@
 import { visible, type AnswerMap } from './answers'
-import { Choices, Note, Question, Scale } from './StudyParts'
+import { Choices, focus, Note, Question, Scale } from './StudyParts'
 import { localize, type Lang, type StudyQuestion } from './questions'
 
 /** Vẽ một danh sách câu hỏi từ questions.ts. compact = bản gọn dưới mỗi bước lắp. */
@@ -30,6 +30,21 @@ export function QuestionList({
           const input =
             q.type === 'scale' ? (
               <Scale name={name} value={typeof value === 'number' ? value : null} onChange={(v) => set(q.key, v)} low={q.low ?? ''} high={q.high ?? ''} />
+            ) : q.type === 'number' ? (
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={120}
+                step={1}
+                aria-label={q.text}
+                value={typeof value === 'number' ? value : ''}
+                onChange={(e) => set(q.key, e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder={q.placeholder}
+                className={`w-32 rounded-xl bg-surface px-3 py-2 text-[14px] text-ink ring-1 ring-line-strong placeholder:text-ink-3 ${focus}`}
+              />
+            ) : q.type === 'line' ? (
+              <LineAnswer name={name} q={q} value={typeof value === 'string' ? value : ''} onChange={(v) => set(q.key, v)} lang={lang} />
             ) : q.type === 'text' ? (
               <Note value={typeof value === 'string' ? value : ''} onChange={(v) => set(q.key, v)} placeholder={q.placeholder ?? (lang === 'vi' ? 'Viết bằng lời của bạn' : "Use your own words")} />
             ) : (
@@ -60,5 +75,26 @@ export function QuestionList({
           )
         })}
     </>
+  )
+}
+
+/** Một dòng chữ tự do, kèm các gợi ý dạng viên thuốc để chọn nhanh. Chọn gợi ý thì lưu value của gợi ý (tiếng Anh). */
+function LineAnswer({ name, q, value, onChange, lang }: { name: string; q: StudyQuestion; value: string; onChange: (v: string) => void; lang: Lang }) {
+  const options = q.options ?? []
+  const picked = options.some((o) => o.value === value)
+  return (
+    <div className="space-y-2">
+      {options.length > 0 && <Choices name={name} options={options} value={picked ? [value] : []} onChange={(v) => onChange(v[0] ?? '')} />}
+      <input
+        type="text"
+        data-nofocus
+        aria-label={q.text}
+        maxLength={80}
+        value={picked ? '' : value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={options.length ? (lang === 'vi' ? 'Hoặc tự gõ' : 'Or type your own') : q.placeholder}
+        className={`w-full rounded-xl bg-surface px-3 py-2 text-[14px] text-ink ring-1 ring-line-strong placeholder:text-ink-3 ${focus}`}
+      />
+    </div>
   )
 }

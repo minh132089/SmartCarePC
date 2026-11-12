@@ -1,6 +1,10 @@
 import { create } from 'zustand'
+import { useSession } from '../Account'
 
-/** Hồ sơ tự nguyện: chỉ tuổi và nghề. Không thu tên thật, vì khảo sát đã hứa ẩn danh; phản hồi gắn với mã người tham gia. */
+/**
+ * Tuổi và nghề của người tham gia, hỏi trong form đầu tiên (baseline). Lưu lại trên trình duyệt để các phản hồi sau
+ * (form cuối, góp ý chung, chấm sao) cũng mang theo, giống form hồ sơ cũ.
+ */
 export type Participant = { age: number; occupation: string }
 const KEY = 'pcsc-participant-v1'
 
@@ -11,40 +15,32 @@ export function validParticipant(value: unknown): value is Participant {
     && typeof p.occupation === 'string' && p.occupation.trim().length >= 2 && p.occupation.trim().length <= 80
 }
 
-/** Chỉ bắt buộc với website Cloudflare Pages; localhost và demo qua LAN không bị chặn. */
-export function needsParticipant(hostname: string) {
-  return hostname.toLowerCase().endsWith('.pages.dev')
-}
-
 function read(): Participant | null {
   try {
     const p: unknown = JSON.parse(localStorage.getItem(KEY) ?? 'null')
-    // Bản cũ có lưu tên: bỏ tên, chỉ giữ tuổi và nghề
     return validParticipant(p) ? { age: p.age, occupation: p.occupation } : null
   } catch { return null }
 }
 
-export const useParticipant = create<{
-  profile: Participant | null
-  /** Chỉ giữ trong trang hiện tại; tải lại hoặc mở tab mới phải xác nhận lại. */
-  confirmedThisVisit: boolean
-  editing: boolean
-  edit: () => void
-  save: (profile: Participant) => void
-}>((set) => ({
+export const useParticipant = create<{ profile: Participant | null; save: (profile: Participant) => void }>((set) => ({
   profile: read(),
-  confirmedThisVisit: false,
-  editing: false,
-  edit: () => set({ editing: true }),
   save: (profile) => {
     if (!validParticipant(profile)) return
     const clean = { age: profile.age, occupation: profile.occupation.trim() }
     try { localStorage.setItem(KEY, JSON.stringify(clean)) } catch { /* Giữ trong phiên khi trình duyệt chặn lưu. */ }
-    set({ profile: clean, confirmedThisVisit: true, editing: false })
+    set({ profile: clean })
   },
 }))
 
+/**
+ * Thông tin gửi kèm mỗi phản hồi: tuổi, nghề (nếu đã trả lời) và tên, email của tài khoản đang đăng nhập.
+ * Tên và email chỉ nhóm nghiên cứu xem được (trang /feedback cần khoá), không công khai.
+ */
 export function participantAnswers() {
   const p = useParticipant.getState().profile
-  return p ? { participant_age: p.age, participant_occupation: p.occupation } : {}
+  const s = useSession.getState().session
+  return {
+    ...(p ? { participant_age: p.age, participant_occupation: p.occupation } : {}),
+    ...(s ? { participant_name: s.name, participant_email: s.email } : {}),
+  }
 }

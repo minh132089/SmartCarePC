@@ -212,7 +212,9 @@ export function FeedbackAdmin() {
                     )}
                   </div>
                   <div className="feedback-person">
-                    {person.age == null && !person.occupation && <strong>No profile information</strong>}
+                    {person.age == null && !person.occupation && !person.name && !person.email && <strong>No profile information</strong>}
+                    {person.name && <strong>{person.name}</strong>}
+                    {person.email && <span>{person.email}</span>}
                     {person.age != null && <span>{person.age} years old</span>}
                     {person.occupation && <span>{person.occupation}</span>}
                   </div>

@@ -50,21 +50,34 @@ export function AccountSlot({ hideSignIn = false }: { hideSignIn?: boolean }) {
   )
 }
 
-/** Lớp phủ đăng nhập / đăng ký. Esc hoặc nút "Để sau" đóng lại, đăng nhập xong cũng tự đóng. */
+/**
+ * Website công khai (Cloudflare Pages) bắt đăng nhập trước khi dùng, để phản hồi gắn được với người gửi.
+ * localhost và demo qua mạng LAN thì không bắt, cho dễ thử.
+ */
+export function needsLogin(hostname: string) {
+  return hostname.toLowerCase().endsWith('.pages.dev')
+}
+
+/**
+ * Lớp phủ đăng nhập / đăng ký. Esc hoặc nút "Để sau" đóng lại, đăng nhập xong cũng tự đóng.
+ * Trên website công khai mà chưa đăng nhập thì lớp phủ luôn mở và không có nút đóng.
+ */
 export function AuthOverlay() {
-  const open = useSession((s) => s.authOpen)
+  const session = useSession((s) => s.session)
+  const required = !session && needsLogin(location.hostname)
+  const open = useSession((s) => s.authOpen) || required
   const login = useSession((s) => s.login)
   const close = useSession((s) => s.closeAuth)
   useEffect(() => {
-    if (!open) return
+    if (!open || required) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, close])
+  }, [open, required, close])
   if (!open) return null
   return (
     <div role="dialog" aria-modal="true" aria-label="Sign in or create an account" className="fixed inset-0 z-[200] overflow-y-auto bg-[#e9edf2]">
-      <AuthPage onLogin={login} onClose={close} />
+      <AuthPage onLogin={login} onClose={required ? undefined : close} required={required} />
     </div>
   )
 }

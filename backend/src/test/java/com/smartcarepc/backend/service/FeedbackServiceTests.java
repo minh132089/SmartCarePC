@@ -66,8 +66,8 @@ class FeedbackServiceTests {
     }
 
     @Test
-    void tenThatKhongDuocLuu() {
-        var answers = Map.<String, Object>of("participant_name", "Nguyễn Minh", "participant_age", 21,
+    void tenVaEmailTaiKhoanDuocLuu() {
+        var answers = Map.<String, Object>of("participant_name", "Nguyễn Minh", "participant_email", "minh@example.com", "participant_age", 21,
                 "participant_occupation", "Sinh viên", "stars", 5);
         when(repo.save(any())).thenAnswer(inv -> {
             Feedback f = inv.getArgument(0);
@@ -77,7 +77,7 @@ class FeedbackServiceTests {
         service.save(new FeedbackRequest("P07", "before", null, answers));
         var captor = org.mockito.ArgumentCaptor.forClass(Feedback.class);
         org.mockito.Mockito.verify(repo).save(captor.capture());
-        assertThat(captor.getValue().getAnswers()).doesNotContain("participant_name", "Nguyễn Minh").contains("Sinh viên");
+        assertThat(captor.getValue().getAnswers()).contains("Nguyễn Minh", "minh@example.com", "Sinh viên");
     }
 
     @Test

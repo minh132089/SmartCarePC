@@ -8,7 +8,7 @@ import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, pendingForm, sendFeedback, 
 import { Choices, Dialog, focus, LangToggle, PrimaryButton, Question, QuietButton } from './StudyParts'
 import { tr, useFormLang } from './lang'
 import { useMaintenance } from '../maintenance/maintenanceState'
-import { useParticipant } from './participant'
+import { useParticipant, validParticipant, type Participant } from './participant'
 
 /** Nút nhỏ "Tham gia thử nghiệm" cho người chưa có mã (người dùng bình thường bỏ qua được) */
 export function StudyJoinLink({ className = '' }: { className?: string }) {
@@ -25,17 +25,15 @@ export function StudyJoinLink({ className = '' }: { className?: string }) {
 /** Dải nhỏ cho người tham gia: mã, lần đo, và nút mở form của lần đo (hoặc form phản hồi chung khi đã trả lời) */
 export function StudyBar() {
   const { code, phase, answered, open } = useStudy()
-  const { profile, edit } = useParticipant()
-  if (!code && !profile) return null
-  const form = code ? pendingForm(phase, answered) : null
+  if (!code) return null
+  const form = pendingForm(phase, answered)
   const sent = answered.includes('feedback')
   return (
     <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-2xl bg-info-bg px-3 py-2 text-[13px] text-info">
-      <button onClick={() => code ? open('join') : edit()} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title={code ? "Change code or study phase" : "Edit your details"}>
+      <button onClick={() => open('join')} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title="Change code or study phase">
         <Flask size={15} aria-hidden />
-        {code ? `Study · ${code} · ${PHASE_LABEL[phase]}` : "Your details · Edit"}
+        {`Study · ${code} · ${PHASE_LABEL[phase]}`}
       </button>
-      {code && profile && <button onClick={edit} className={`rounded-full px-2 text-[12px] hover:underline ${focus}`}>Edit your details</button>}
       <span className="flex-1" />
       <button onClick={() => open(form ?? 'feedback')} className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-medium hover:bg-surface ${focus} ${form ? 'bg-surface' : ''}`}>
         <NotePencil size={14} aria-hidden />
@@ -85,8 +83,8 @@ function JoinDialog() {
       <p className="text-[14px] leading-[1.5] text-ink-2">
         {tr(
           lang,
-          "Thank you for taking part. First you answer a few short questions, before using any guide. Then use the app as usual. On the last day of the study, open the app again, choose “End of study” below and answer the final questions. Responses are linked to your participant code only, not your name.",
-          'Cảm ơn bạn đã tham gia. Trước tiên bạn trả lời vài câu hỏi ngắn, trước khi dùng bất kỳ hướng dẫn nào. Sau đó dùng app như bình thường. Vào ngày cuối của nghiên cứu, mở lại app, chọn “Cuối nghiên cứu” bên dưới và trả lời các câu hỏi cuối. Câu trả lời chỉ gắn với mã người tham gia, không gắn với tên của bạn.',
+          "Thank you for taking part. First you answer a few short questions, before using any guide. Then use the app as usual. On the last day of the study, open the app again, choose “End of study” below and answer the final questions. Responses are saved with your participant code and the name and email of your account. Only the research team can see them.",
+          'Cảm ơn bạn đã tham gia. Trước tiên bạn trả lời vài câu hỏi ngắn, trước khi dùng bất kỳ hướng dẫn nào. Sau đó dùng app như bình thường. Vào ngày cuối của nghiên cứu, mở lại app, chọn “Cuối nghiên cứu” bên dưới và trả lời các câu hỏi cuối. Câu trả lời được lưu cùng mã người tham gia và tên, email tài khoản của bạn. Chỉ nhóm nghiên cứu xem được.',
         )}
       </p>
       <Question label={tr(lang, "Participant code", 'Mã người tham gia')}>
@@ -122,6 +120,7 @@ function JoinDialog() {
  */
 function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
   const { open, markAnswered, setOwnPc, ownPc } = useStudy()
+  const saveProfile = useParticipant((s) => s.save)
   const { lang, setLang } = useFormLang()
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
@@ -130,11 +129,16 @@ function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
   // Ở form cuối, câu bảo dưỡng chỉ dành cho người có máy bàn (hoặc chưa rõ vì trả lời form đầu trên máy khác)
   const questions = form === 'baseline' ? BASELINE : FOLLOWUP.filter((q) => q.key !== 'maint_done' || ownPc == null || ownPc === 'desktop')
   const { answers, empty } = collect(questions, a)
+  // Tuổi và nghề đi theo cặp (máy chủ từ chối nếu chỉ có một hoặc sai dạng): thiếu hay sai một ô thì không gửi cả hai
+  const profile = { age: answers.participant_age, occupation: answers.participant_occupation }
+  const profileOk = validParticipant(profile)
+  if (!profileOk) { delete answers.participant_age; delete answers.participant_occupation }
   const close = () => !busy && open(null)
 
   const submit = async () => {
     const r = await sendFeedback({ machine: null, answers: { form, form_lang: lang, ...answers } }, submissionId)
     if (r === 'failed') return setFailed(true)
+    if (profileOk) saveProfile(profile as Participant)
     markAnswered(form)
     if (form === 'baseline' && typeof answers.own_pc === 'string') setOwnPc(answers.own_pc)
     open(null)

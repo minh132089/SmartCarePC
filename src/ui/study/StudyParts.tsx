@@ -13,7 +13,7 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
     const back = document.activeElement as HTMLElement | null
     // Có ô nhập một dòng (ô mã) thì đặt con trỏ vào đó, không thì focus chính hộp thoại. Không nhảy vào ô góp ý
     // ở cuối form, vì như vậy form bị cuộn xuống giữa chừng.
-    const field = box.current?.querySelector<HTMLElement>('input:not([type]), input[type=text]')
+    const field = box.current?.querySelector<HTMLElement>('input:not([type]):not([data-nofocus]), input[type=text]:not([data-nofocus])')
     const target = field ?? box.current
     target?.focus()
     const onKey = (e: KeyboardEvent) => {

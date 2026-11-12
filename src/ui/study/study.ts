@@ -179,7 +179,7 @@ export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phas
   if (useSending.getState().sending) return 'failed'
   useSending.setState({ sending: true })
   const { code, phase } = useStudy.getState()
-  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...data.answers, ...participantAnswers(), submission_id: id } }
+  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...participantAnswers(), ...data.answers, submission_id: id } }
   try {
     await post(payload)
     void flushQueue()
