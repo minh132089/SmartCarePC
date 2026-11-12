@@ -5,10 +5,10 @@ import type { MaintenanceEvent } from './maintenanceState'
 import { QuietButton } from '../study/StudyParts'
 
 export interface MaintenanceRow extends MaintenanceEvent { id: number; createdAt: string }
-export function MaintenanceSummary({ rows, feedback, error, download }: { rows: MaintenanceRow[] | null; feedback: FeedbackRow[]; error: string | null; download: () => void }) {
+export function MaintenanceSummary({ rows, feedback, error, download }: { rows: MaintenanceRow[] | null; feedback: FeedbackRow[]; error: string | null; download?: () => void }) {
   const groups = maintenanceGroups(rows ?? [], feedback)
   return <section className="mt-6 rounded-2xl bg-panel p-4 ring-1 ring-line">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-[18px] font-semibold">Maintenance study</h2><QuietButton onClick={download}>Download maintenance CSV</QuietButton></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-[18px] font-semibold">Maintenance study</h2>{download && <QuietButton onClick={download}>Download maintenance CSV</QuietButton>}</div>
     <p className="mt-2 text-[13px] text-ink-2">Unique participants per phase, grouped by their first-use maintenance baseline. Calendar exports / clicks do not confirm an event was saved or a notification delivered. People who stop remain included.</p>
     <p className="mt-1 text-[12px] text-ink-3">Technical background comes from each participant's first-use form. Baseline maintenance history is kept in reminder_set events. During the study, reminders are simulated: they appear the next time the participant opens the app after setting them (marked “simulated” in the event details).</p>
     {error && <p role="alert" className="mt-3 text-[13px] text-bad">{error}</p>}

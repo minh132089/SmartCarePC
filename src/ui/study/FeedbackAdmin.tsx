@@ -10,8 +10,10 @@ import { MaintenanceSummary, type MaintenanceRow } from '../maintenance/Maintena
 import LatticeLoader from '../../components/LatticeLoader'
 
 /**
- * Trang xem phản hồi cho nhóm nghiên cứu: mở /feedback (hoặc #feedback), nhập khoá FEEDBACK_EXPORT_KEY trong backend/.env.
- * Khoá chỉ giữ trong tab đang mở (sessionStorage) và gửi qua header, không nằm trong địa chỉ trang.
+ * Trang xem phản hồi cho nhóm nghiên cứu: mở /feedback (hoặc #feedback). Hai cách vào:
+ * - đăng nhập tài khoản quản trị (tên "admin"): backend trả vé xem 12 giờ, chỉ xem được, không tải CSV;
+ * - nhập khoá FEEDBACK_EXPORT_KEY trong backend/.env: xem và tải CSV.
+ * Vé / khoá chỉ giữ trong tab đang mở (sessionStorage) và gửi qua header, không nằm trong địa chỉ trang.
  */
 const KEY = 'pcsc-export-key'
 const SCALES = FEEDBACK.filter((q) => q.type === 'scale')
@@ -29,7 +31,11 @@ function readKey() {
 
 export function FeedbackAdmin() {
   const [key, setKey] = useState(readKey)
-  const [draft, setDraft] = useState(key)
+  const [draft, setDraft] = useState('')
+  const [useKey, setUseKey] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const viewOnly = key.startsWith('adm.')
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -43,7 +49,7 @@ export function FeedbackAdmin() {
     setError(null)
     try {
       const res = await fetch('/api/feedback/list', { headers: { 'X-Export-Key': k } })
-      if (res.status === 403) throw new Error("Incorrect access key, or the server has no access key configured.")
+      if (res.status === 403) throw new Error(k.startsWith('adm.') ? "Your admin session has expired. Sign in again." : "Incorrect access key, or the server has no access key configured.")
       if (!res.ok) throw new Error(res.status === 503 ? "The demo server is offline." : `Error ${res.status}`)
       setRows((await res.json()) as Row[])
       setMaintenanceError(null)
@@ -76,6 +82,30 @@ export function FeedbackAdmin() {
     else setKey(k)
   }
 
+  const signIn = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/auth/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.trim(), password }) })
+      if (res.status === 401) throw new Error("Incorrect username or password.")
+      if (!res.ok) throw new Error(res.status === 503 ? "The demo server is offline." : `Error ${res.status}`)
+      const { token } = (await res.json()) as { token: string }
+      setPassword('')
+      if (token === key) void load(token)
+      else setKey(token)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sign in")
+      setBusy(false)
+    }
+  }
+
+  const signOut = () => {
+    try { sessionStorage.removeItem(KEY) } catch { /* bỏ qua */ }
+    setRows(null)
+    setMaintenanceRows(null)
+    setKey('')
+  }
+
   const shown = useMemo(
     () =>
       (rows ?? []).filter((r) =>
@@ -105,29 +135,45 @@ export function FeedbackAdmin() {
   }
 
   if (!key || (!rows && error)) {
+    const field = `mt-1.5 w-full rounded-xl bg-surface px-3 py-2 text-[15px] text-ink ring-1 ring-line-strong ${focus}`
     return (
       <div className="grid min-h-full place-items-center bg-canvas p-4">
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            submitKey()
+            if (useKey) submitKey()
+            else void signIn()
           }}
           className="w-full max-w-[420px] rounded-[24px] bg-panel p-6 ring-1 ring-line"
         >
-          <h1 className="text-[20px] font-semibold text-ink">Feedback data</h1>
-          <p className="mt-2 text-[14px] leading-[1.5] text-ink-2">Enter your feedback access key.</p>
-          <input
-            type="password"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            autoComplete="off"
-            aria-label="Feedback access key"
-            className={`mt-4 w-full rounded-xl bg-surface px-3 py-2 text-[15px] text-ink ring-1 ring-line-strong ${focus}`}
-          />
+          <h1 className="text-[20px] font-semibold text-ink">Feedback dashboard</h1>
+          <p className="mt-2 text-[14px] leading-[1.5] text-ink-2">
+            {useKey ? "Enter the feedback access key. It also lets you download the CSV files." : "Sign in with the admin account to view the dashboard."}
+          </p>
+          {useKey ? (
+            <label className="mt-4 block text-[13px] font-medium text-ink-2">
+              Access key
+              <input type="password" value={draft} onChange={(e) => setDraft(e.target.value)} autoComplete="off" className={field} />
+            </label>
+          ) : (
+            <>
+              <label className="mt-4 block text-[13px] font-medium text-ink-2">
+                Username
+                <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} className={field} />
+              </label>
+              <label className="mt-3 block text-[13px] font-medium text-ink-2">
+                Password
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className={field} />
+              </label>
+            </>
+          )}
           {error && <p role="alert" className="mt-2 text-[13px] text-bad">{error}</p>}
-          <div className="mt-4 flex justify-end">
-            <PrimaryButton onClick={submitKey} disabled={!draft.trim() || busy}>
-              View data
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <button type="button" onClick={() => { setUseKey(!useKey); setError(null) }} className={`text-[13px] text-link hover:underline ${focus}`}>
+              {useKey ? "Sign in with the admin account" : "Use an access key instead"}
+            </button>
+            <PrimaryButton onClick={() => (useKey ? submitKey() : void signIn())} disabled={busy || (useKey ? !draft.trim() : !username.trim() || !password)}>
+              {useKey ? "View data" : busy ? "Signing in…" : "Sign in"}
             </PrimaryButton>
           </div>
         </form>
@@ -147,11 +193,15 @@ export function FeedbackAdmin() {
               <ArrowClockwise size={15} aria-hidden /> Refresh
             </span>
           </QuietButton>
-          <PrimaryButton onClick={() => void download()}>
-            <span className="flex items-center gap-1.5">
-              <DownloadSimple size={15} aria-hidden /> Download CSV
-            </span>
-          </PrimaryButton>
+          {viewOnly ? (
+            <QuietButton onClick={signOut}>Sign out</QuietButton>
+          ) : (
+            <PrimaryButton onClick={() => void download()}>
+              <span className="flex items-center gap-1.5">
+                <DownloadSimple size={15} aria-hidden /> Download CSV
+              </span>
+            </PrimaryButton>
+          )}
         </header>
 
         <div className="mt-4 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Filter">
@@ -181,7 +231,7 @@ export function FeedbackAdmin() {
 
         {rows && <GapSummary feedback={rows} events={maintenanceRows ?? []} />}
         {rows && <FeedbackOverview rows={shown} />}
-        {rows && <MaintenanceSummary rows={maintenanceRows} feedback={rows} error={maintenanceError} download={() => void downloadMaintenance()} />}
+        {rows && <MaintenanceSummary rows={maintenanceRows} feedback={rows} error={maintenanceError} download={viewOnly ? undefined : () => void downloadMaintenance()} />}
 
         <section className="mt-5">
           <p className="text-[13px] font-semibold text-ink">Responses (newest first)</p>

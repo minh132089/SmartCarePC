@@ -45,6 +45,12 @@ public class FeedbackService {
         this.exportKey = exportKey.strip().getBytes(StandardCharsets.UTF_8);
     }
 
+    /** Không bắt buộc (test dựng service bằng tay thì không có): có thì nhận thêm vé xem của tài khoản quản trị */
+    private AdminTokens adminTokens;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAdminTokens(AdminTokens adminTokens) { this.adminTokens = adminTokens; }
+
     private static final java.util.regex.Pattern SUBMISSION_ID = java.util.regex.Pattern.compile("[A-Za-z0-9-]{8,64}");
 
     @Transactional
@@ -104,7 +110,7 @@ public class FeedbackService {
     /** Toàn bộ phản hồi cho trang xem dữ liệu /feedback, mới nhất trước. Cần khoá FEEDBACK_EXPORT_KEY. */
     @Transactional(readOnly = true)
     public List<Row> list(String key) {
-        checkKey(key);
+        checkView(key);
         List<Row> out = new ArrayList<>();
         for (Feedback f : repository.findAllByOrderByIdAsc().reversed()) {
             out.add(new Row(f.getId(), f.getCreatedAt() == null ? null : f.getCreatedAt().format(TIME), f.getParticipantCode(),
@@ -115,6 +121,17 @@ public class FeedbackService {
 
     /** Cùng khoá cho dữ liệu bảo trì; tuyệt đối không nhận khoá từ query. */
     public void authorizeExport(String key) { checkKey(key); }
+
+    /** Xem dashboard: khoá FEEDBACK_EXPORT_KEY, hoặc vé của tài khoản quản trị (chỉ xem, không tải CSV) */
+    public void authorizeView(String key) { checkView(key); }
+
+    private void checkView(String key) {
+        if (adminTokens != null && key != null && key.startsWith(AdminTokens.PREFIX)) {
+            if (adminTokens.valid(key)) return;
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Your admin session has expired. Sign in again.");
+        }
+        checkKey(key);
+    }
 
     private void checkKey(String key) {
         if (exportKey.length == 0) {

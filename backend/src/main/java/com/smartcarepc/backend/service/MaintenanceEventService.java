@@ -48,9 +48,10 @@ public class MaintenanceEventService {
     public Optional<Saved> existing(String eventId) { return repository.findFirstByEventId(eventId).map(e -> new Saved(e.getId())); }
     @Transactional(readOnly = true)
     public List<Row> list(String key) {
-        feedback.authorizeExport(key);
-        return repository.findAllByOrderByIdDesc().stream().map(this::row).toList();
+        feedback.authorizeView(key);
+        return rows();
     }
+    private List<Row> rows() { return repository.findAllByOrderByIdDesc().stream().map(this::row).toList(); }
     @SuppressWarnings("unchecked")
     private Row row(MaintenanceEvent e) {
         Map<String, Object> data = json.readValue(e.getDetails(), LinkedHashMap.class);
@@ -59,7 +60,9 @@ public class MaintenanceEventService {
     }
     @Transactional(readOnly = true)
     public String exportCsv(String key) {
-        var rows = list(key);
+        // Tải CSV chỉ bằng khoá FEEDBACK_EXPORT_KEY; vé xem của tài khoản quản trị không tải được
+        feedback.authorizeExport(key);
+        var rows = rows();
         var out = new StringBuilder("\ufeff");
         line(out, List.of("event_id", "event_type", "task", "participant_code", "phase", "machine", "occurred_at", "received_at", "run_id", "step_id", "alone", "who", "never_serviced", "details"));
         for (var r : rows) line(out, Arrays.asList(r.eventId(), r.eventType(), r.task(), r.participantCode(), r.phase(), r.machine(), r.occurredAt(), r.createdAt(),

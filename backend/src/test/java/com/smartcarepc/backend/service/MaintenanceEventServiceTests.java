@@ -39,8 +39,10 @@ class MaintenanceEventServiceTests {
         verify(repo, never()).save(any());
     }
     @Test void xuatDuLieuPhaiQuaCungKhoaFeedback() {
-        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN)).when(feedback).authorizeExport("wrong");
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN)).when(feedback).authorizeView("wrong");
         assertThatThrownBy(() -> service.list("wrong")).isInstanceOf(ResponseStatusException.class);
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN)).when(feedback).authorizeExport("adm.chi-xem");
+        assertThatThrownBy(() -> service.exportCsv("adm.chi-xem")).isInstanceOf(ResponseStatusException.class);
         verify(repo, never()).findAllByOrderByIdDesc();
     }
     @Test void csvGiuCaCauTraLoiMocTruoc() {
