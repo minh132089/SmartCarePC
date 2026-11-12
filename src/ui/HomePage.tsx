@@ -7,6 +7,7 @@ import { ArrowUp } from '@/components/animate-ui/icons/arrow-up'
 import { CircuitBoard } from '@/components/animate-ui/icons/circuit-board'
 import { Settings } from '@/components/animate-ui/icons/settings'
 import { useViewer } from '../store'
+import { AccountSlot } from './Account'
 import { Rise } from './Rise'
 import { useMaintenance } from './maintenance/maintenanceState'
 import { useStudy } from './study/study'
@@ -33,11 +34,14 @@ export function HomePage() {
       <div className="mx-auto flex min-h-full max-w-[1080px] flex-col px-4 pt-5 pb-10 md:px-8">
         <header className="flex items-center justify-between gap-3">
           <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">SmartCare PC</span>
-          {!code && (
-            <button onClick={() => openStudy('join')} className={`rounded-full px-3 py-1.5 text-[13px] font-medium text-link hover:bg-fill ${focus}`}>
-              Study participant? Enter your code
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {!code && (
+              <button onClick={() => openStudy('join')} className={`rounded-full px-3 py-1.5 text-[13px] font-medium text-link hover:bg-fill ${focus}`}>
+                Study participant? Enter your code
+              </button>
+            )}
+            <AccountSlot />
+          </div>
         </header>
         <StudyBar />
 

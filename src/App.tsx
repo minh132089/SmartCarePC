@@ -11,6 +11,7 @@ import { Inspector } from './ui/Inspector'
 import { Sidebar } from './ui/Sidebar'
 import { StudyDialogs } from './ui/study/StudyBar'
 import { UpgradePage } from './ui/UpgradePage'
+import { AccountSlot, AuthOverlay } from './ui/Account'
 
 export default function App() {
   const guide = useViewer((s) => s.guide)
@@ -24,6 +25,7 @@ export default function App() {
           {page === 'home' ? <HomePage /> : page === 'upgrade' ? <UpgradePage /> : <AdvicePage />}
         </Fade>
         <StudyDialogs />
+        <AuthOverlay />
       </>
     )
   return (
@@ -36,9 +38,13 @@ export default function App() {
         <GuideCaption />
         <InspectButton />
         <Inspector />
+        <div className="absolute right-4 top-4 z-30">
+          <AccountSlot hideSignIn />
+        </div>
         <ChatPanel />
       </main>
       <StudyDialogs />
+      <AuthOverlay />
     </div>
   )
 }

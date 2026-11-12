@@ -18,6 +18,7 @@ import { useStudy } from './study/study'
 import { MaintenanceEntry } from './maintenance/MaintenanceHub'
 import { useMaintenance } from './maintenance/maintenanceState'
 import { StudyBar } from './study/StudyBar'
+import { AccountSlot } from './Account'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -150,6 +151,7 @@ export function AdvicePage() {
           <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
             Skip to the 3D viewer ›
           </button>
+          <AccountSlot />
         </div>
       </header>
       <div className="shrink-0 px-5 md:px-10">

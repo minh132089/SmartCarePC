@@ -5,6 +5,7 @@ import { useViewer } from '../store'
 import { Rise } from './Rise'
 import { useUpgradeChat, type CaseSize, type UpgradeForm } from './chat/chatStore'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
+import { AccountSlot } from './Account'
 import { ProposalView } from './chat/Proposal'
 import { Choices, PrimaryButton, Question, focus } from './study/StudyParts'
 import { StudyBar } from './study/StudyBar'
@@ -134,14 +135,17 @@ export function UpgradePage() {
       <button onClick={() => setPage('home')} className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[14px] font-medium text-link hover:bg-fill ${focus}`}>
         <House size={16} aria-hidden /> Home
       </button>
-      {!editing && (
-        <div className="flex items-center gap-2">
-          <button onClick={() => setEditing(true)} className={`flex items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13.5px] font-medium text-ink hover:bg-fill-hover ${focus}`}>
-            <PencilSimple size={14} aria-hidden /> Edit PC details
-          </button>
-          <IconButton label="Start over" onClick={() => { reset(); setEditing(true) }} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        {!editing && (
+          <>
+            <button onClick={() => setEditing(true)} className={`flex items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13.5px] font-medium text-ink hover:bg-fill-hover ${focus}`}>
+              <PencilSimple size={14} aria-hidden /> Edit PC details
+            </button>
+            <IconButton label="Start over" onClick={() => { reset(); setEditing(true) }} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
+          </>
+        )}
+        <AccountSlot />
+      </div>
     </header>
   )
 
