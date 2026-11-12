@@ -76,7 +76,7 @@ export function AuthOverlay() {
   }, [open, required, close])
   if (!open) return null
   return (
-    <div role="dialog" aria-modal="true" aria-label="Sign in or create an account" className="fixed inset-0 z-[200] overflow-y-auto bg-white">
+    <div role="dialog" aria-modal="true" aria-label="Sign in or create an account" className="fixed inset-0 z-[200] overflow-y-auto bg-[#5d6270]">
       <AuthPage onLogin={login} onClose={required ? undefined : close} required={required} />
     </div>
   )

@@ -1,0 +1,6 @@
+Ảnh màn đăng nhập, lấy từ Unsplash (giấy phép Unsplash: dùng miễn phí, kể cả thương mại, không bắt buộc ghi nguồn).
+Bản gốc đã thu nhỏ còn 900x1200.
+
+build.jpg    https://unsplash.com/photos/GYj9ts-qvlQ
+maintain.jpg https://unsplash.com/photos/nkVlp_owMks
+upgrade.jpg  https://unsplash.com/photos/VBVtNgkA3ak

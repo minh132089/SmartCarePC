@@ -18,7 +18,8 @@ public class AccountController {
     private final BCryptPasswordEncoder passwords = new BCryptPasswordEncoder();
 
     public AccountController(AppUserRepository users) { this.users = users; }
-    record Credentials(String email, String password) {}
+    /** firstName / lastName chỉ dùng khi đăng ký, không bắt buộc (bản app cũ không gửi) */
+    record Credentials(String email, String password, String firstName, String lastName) {}
     record User(String email, String name) {}
 
     @PostMapping("/register")
@@ -31,7 +32,7 @@ public class AccountController {
         AppUser user = new AppUser();
         user.setEmail(email);
         user.setPasswordHash(passwords.encode(input.password()));
-        user.setFullName(email.substring(0, email.indexOf('@')));
+        user.setFullName(fullName(input, email));
         try { users.saveAndFlush(user); }
         catch (DataIntegrityViolationException e) { throw new ResponseStatusException(HttpStatus.CONFLICT, "Email đã được đăng ký."); }
         return new User(user.getEmail(), user.getFullName());
@@ -45,6 +46,15 @@ public class AccountController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Email hoặc mật khẩu không chính xác.");
         return new User(user.getEmail(), user.getFullName());
     }
+
+    /** Họ tên người dùng nhập; để trống thì lấy phần trước @ của email như trước */
+    static String fullName(Credentials input, String email) {
+        String name = (clean(input.firstName()) + " " + clean(input.lastName())).trim().replaceAll("\\s+", " ");
+        if (name.isEmpty()) return email.substring(0, email.indexOf('@'));
+        return name.length() > 100 ? name.substring(0, 100).trim() : name;
+    }
+
+    private static String clean(String part) { return part == null ? "" : part.strip(); }
 
     private String normalize(String email) {
         if (email == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email không hợp lệ.");
