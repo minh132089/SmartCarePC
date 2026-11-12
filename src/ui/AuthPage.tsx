@@ -144,9 +144,11 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
         <motion.div
           className="auth-card"
           style={{ backgroundColor: `hsl(${hue} 14% 13%)` }}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 28, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: 'spring', bounce: 0, duration: 0.8, delay: reduce ? 0 : CARD_DELAY }}
+          // Thẻ trượt từ dưới đáy màn hình lên như một tấm sheet, không mờ dần, không phóng to. Lò xo nảy rất nhẹ
+          // khi chạm chỗ, cho cảm giác có quán tính của cú đẩy lên. Giảm chuyển động thì chỉ hiện dần.
+          initial={reduce ? { opacity: 0 } : { y: '110vh' }}
+          animate={reduce ? { opacity: 1 } : { y: 0 }}
+          transition={reduce ? { duration: 0.3, delay: 0 } : { type: 'spring', bounce: 0.14, duration: 0.85, delay: CARD_DELAY }}
         >
           <Showcase index={slide} onChange={setSlide} onClose={onClose} />
 

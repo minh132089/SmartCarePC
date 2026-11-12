@@ -5,7 +5,7 @@
 @media (prefers-reduced-motion: reduce) { .guide-step-title { transition: none; } }
 
 /* Login: thẻ tối hai cột trên nền xám. Trái: ảnh máy đổi dần. Phải: form. Màu nhấn xanh, hợp với ánh đèn trong ảnh */
-.auth-page { position: relative; isolation: isolate; min-height: 100dvh; display: grid; place-items: center; padding: 40px 24px; background: #0b0d14; color: #f2f3f5; font-family: system-ui, sans-serif; }
+.auth-page { position: relative; isolation: isolate; overflow: clip; min-height: 100dvh; display: grid; place-items: center; padding: 40px 24px; background: #0b0d14; color: #f2f3f5; font-family: system-ui, sans-serif; }
 .auth-ascii { position: fixed; inset: 0; z-index: -1; }
 .auth-card { width: min(1040px, 100%); min-height: 600px; display: grid; grid-template-columns: 1fr 1fr; padding: 14px; border-radius: 18px; background: #1f2229; box-shadow: 0 40px 90px -30px rgb(10 12 20 / .6); transition: background-color 900ms ease; }
 .auth-showcase { position: relative; overflow: hidden; isolation: isolate; border-radius: 12px; background: #11141a; }
