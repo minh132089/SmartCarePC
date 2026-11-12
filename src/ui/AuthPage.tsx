@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react'
+import { animate, AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react'
 import { AnimateIcon } from '@animate-ui/react/icons'
 import GlassSurface from '@/components/GlassSurface'
+import GradientASCII from '@/components/GradientASCII'
 import { ArrowRight } from '@/components/animate-ui/icons/arrow-right'
 import { CircuitBoard } from '@/components/animate-ui/icons/circuit-board'
 import { Eye } from '@/components/animate-ui/icons/eye'
@@ -21,6 +22,8 @@ const SLIDES = [
   { src: '/auth/upgrade.jpg', hue: 217, caption: 'Know which upgrade\nis worth the money' },
 ]
 const SLIDE_MS = 5000
+/** Nền ASCII chạy phần mở màn (2,4 giây trong GradientASCII) được một lúc thì thẻ form mới hiện ra */
+const CARD_DELAY = 1.8
 
 export type Session = { email: string; name: string }
 
@@ -56,6 +59,7 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
   const [busy, setBusy] = useState(false)
   const [slide, setSlide] = useState(0)
   const hue = SLIDES[slide].hue
+  const reduce = useReducedMotion()
   const changeMode = (next: boolean) => { if (busy) return; setRegister(next); setError(''); setNotice(''); setPassword(''); setShowPassword(false) }
 
   useEffect(() => {
@@ -77,12 +81,12 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
       googleButton.current.replaceChildren()
       // Nút của Google có bề rộng cố định: lấy đúng bề rộng ô chứa để không tràn trên điện thoại
       const width = Math.min(400, Math.max(200, Math.floor(googleButton.current.clientWidth)))
-      window.google.accounts.id.renderButton(googleButton.current, { theme: 'filled_black', size: 'large', text: register ? 'signup_with' : 'signin_with', shape: 'rectangular', width, locale: 'vi' })
+      window.google.accounts.id.renderButton(googleButton.current, { theme: 'filled_black', size: 'large', text: register ? 'signup_with' : 'signin_with', shape: 'rectangular', width, locale: 'en' })
     }
     if (window.google) initialize()
     else {
       const script = document.createElement('script')
-      script.src = 'https://accounts.google.com/gsi/client'
+      script.src = 'https://accounts.google.com/gsi/client?hl=en'
       script.async = true
       script.onload = initialize
       script.onerror = () => { if (!cancelled) setError('Could not load Google sign-in. Please try again.') }
@@ -134,9 +138,16 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
 
   return (
     <MotionConfig reducedMotion="user" transition={SPRING}>
-      {/* Nền trang và thẻ ngả theo màu đèn của ảnh đang hiện, chuyển màu chậm cùng lúc ảnh mờ dần sang ảnh mới */}
-      <main className="auth-page" style={{ backgroundColor: `hsl(${hue} 22% 40%)` }}>
-        <div className="auth-card" style={{ backgroundColor: `hsl(${hue} 14% 13%)` }}>
+      {/* Nền ASCII và thẻ ngả theo màu đèn của ảnh đang hiện, chuyển màu chậm cùng lúc ảnh mờ dần sang ảnh mới */}
+      <main className="auth-page">
+        <AsciiBackdrop hue={hue} />
+        <motion.div
+          className="auth-card"
+          style={{ backgroundColor: `hsl(${hue} 14% 13%)` }}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 28, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', bounce: 0, duration: 0.8, delay: reduce ? 0 : CARD_DELAY }}
+        >
           <Showcase index={slide} onChange={setSlide} onClose={onClose} />
 
           <section className="auth-form-side" aria-label={register ? 'Create an account' : 'Log in'}>
@@ -185,9 +196,35 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
             <div className="auth-divider"><span />{register ? 'Or register with' : 'Or log in with'}<span /></div>
             <div ref={googleButton} className="auth-google" />
           </section>
-        </div>
+        </motion.div>
       </main>
     </MotionConfig>
+  )
+}
+
+/** Bảng màu của nền ASCII theo một sắc màu: xanh đậm, gần trắng, nhạt, sáng (giống bảng mặc định của React Bits) */
+function palette(h: number) {
+  const at = (dh: number) => (Math.round(h + dh) % 360 + 360) % 360
+  return [`hsl(${at(0)} 75% 47%)`, `hsl(${at(0)} 85% 86%)`, `hsl(${at(-22)} 100% 82%)`, `hsl(${at(-30)} 92% 60%)`]
+}
+
+/**
+ * Nền Gradient ASCII của React Bits phủ cả trang. Đổi ảnh thì sắc màu trượt dần sang màu mới (đi đường ngắn trên
+ * vòng màu, 0,9 giây), khớp với lúc ảnh mờ dần. Lần đầu mở có phần mở màn của chính GradientASCII.
+ */
+function AsciiBackdrop({ hue }: { hue: number }) {
+  const [shown, setShown] = useState(hue)
+  const current = useRef(hue)
+  useEffect(() => {
+    const from = current.current
+    const to = from + ((((hue - from) % 360) + 540) % 360) - 180
+    const controls = animate(from, to, { duration: 0.9, ease: 'easeInOut', onUpdate: (v) => { current.current = v; setShown(Math.round(v)) } })
+    return () => controls.stop()
+  }, [hue])
+  return (
+    <div className="auth-ascii" style={{ backgroundColor: `hsl(${((shown % 360) + 360) % 360} 40% 6%)` }} aria-hidden>
+      <GradientASCII colors={palette(shown)} shape="horizon" cellSize={16} glyphOpacity={0.8} gradientOpacity={0.85} clickEffect="wave" />
+    </div>
   )
 }
 
