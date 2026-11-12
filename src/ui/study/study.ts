@@ -9,7 +9,7 @@ import { participantAnswers } from './participant'
 export type Phase = 'before' | 'after'
 export type Answers = Record<string, unknown>
 
-export const PHASE_LABEL: Record<Phase, string> = { before: "First use", after: "After 4 weeks" }
+export const PHASE_LABEL: Record<Phase, string> = { before: "First use", after: "End of study" }
 export const CODE_PATTERN = /^[A-Za-z0-9_-]{1,20}$/
 
 const KEY = 'pcsc-study'
@@ -38,23 +38,36 @@ function write(key: string, value: unknown) {
 interface Saved {
   code: string
   phase: Phase
-  /** Đã gửi gì trong lần đo này (hiện chỉ có "feedback") */
+  /** Đã gửi gì trong lần đo này: "baseline" (form lần đầu), "followup" (form cuối), "feedback" (form chung / chấm sao) */
   answered: string[]
+  /** Câu own_pc của form lần đầu: chỉ người có máy bàn mới được dẫn sang bảo dưỡng và được hỏi về bảo dưỡng ở form cuối */
+  ownPc?: string
 }
 
 interface StudyState {
   code: string | null
   phase: Phase
   answered: string[]
-  /** Hộp thoại đang mở: nhập mã, form phản hồi, hoặc chấm sao sau khi lắp xong cả máy (form phản hồi nằm dưới) */
-  dialog: 'join' | 'feedback' | 'rating' | null
+  ownPc: string | null
+  /**
+   * Hộp thoại đang mở: nhập mã, form lần đầu (baseline), form cuối nghiên cứu (followup), form phản hồi chung,
+   * hoặc chấm sao sau khi lắp xong cả máy (form phản hồi nằm dưới)
+   */
+  dialog: 'join' | 'baseline' | 'followup' | 'feedback' | 'rating' | null
   join: (code: string, phase: Phase) => void
   leave: () => void
   open: (dialog: StudyState['dialog']) => void
   markAnswered: (key: string) => void
+  setOwnPc: (value: string) => void
 }
 
-function initial(): Pick<StudyState, 'code' | 'phase' | 'answered' | 'dialog'> {
+/** Form của lần đo này còn chưa trả lời: lần đầu là baseline, cuối nghiên cứu là followup */
+export function pendingForm(phase: Phase, answered: string[]): 'baseline' | 'followup' | null {
+  const form = phase === 'before' ? 'baseline' : 'followup'
+  return answered.includes(form) ? null : form
+}
+
+function initial(): Pick<StudyState, 'code' | 'phase' | 'answered' | 'ownPc' | 'dialog'> {
   const saved = read<Saved | null>(KEY, null)
   // Link mời: ?thunghiem=P07. Đọc xong thì xoá khỏi thanh địa chỉ để mã không bị chép lan khi chia sẻ link.
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
@@ -68,12 +81,15 @@ function initial(): Pick<StudyState, 'code' | 'phase' | 'answered' | 'dialog'> {
     const q = params!.toString()
     window.history.replaceState(null, '', window.location.pathname + (q ? `?${q}` : '') + window.location.hash)
     const same = saved?.code === code && saved.phase === phase
-    const next = { code, phase, answered: same ? saved!.answered : [] }
+    const ownPc = saved?.code === code ? saved.ownPc : undefined
+    const next = { code, phase, answered: same ? saved!.answered : [], ownPc }
     write(KEY, next)
     // Mở link mời thì hiện hộp thoại tham gia để người dùng đọc lời giới thiệu và xác nhận mã
-    return { ...next, dialog: same ? null : 'join' }
+    return { ...next, ownPc: ownPc ?? null, dialog: same ? pendingForm(phase, next.answered) : 'join' }
   }
-  return { ...(saved ?? { code: null, phase: 'before', answered: [] }), dialog: null }
+  if (!saved) return { code: null, phase: 'before', answered: [], ownPc: null, dialog: null }
+  // Chưa trả lời form của lần đo này thì mở ngay khi vào app, trước mọi hướng dẫn
+  return { code: saved.code, phase: saved.phase, answered: saved.answered ?? [], ownPc: saved.ownPc ?? null, dialog: saved.code ? pendingForm(saved.phase, saved.answered ?? []) : null }
 }
 
 export const useStudy = create<StudyState>((set, get) => ({
@@ -82,20 +98,28 @@ export const useStudy = create<StudyState>((set, get) => ({
     const s = get()
     const c = code.trim().toUpperCase()
     const answered = s.code === c && s.phase === phase ? s.answered : []
-    write(KEY, { code: c, phase, answered })
-    set({ code: c, phase, answered, dialog: null })
+    const ownPc = s.code === c ? s.ownPc : null
+    write(KEY, { code: c, phase, answered, ownPc: ownPc ?? undefined })
+    // Nhập mã xong là vào thẳng form của lần đo này (lần đầu: trước khi xem gợi ý hay hướng dẫn)
+    set({ code: c, phase, answered, ownPc, dialog: pendingForm(phase, answered) })
   },
   leave: () => {
     write(KEY, null)
-    set({ code: null, phase: 'before', answered: [], dialog: null })
+    set({ code: null, phase: 'before', answered: [], ownPc: null, dialog: null })
   },
   open: (dialog) => set({ dialog }),
   markAnswered: (key) => {
     const s = get()
     if (!s.code || s.answered.includes(key)) return
     const answered = [...s.answered, key]
-    write(KEY, { code: s.code, phase: s.phase, answered })
+    write(KEY, { code: s.code, phase: s.phase, answered, ownPc: s.ownPc ?? undefined })
     set({ answered })
+  },
+  setOwnPc: (value) => {
+    const s = get()
+    if (!s.code) return
+    write(KEY, { code: s.code, phase: s.phase, answered: s.answered, ownPc: value })
+    set({ ownPc: value })
   },
 }))
 

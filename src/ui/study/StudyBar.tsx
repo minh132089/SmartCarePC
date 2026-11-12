@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Flask, NotePencil, Star } from '@phosphor-icons/react'
 import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
-import { FEEDBACK } from './questions'
+import { BASELINE, FEEDBACK, FOLLOWUP, type Lang } from './questions'
 import { QuestionList } from './QuestionList'
-import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, sendFeedback, useSending, useStudy, type Phase } from './study'
-import { Choices, Dialog, focus, PrimaryButton, Question, QuietButton } from './StudyParts'
+import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, pendingForm, sendFeedback, useSending, useStudy, type Phase } from './study'
+import { Choices, Dialog, focus, LangToggle, PrimaryButton, Question, QuietButton } from './StudyParts'
+import { tr, useFormLang } from './lang'
+import { useMaintenance } from '../maintenance/maintenanceState'
 import { useParticipant } from './participant'
 
 /** Nút nhỏ "Tham gia thử nghiệm" cho người chưa có mã (người dùng bình thường bỏ qua được) */
@@ -20,23 +22,24 @@ export function StudyJoinLink({ className = '' }: { className?: string }) {
   )
 }
 
-/** Dải nhỏ cho người tham gia: mã, lần đo, và nút gửi phản hồi */
+/** Dải nhỏ cho người tham gia: mã, lần đo, và nút mở form của lần đo (hoặc form phản hồi chung khi đã trả lời) */
 export function StudyBar() {
   const { code, phase, answered, open } = useStudy()
   const { profile, edit } = useParticipant()
   if (!code && !profile) return null
+  const form = code ? pendingForm(phase, answered) : null
   const sent = answered.includes('feedback')
   return (
     <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-2xl bg-info-bg px-3 py-2 text-[13px] text-info">
       <button onClick={() => code ? open('join') : edit()} className={`flex items-center gap-1.5 rounded-full font-semibold ${focus}`} title={code ? "Change code or study phase" : "Edit your details"}>
         <Flask size={15} aria-hidden />
-        {code ? `Study · ${code} · ${PHASE_LABEL[phase]}` : `${profile!.name} · Edit details`}
+        {code ? `Study · ${code} · ${PHASE_LABEL[phase]}` : "Your details · Edit"}
       </button>
-      {code && profile && <button onClick={edit} className={`rounded-full px-2 text-[12px] hover:underline ${focus}`}>{profile.name} · Edit details</button>}
+      {code && profile && <button onClick={edit} className={`rounded-full px-2 text-[12px] hover:underline ${focus}`}>Edit your details</button>}
       <span className="flex-1" />
-      <button onClick={() => open('feedback')} className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-medium hover:bg-surface ${focus}`}>
+      <button onClick={() => open(form ?? 'feedback')} className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-medium hover:bg-surface ${focus} ${form ? 'bg-surface' : ''}`}>
         <NotePencil size={14} aria-hidden />
-        {sent ? "Feedback submitted" : "Send feedback"}
+        {form === 'baseline' ? "Answer the first-use questions" : form === 'followup' ? "Answer the end-of-study questions" : sent ? "Feedback submitted" : "Send feedback"}
       </button>
     </div>
   )
@@ -46,57 +49,65 @@ export function StudyBar() {
 export function StudyDialogs() {
   const dialog = useStudy((s) => s.dialog)
   if (dialog === 'join') return <JoinDialog />
+  if (dialog === 'baseline') return <StudyForm form="baseline" />
+  if (dialog === 'followup') return <StudyForm form="followup" />
   if (dialog === 'feedback') return <FeedbackDialog />
   if (dialog === 'rating') return <RatingDialog />
   return null
 }
 
 function JoinDialog() {
-  const { code, phase, join, leave, open } = useStudy()
+  const { code, phase, answered, join, leave, open } = useStudy()
+  const { lang, setLang } = useFormLang()
   const [value, setValue] = useState(code ?? '')
   const [lan, setLan] = useState<Phase>(phase)
   const ok = CODE_PATTERN.test(value.trim())
   const close = () => open(null)
   return (
     <Dialog
-      title="Join the study"
+      title={tr(lang, "Join the study", 'Tham gia nghiên cứu')}
       onClose={close}
       footer={
         <>
           {code && (
             <button onClick={leave} className={`mr-auto text-[13px] font-medium text-bad hover:underline ${focus}`}>
-              Leave study mode
+              {tr(lang, "Leave study mode", 'Thoát chế độ nghiên cứu')}
             </button>
           )}
-          <QuietButton onClick={close}>Cancel</QuietButton>
+          <QuietButton onClick={close}>{tr(lang, "Cancel", 'Huỷ')}</QuietButton>
           <PrimaryButton onClick={() => join(value, lan)} disabled={!ok}>
-            {code ? "Save" : "Get started"}
+            {code && !pendingForm(phase, answered) ? tr(lang, "Save", 'Lưu') : tr(lang, "Get started", 'Bắt đầu')}
           </PrimaryButton>
         </>
       }
     >
+      <LangToggle lang={lang} onChange={setLang} />
       <p className="text-[14px] leading-[1.5] text-ink-2">
-        Thank you for participating. Use the app as usual: ask the assistant to recommend a build, then follow the assembly guide. When finished, select Send feedback to answer seven short questions. Responses are linked to your code and include any profile details you confirmed.
+        {tr(
+          lang,
+          "Thank you for taking part. First you answer a few short questions, before using any guide. Then use the app as usual. On the last day of the study, open the app again, choose “End of study” below and answer the final questions. Responses are linked to your participant code only, not your name.",
+          'Cảm ơn bạn đã tham gia. Trước tiên bạn trả lời vài câu hỏi ngắn, trước khi dùng bất kỳ hướng dẫn nào. Sau đó dùng app như bình thường. Vào ngày cuối của nghiên cứu, mở lại app, chọn “Cuối nghiên cứu” bên dưới và trả lời các câu hỏi cuối. Câu trả lời chỉ gắn với mã người tham gia, không gắn với tên của bạn.',
+        )}
       </p>
-      <Question label="Participant code">
+      <Question label={tr(lang, "Participant code", 'Mã người tham gia')}>
         <input
           value={value}
           onChange={(e) => setValue(e.target.value.toUpperCase())}
           maxLength={20}
-          placeholder="For example: P07"
+          placeholder={tr(lang, "For example: P07", 'Ví dụ: P07')}
           autoCapitalize="characters"
           className={`w-full rounded-xl bg-surface px-3 py-2 text-[15px] tracking-wide text-ink ring-1 ring-line-strong placeholder:text-ink-3 ${focus}`}
         />
-        {value && !ok && <p className="mt-1 text-[12.5px] text-bad">Use letters, numbers and hyphens only, up to 20 characters.</p>}
+        {value && !ok && <p className="mt-1 text-[12.5px] text-bad">{tr(lang, "Use letters, numbers and hyphens only, up to 20 characters.", 'Chỉ dùng chữ, số và dấu gạch ngang, tối đa 20 ký tự.')}</p>}
       </Question>
-      <Question label="Which study phase is this?">
+      <Question label={tr(lang, "Which study phase is this?", 'Đây là lần nào của nghiên cứu?')}>
         <Choices
           name="phase"
           value={[lan]}
           onChange={(v) => setLan(v[0])}
           options={[
-            { value: 'before', label: "First use" },
-            { value: 'after', label: "After 4 weeks" },
+            { value: 'before', label: tr(lang, "First use", 'Lần đầu') },
+            { value: 'after', label: tr(lang, "End of study", 'Cuối nghiên cứu') },
           ]}
         />
       </Question>
@@ -104,9 +115,61 @@ function JoinDialog() {
   )
 }
 
-/** Form phản hồi: 5 câu chấm điểm 1 đến 5 và 2 câu tự luận (questions.ts). Gửi kèm máy đang xem. */
+/**
+ * Form của hai lần đo. Lần đầu (baseline) hiện ngay sau khi nhập mã, trước mọi gợi ý và hướng dẫn, để làm mức nền.
+ * Cuối nghiên cứu (followup) hỏi lại y nguyên ba nhóm câu lõi để lấy hiệu sau − trước. Câu nào cũng bỏ qua được.
+ * Người có máy bàn: gửi xong form lần đầu thì mở luôn bước chọn máy và đặt lời nhắc bảo dưỡng.
+ */
+function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
+  const { open, markAnswered, setOwnPc, ownPc } = useStudy()
+  const { lang, setLang } = useFormLang()
+  const [a, setA] = useState<AnswerMap>({})
+  const busy = useSending((s) => s.sending)
+  const [failed, setFailed] = useState(false)
+  const [submissionId] = useState(newSubmissionId)
+  // Ở form cuối, câu bảo dưỡng chỉ dành cho người có máy bàn (hoặc chưa rõ vì trả lời form đầu trên máy khác)
+  const questions = form === 'baseline' ? BASELINE : FOLLOWUP.filter((q) => q.key !== 'maint_done' || ownPc == null || ownPc === 'desktop')
+  const { answers, empty } = collect(questions, a)
+  const close = () => !busy && open(null)
+
+  const submit = async () => {
+    const r = await sendFeedback({ machine: null, answers: { form, form_lang: lang, ...answers } }, submissionId)
+    if (r === 'failed') return setFailed(true)
+    markAnswered(form)
+    if (form === 'baseline' && typeof answers.own_pc === 'string') setOwnPc(answers.own_pc)
+    open(null)
+    if (form === 'baseline' && answers.own_pc === 'desktop') useMaintenance.getState().open('dust')
+  }
+
+  return (
+    <Dialog
+      title={form === 'baseline' ? tr(lang, "Before you start", 'Trước khi bắt đầu') : tr(lang, "End of study", 'Cuối nghiên cứu')}
+      onClose={close}
+      footer={
+        <>
+          {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
+          <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
+          <PrimaryButton onClick={submit} disabled={busy || empty}>
+            {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Send", 'Gửi')}
+          </PrimaryButton>
+        </>
+      }
+    >
+      <LangToggle lang={lang} onChange={setLang} />
+      <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">
+        {form === 'baseline'
+          ? tr(lang, "About 3 minutes. Please answer before you use the app's advice or guides, so we can compare with your answers at the end of the study. There are no right or wrong answers, and you can skip any question.", 'Khoảng 3 phút. Bạn trả lời trước khi dùng phần tư vấn hay hướng dẫn của app, để cuối nghiên cứu so sánh với câu trả lời lúc đó. Không có đúng hay sai, câu nào cũng bỏ qua được.')
+          : tr(lang, "About 4 minutes. Some questions are the same as on your first day; answer them as things are for you now, not as you answered before.", 'Khoảng 4 phút. Một số câu giống hôm đầu; bạn trả lời theo đúng hiện tại, không cần nhớ lần trước đã chọn gì.')}
+      </p>
+      <QuestionList questions={questions} answers={a} onChange={setA} lang={lang} />
+    </Dialog>
+  )
+}
+
+/** Form phản hồi chung: bảy câu cũ (questions.ts). Gửi kèm máy đang xem. */
 function FeedbackDialog() {
   const { open, markAnswered } = useStudy()
+  const { lang, setLang } = useFormLang()
   const machine = useViewer((s) => s.familyId ?? s.buildId)
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
@@ -117,7 +180,7 @@ function FeedbackDialog() {
   const close = () => !busy && open(null)
 
   const submit = async () => {
-    const r = await sendFeedback({ machine, answers }, submissionId)
+    const r = await sendFeedback({ machine, answers: { form: 'general', form_lang: lang, ...answers } }, submissionId)
     if (r === 'failed') return setFailed(true)
     markAnswered('feedback')
     open(null)
@@ -125,28 +188,29 @@ function FeedbackDialog() {
 
   return (
     <Dialog
-      title="App feedback"
+      title={tr(lang, "App feedback", 'Góp ý cho app')}
       onClose={close}
       footer={
         <>
-          {failed && <p className="mr-auto text-[13px] text-bad">Could not send. Check your connection and select Send again.</p>}
-          <QuietButton onClick={close}>Later</QuietButton>
+          {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
+          <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
           <PrimaryButton onClick={submit} disabled={busy || empty}>
-            {busy ? "Sending…" : failed ? "Send again" : "Send"}
+            {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Send", 'Gửi')}
           </PrimaryButton>
         </>
       }
     >
-      <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">About two minutes. There are no right or wrong answers, and every question is optional.</p>
-      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} />
+      <LangToggle lang={lang} onChange={setLang} />
+      <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">{tr(lang, "About two minutes. There are no right or wrong answers, and every question is optional.", 'Khoảng hai phút. Không có đúng hay sai, câu nào cũng bỏ qua được.')}</p>
+      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} lang={lang} />
     </Dialog>
   )
 }
 
-const STAR_WORDS = ['', "Very poor", "Poor", "Fair", "Good", "Excellent"]
+const STAR_WORDS = { en: ['', "Very poor", "Poor", "Fair", "Good", "Excellent"], vi: ['', 'Rất tệ', 'Tệ', 'Tạm được', 'Tốt', 'Rất tốt'] }
 
 /** Chấm 1 đến 5 sao. Dùng radio thật để đọc được bằng trình đọc màn hình và chọn được bằng phím mũi tên */
-function Stars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function Stars({ value, onChange, lang }: { value: number; onChange: (v: number) => void; lang: Lang }) {
   return (
     <div>
       <div className="flex gap-1" role="radiogroup" aria-label="Star rating">
@@ -157,7 +221,7 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
               name="stars"
               checked={value === n}
               onChange={() => onChange(n)}
-              aria-label={`${n} stars, ${STAR_WORDS[n]}`}
+              aria-label={`${n} stars, ${STAR_WORDS[lang][n]}`}
               className="peer absolute inset-0 cursor-pointer opacity-0"
             />
             <Star
@@ -171,7 +235,7 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
           </label>
         ))}
       </div>
-      <p className="mt-1 h-5 text-[13px] text-ink-2">{value ? STAR_WORDS[value] : "Choose a rating"}</p>
+      <p className="mt-1 h-5 text-[13px] text-ink-2">{value ? STAR_WORDS[lang][value] : tr(lang, "Choose a rating", 'Chọn số sao')}</p>
     </div>
   )
 }
@@ -182,6 +246,7 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
  */
 function RatingDialog() {
   const { open, markAnswered } = useStudy()
+  const { lang, setLang } = useFormLang()
   const machine = useViewer((s) => s.familyId ?? s.buildId)
   const [stars, setStars] = useState(0)
   const [a, setA] = useState<AnswerMap>({})
@@ -193,7 +258,7 @@ function RatingDialog() {
   const close = () => !busy && open(null)
 
   const submit = async () => {
-    const r = await sendFeedback({ machine, answers: { stars, source: 'guide_done', ...answers } }, submissionId)
+    const r = await sendFeedback({ machine, answers: { form: 'post_build', form_lang: lang, stars, source: 'guide_done', ...answers } }, submissionId)
     // Không tới được máy chủ và không cất được trên máy: giữ form và câu trả lời để thử lại
     if (r === 'failed') return setFailed(true)
     markAnswered('feedback')
@@ -202,24 +267,25 @@ function RatingDialog() {
 
   return (
     <Dialog
-      title="Your PC is assembled!"
+      title={tr(lang, "Your PC is assembled!", 'Bạn đã lắp xong máy!')}
       onClose={close}
       footer={
         <>
-          {failed && <p className="mr-auto text-[13px] text-bad">Could not send. Check your connection and select Send again.</p>}
-          <QuietButton onClick={close}>Later</QuietButton>
+          {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
+          <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
           <PrimaryButton onClick={submit} disabled={busy || stars === 0}>
-            {busy ? "Sending…" : failed ? "Send again" : "Submit rating"}
+            {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Submit rating", 'Gửi đánh giá')}
           </PrimaryButton>
         </>
       }
     >
-      <p className="text-[14px] leading-[1.5] text-ink-2">How was your experience choosing and assembling a PC with the app?</p>
+      <LangToggle lang={lang} onChange={setLang} />
+      <p className="text-[14px] leading-[1.5] text-ink-2">{tr(lang, "How was your experience choosing and assembling a PC with the app?", 'Trải nghiệm chọn và lắp máy với app của bạn thế nào?')}</p>
       <div className="mt-3">
-        <Stars value={stars} onChange={setStars} />
+        <Stars value={stars} onChange={setStars} lang={lang} />
       </div>
-      <p className="mt-5 mb-1 text-[13px] text-ink-3">Have two more minutes? Your answers help the team improve the app. Every question is optional.</p>
-      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} />
+      <p className="mt-5 mb-1 text-[13px] text-ink-3">{tr(lang, "Have two more minutes? Your answers help the team improve the app. Every question is optional.", 'Còn hai phút nữa không? Câu trả lời giúp nhóm cải thiện app. Câu nào cũng bỏ qua được.')}</p>
+      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} lang={lang} />
     </Dialog>
   )
 }

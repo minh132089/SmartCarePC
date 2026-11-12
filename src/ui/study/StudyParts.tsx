@@ -153,6 +153,27 @@ export function Note({ value, onChange, placeholder }: { value: string; onChange
   )
 }
 
+/** Chọn ngôn ngữ của form nghiên cứu (English / Tiếng Việt) */
+export function LangToggle({ lang, onChange }: { lang: 'en' | 'vi'; onChange: (lang: 'en' | 'vi') => void }) {
+  return (
+    <div className="mb-4 flex justify-end">
+      <div role="radiogroup" aria-label="Language / Ngôn ngữ" className="inline-flex rounded-full bg-fill p-0.5 text-[12.5px]">
+        {(['en', 'vi'] as const).map((l) => (
+          <button
+            key={l}
+            role="radio"
+            aria-checked={lang === l}
+            onClick={() => onChange(l)}
+            className={`rounded-full px-3 py-1 font-medium ${focus} ${lang === l ? 'bg-surface text-ink shadow-sm' : 'text-ink-2 hover:text-ink'}`}
+          >
+            {l === 'en' ? 'English' : 'Tiếng Việt'}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function PrimaryButton({ children, onClick, disabled }: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
   return (
     <button

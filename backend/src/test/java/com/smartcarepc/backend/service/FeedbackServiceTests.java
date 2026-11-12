@@ -51,8 +51,7 @@ class FeedbackServiceTests {
 
     @Test
     void hoSoDiCungPhanHoiVaCoTrongTrangXemVaCsv() {
-        var answers = Map.<String, Object>of("participant_name", "Nguyễn Minh", "participant_age", 21,
-                "participant_occupation", "Sinh viên", "stars", 5);
+        var answers = Map.<String, Object>of("participant_age", 21, "participant_occupation", "Sinh viên", "stars", 5);
         when(repo.save(any())).thenAnswer(inv -> {
             Feedback f = inv.getArgument(0);
             f.setId(9L);
@@ -62,18 +61,33 @@ class FeedbackServiceTests {
         var stored = row(9, null, JsonMapper.builder().build().writeValueAsString(answers));
         when(repo.findAllByOrderByIdAsc()).thenReturn(List.of(stored));
         assertThat(service.list("khoa-bi-mat").getFirst().answers()).containsAllEntriesOf(answers);
-        assertThat(service.exportCsv("khoa-bi-mat")).contains("a.participant_name", "a.participant_age",
-                "a.participant_occupation", "Nguyễn Minh", "Sinh viên", "21");
+        assertThat(service.exportCsv("khoa-bi-mat")).contains("a.participant_age",
+                "a.participant_occupation", "Sinh viên", "21");
+    }
+
+    @Test
+    void tenThatKhongDuocLuu() {
+        var answers = Map.<String, Object>of("participant_name", "Nguyễn Minh", "participant_age", 21,
+                "participant_occupation", "Sinh viên", "stars", 5);
+        when(repo.save(any())).thenAnswer(inv -> {
+            Feedback f = inv.getArgument(0);
+            f.setId(10L);
+            return f;
+        });
+        service.save(new FeedbackRequest("P07", "before", null, answers));
+        var captor = org.mockito.ArgumentCaptor.forClass(Feedback.class);
+        org.mockito.Mockito.verify(repo).save(captor.capture());
+        assertThat(captor.getValue().getAnswers()).doesNotContain("participant_name", "Nguyễn Minh").contains("Sinh viên");
     }
 
     @Test
     void tuChoiHoSoThieuTruongSaiKieuHoacNgoaiGioiHan() {
         for (var answers : List.of(
-                Map.<String, Object>of("participant_name", "Minh"),
-                Map.<String, Object>of("participant_name", "Minh", "participant_age", "21", "participant_occupation", "Sinh viên"),
-                Map.<String, Object>of("participant_name", "Minh", "participant_age", 21.5, "participant_occupation", "Sinh viên"),
-                Map.<String, Object>of("participant_name", "Minh", "participant_age", 121, "participant_occupation", "Sinh viên"),
-                Map.<String, Object>of("participant_name", "x".repeat(81), "participant_age", 21, "participant_occupation", "Sinh viên"))) {
+                Map.<String, Object>of("participant_age", 21),
+                Map.<String, Object>of("participant_age", "21", "participant_occupation", "Sinh viên"),
+                Map.<String, Object>of("participant_age", 21.5, "participant_occupation", "Sinh viên"),
+                Map.<String, Object>of("participant_age", 121, "participant_occupation", "Sinh viên"),
+                Map.<String, Object>of("participant_age", 21, "participant_occupation", "x".repeat(81)))) {
             assertThatThrownBy(() -> service.save(new FeedbackRequest(null, null, null, answers)))
                     .isInstanceOf(ResponseStatusException.class);
         }

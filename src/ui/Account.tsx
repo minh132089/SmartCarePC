@@ -45,7 +45,7 @@ export function AccountSlot({ hideSignIn = false }: { hideSignIn?: boolean }) {
       onClick={openAuth}
       className="flex items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13.5px] font-medium text-ink hover:bg-fill-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
-      <SignIn size={15} aria-hidden /> Đăng nhập
+      <SignIn size={15} aria-hidden /> Sign in
     </button>
   )
 }
@@ -63,7 +63,7 @@ export function AuthOverlay() {
   }, [open, close])
   if (!open) return null
   return (
-    <div role="dialog" aria-modal="true" aria-label="Đăng nhập hoặc đăng ký" className="fixed inset-0 z-[200] overflow-y-auto bg-[#e9edf2]">
+    <div role="dialog" aria-modal="true" aria-label="Sign in or create an account" className="fixed inset-0 z-[200] overflow-y-auto bg-[#e9edf2]">
       <AuthPage onLogin={login} onClose={close} />
     </div>
   )

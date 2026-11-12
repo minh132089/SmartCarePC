@@ -3,6 +3,8 @@ import { ArrowClockwise, DownloadSimple, Star } from '@phosphor-icons/react'
 import { FEEDBACK } from './questions'
 import { PrimaryButton, QuietButton, focus } from './StudyParts'
 import { FeedbackOverview } from './FeedbackOverview'
+import { GapSummary } from './GapSummary'
+import { measuresOf } from './gapStats'
 import { participantOf, score as num, type FeedbackRow as Row } from './feedbackStats'
 import { MaintenanceSummary, type MaintenanceRow } from '../maintenance/MaintenanceSummary'
 import LatticeLoader from '../../components/LatticeLoader'
@@ -14,7 +16,8 @@ import LatticeLoader from '../../components/LatticeLoader'
 const KEY = 'pcsc-export-key'
 const SCALES = FEEDBACK.filter((q) => q.type === 'scale')
 const TEXTS = FEEDBACK.filter((q) => q.type === 'text')
-const PHASE: Record<string, string> = { before: "First use", after: "After 4 weeks" }
+const PHASE: Record<string, string> = { before: "First use", after: "End of study" }
+const FORM: Record<string, string> = { baseline: "First-use questions", followup: "End-of-study questions", post_build: "After assembly", general: "General feedback" }
 
 function readKey() {
   try {
@@ -176,6 +179,7 @@ export function FeedbackAdmin() {
         {error && <p role="alert" className="mt-3 text-[13px] text-bad">{error}</p>}
         {busy && <div className="mt-5 text-ink-2"><LatticeLoader label="Loading feedback" fontSize={13} /></div>}
 
+        {rows && <GapSummary feedback={rows} events={maintenanceRows ?? []} />}
         {rows && <FeedbackOverview rows={shown} />}
         {rows && <MaintenanceSummary rows={maintenanceRows} feedback={rows} error={maintenanceError} download={() => void downloadMaintenance()} />}
 
@@ -197,6 +201,7 @@ export function FeedbackAdmin() {
                         {r.phase ? ` · ${PHASE[r.phase] ?? r.phase}` : ''}
                       </span>
                     )}
+                    {typeof r.answers.form === 'string' && <span className="rounded-full bg-fill px-2 py-0.5 text-ink-2">{FORM[r.answers.form] ?? r.answers.form}</span>}
                     {r.machine && <span>PC: {r.machine}</span>}
                     {stars != null && (
                       <span className="flex items-center gap-0.5 text-[#f5a524]" aria-label={`${stars} stars`}>
@@ -207,10 +212,14 @@ export function FeedbackAdmin() {
                     )}
                   </div>
                   <div className="feedback-person">
-                    <strong>{person.name || "No profile information"}</strong>
+                    {person.age == null && !person.occupation && <strong>No profile information</strong>}
                     {person.age != null && <span>{person.age} years old</span>}
                     {person.occupation && <span>{person.occupation}</span>}
                   </div>
+                  {(r.answers.form === 'baseline' || r.answers.form === 'followup') && (() => {
+                    const m = measuresOf(r.answers)
+                    return <p className="mt-2 text-[12.5px] tabular-nums text-ink-2">Confidence {m.confidence?.toFixed(2) ?? '—'} · Doing it yourself {m.independence?.toFixed(2) ?? '—'} · Decisions {m.decisions ?? '—'}/4 · Others asked {m.sources ?? '—'}{typeof r.answers.tech_bg === 'string' ? ` · Background: ${r.answers.tech_bg}` : ''}</p>
+                  })()}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {SCALES.map((q, i) => {
                       const v = num(r.answers[q.key])

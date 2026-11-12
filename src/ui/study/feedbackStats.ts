@@ -30,8 +30,8 @@ export function occupationLabel(value: string): string {
 
 export function participantOf(row: FeedbackRow) {
   const a = row.answers
+  // Tên thật không hiển thị (khảo sát hứa ẩn danh); phản hồi cũ có tên vẫn nằm trong database và file CSV
   return {
-    name: typeof a.participant_name === 'string' ? a.participant_name.trim() : '',
     age: typeof a.participant_age === 'number' && Number.isInteger(a.participant_age) && a.participant_age > 0 && a.participant_age <= 120 ? a.participant_age : null,
     occupation: typeof a.participant_occupation === 'string' ? occupationLabel(a.participant_occupation) : '',
   }

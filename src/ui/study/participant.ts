@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 
-export type Participant = { name: string; age: number; occupation: string }
+/** Hồ sơ tự nguyện: chỉ tuổi và nghề. Không thu tên thật, vì khảo sát đã hứa ẩn danh; phản hồi gắn với mã người tham gia. */
+export type Participant = { age: number; occupation: string }
 const KEY = 'pcsc-participant-v1'
 
 export function validParticipant(value: unknown): value is Participant {
   if (!value || typeof value !== 'object') return false
   const p = value as Partial<Participant>
-  return typeof p.name === 'string' && p.name.trim().length >= 2 && p.name.trim().length <= 80
-    && Number.isInteger(p.age) && p.age! >= 1 && p.age! <= 120
+  return Number.isInteger(p.age) && p.age! >= 1 && p.age! <= 120
     && typeof p.occupation === 'string' && p.occupation.trim().length >= 2 && p.occupation.trim().length <= 80
 }
 
@@ -19,7 +19,8 @@ export function needsParticipant(hostname: string) {
 function read(): Participant | null {
   try {
     const p: unknown = JSON.parse(localStorage.getItem(KEY) ?? 'null')
-    return validParticipant(p) ? p : null
+    // Bản cũ có lưu tên: bỏ tên, chỉ giữ tuổi và nghề
+    return validParticipant(p) ? { age: p.age, occupation: p.occupation } : null
   } catch { return null }
 }
 
@@ -37,7 +38,7 @@ export const useParticipant = create<{
   edit: () => set({ editing: true }),
   save: (profile) => {
     if (!validParticipant(profile)) return
-    const clean = { name: profile.name.trim(), age: profile.age, occupation: profile.occupation.trim() }
+    const clean = { age: profile.age, occupation: profile.occupation.trim() }
     try { localStorage.setItem(KEY, JSON.stringify(clean)) } catch { /* Giữ trong phiên khi trình duyệt chặn lưu. */ }
     set({ profile: clean, confirmedThisVisit: true, editing: false })
   },
@@ -45,5 +46,5 @@ export const useParticipant = create<{
 
 export function participantAnswers() {
   const p = useParticipant.getState().profile
-  return p ? { participant_name: p.name, participant_age: p.age, participant_occupation: p.occupation } : {}
+  return p ? { participant_age: p.age, participant_occupation: p.occupation } : {}
 }

@@ -10,7 +10,7 @@ import { useStudy } from './study/study'
 import { StudyBar } from './study/StudyBar'
 import { playTick } from './sound/sfx'
 import { maintenanceSteps, TASKS } from '../data/maintenance'
-import { maintenanceKey, recordStep, useMaintenance } from './maintenance/maintenanceState'
+import { maintenanceKey, recordStep, recordUsage, useMaintenance } from './maintenance/maintenanceState'
 import { MaintenanceEntry, Symptoms } from './maintenance/MaintenanceHub'
 import { Choices, Question } from './study/StudyParts'
 import SpringCheck from '../components/SpringCheck'
@@ -100,6 +100,7 @@ export function GuidePanel() {
   }, [current.id, steps])
 
   const toggle = (id: string) => {
+    if (!isMaintenance && !done.has(id)) recordUsage('build_step_done', { machine, stepId: id, via: 'check' })
     playTick(!done.has(id))
     setDone((d) => {
       const n = new Set(d)
@@ -112,6 +113,7 @@ export function GuidePanel() {
   /** "Xong bước này": đánh dấu rồi chuyển tới bước kế tiếp chưa làm */
   const complete = (alone = true) => {
     if (isMaintenance) recordStep(current.id, alone)
+    else recordUsage('build_step_done', { machine, stepId: current.id, alone })
     if (!done.has(current.id)) playTick()
     const n = new Set(done).add(current.id)
     setDone(n)
@@ -132,12 +134,18 @@ export function GuidePanel() {
   // từ trước thì không bật lên nữa (nút trong ô chúc mừng vẫn mở được)
   const wasDone = useRef(allDone)
   useEffect(() => {
+    if (!isMaintenance && allDone && !wasDone.current) recordUsage('build_guide_completed', { machine, steps: steps.length })
     if (!isMaintenance && allDone && !wasDone.current && !ratedBefore(machine)) {
       markRated(machine)
       openStudy('rating')
     }
     wasDone.current = allDone
-  }, [allDone, machine, openStudy, isMaintenance])
+  }, [allDone, machine, openStudy, isMaintenance, steps.length])
+
+  // Mở hướng dẫn lắp (mỗi máy một lần mỗi lần mở)
+  useEffect(() => {
+    if (!isMaintenance) recordUsage('build_guide_opened', { machine })
+  }, [isMaintenance, machine])
 
   return (
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">

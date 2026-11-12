@@ -8,10 +8,19 @@ import { newSubmissionId, useStudy, type Phase } from '../study/study'
 const KEY = 'pcsc-maintenance-v1'
 const QUEUE = 'pcsc-maintenance-queue-v1'
 export interface MaintenancePC { machine: FamilyId | 'gaming'; cooler: Cooler; hasGpu: boolean }
-export type EventType = 'reminder_set' | 'calendar_added' | 'reminder_shown' | 'reminder_snoozed' | 'opened_from_calendar' | 'maintenance_started' | 'step_done' | 'maintenance_completed' | 'maintenance_abandoned'
-export interface MaintenanceEvent { eventId: string; eventType: EventType; task: MaintenanceTask; participantCode: string; phase: Phase; machine: string; occurredAt: string; data: Record<string, unknown> }
+export type EventType = 'reminder_set' | 'calendar_added' | 'reminder_shown' | 'reminder_snoozed' | 'opened_from_calendar' | 'maintenance_started' | 'step_done' | 'maintenance_completed' | 'maintenance_abandoned' | UsageType
+/** Ghi việc dùng các phần khác của app (task = 'none'), để biết người có điểm tăng đã thực sự dùng hướng dẫn hay chưa */
+export type UsageType = 'advice_asked' | 'upgrade_asked' | 'build_guide_opened' | 'build_step_done' | 'build_guide_completed'
+export interface MaintenanceEvent { eventId: string; eventType: EventType; task: MaintenanceTask | 'none'; participantCode: string; phase: Phase; machine: string; occurredAt: string; data: Record<string, unknown> }
+/**
+ * Lời nhắc giả lập cho nghiên cứu ngắn ngày: đặt lời nhắc xong thì lần mở app sau (lần tải trang khác) hiện lời nhắc ngay,
+ * thay vì chờ tới hạn thật (vài tháng). Chỉ có khi đang ở chế độ nghiên cứu.
+ */
+export interface SimulatedReminder { task: MaintenanceTask; setInLoad: string }
+/** Mã của lần tải trang này: lời nhắc giả lập chỉ hiện ở lần tải khác lần đặt */
+export const LOAD_ID = newSubmissionId()
 interface Run { id: string; task: MaintenanceTask; machine: string; completed: boolean; study: { code: string | null; phase: Phase }; alone: Record<string, boolean> }
-interface Saved { pc: MaintenancePC | null; answers: MaintenanceAnswers | null; dates: Partial<Record<MaintenanceTask, string>>; completed: Partial<Record<MaintenanceTask, string>>; run: Run | null }
+interface Saved { pc: MaintenancePC | null; answers: MaintenanceAnswers | null; dates: Partial<Record<MaintenanceTask, string>>; completed: Partial<Record<MaintenanceTask, string>>; run: Run | null; simulated?: SimulatedReminder | null }
 export function readStored<T>(key: string, fallback: T): T {
   try { const s = localStorage.getItem(key); return s ? JSON.parse(s) as T : fallback } catch { return fallback }
 }
@@ -19,7 +28,7 @@ function writeStored(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true } catch { return false }
 }
 const initial = (): Saved => {
-  const fallback: Saved = { pc: null, answers: null, dates: {}, completed: {}, run: null }
+  const fallback: Saved = { pc: null, answers: null, dates: {}, completed: {}, run: null, simulated: null }
   const saved = readStored<Saved>(KEY, fallback)
   if (!saved || !saved.dates || !saved.completed || (saved.pc && ![...FAMILY_IDS, 'gaming'].includes(saved.pc.machine))) return fallback
   return { ...fallback, ...saved }
@@ -35,6 +44,8 @@ interface MaintenanceState extends Saved {
   rememberPC: (pc: MaintenancePC) => void
   schedule: (answers: MaintenanceAnswers, dates: Record<MaintenanceTask, string>) => void
   snooze: (task: MaintenanceTask) => void
+  /** Hoãn lời nhắc giả lập: hiện lại ở lần mở app sau */
+  snoozeSimulated: () => void
   finish: (task: MaintenanceTask, who: string, stillHot: boolean, symptoms?: string[]) => void
 }
 export const useMaintenance = create<MaintenanceState>((set, get) => ({
@@ -45,8 +56,16 @@ export const useMaintenance = create<MaintenanceState>((set, get) => ({
   schedule: (answers, dates) => {
     const s = get(), plan = maintenancePlan(answers)
     // Giữ câu trả lời lần đầu trong sự kiện, không ghi đè mốc trước của người tham gia.
-    set({ answers, dates }); persist()
+    // Nghiên cứu ngắn ngày: nhắc việc đến hạn đầu tiên (mặc định vệ sinh bụi) ngay lần mở app sau
+    const simulated = useStudy.getState().code ? { task: (Object.keys(TASKS) as MaintenanceTask[]).find(t => t !== 'check' && plan[t].due) ?? 'dust', setInLoad: LOAD_ID } : s.simulated ?? null
+    set({ answers, dates, simulated }); persist()
     for (const task of Object.keys(TASKS) as MaintenanceTask[]) recordEvent('reminder_set', task, { answers, never_serviced: ['never', 'unknown'].includes(answers.lastCleaned), scheduledFor: dates[task], dueNow: plan[task].due, intervalMonths: plan[task].months, firstSetup: !s.answers })
+  },
+  snoozeSimulated: () => {
+    const sim = get().simulated
+    if (!sim) return
+    set({ simulated: { ...sim, setInLoad: LOAD_ID } }); persist()
+    recordEvent('reminder_snoozed', sim.task, { simulated: true })
   },
   snooze: (task) => { const date = addDays(day(), 7); set({ dates: { ...get().dates, [task]: date } }); persist(); recordEvent('reminder_snoozed', task, { scheduledFor: date }) },
   finish: (task, who, stillHot, symptoms) => {
@@ -59,10 +78,10 @@ export const useMaintenance = create<MaintenanceState>((set, get) => ({
       if (plan.paste.due) dates.paste = day()
     }
     recordRun('maintenance_completed', { who, stillHot, ...(symptoms ? { symptoms, cleanedButStillHot: symptoms.some(x => x === 'heat' || x === 'shutdown') && (s.answers?.cleanedButStillHot ?? false) } : {}) })
-    set({ completed: { ...s.completed, [task]: day() }, dates, answers, run: s.run ? { ...s.run, completed: true } : null }); persist()
+    set({ completed: { ...s.completed, [task]: day() }, dates, answers, run: s.run ? { ...s.run, completed: true } : null, simulated: s.simulated?.task === task ? null : s.simulated }); persist()
   },
 }))
-function persist() { const { pc, answers, dates, completed, run } = useMaintenance.getState(); if (!writeStored(KEY, { pc, answers, dates, completed, run })) useMaintenance.setState({ storageWarning: true }) }
+function persist() { const { pc, answers, dates, completed, run, simulated } = useMaintenance.getState(); if (!writeStored(KEY, { pc, answers, dates, completed, run, simulated })) useMaintenance.setState({ storageWarning: true }) }
 export const maintenanceKey = (pc: MaintenancePC, task: MaintenanceTask) => `maint-${task}-${pc.machine}-${pc.cooler}-${pc.hasGpu ? 'gpu' : 'igpu'}`
 export function currentPC(): MaintenancePC {
   const v = useViewer.getState()
@@ -100,7 +119,11 @@ export function recordRun(type: EventType, data: Record<string, unknown>) {
   if (current.code !== run.study.code || current.phase !== run.study.phase) return
   recordEvent(type, run.task, { runId: run.id, ...data })
 }
-export function recordEvent(eventType: EventType, task: MaintenanceTask, data: Record<string, unknown> = {}) {
+/** Ghi việc dùng app (tư vấn, hướng dẫn lắp, nâng cấp) cho người tham gia nghiên cứu */
+export function recordUsage(eventType: UsageType, data: Record<string, unknown> = {}) {
+  recordEvent(eventType, 'none', data)
+}
+export function recordEvent(eventType: EventType, task: MaintenanceTask | 'none', data: Record<string, unknown> = {}) {
   const { code, phase } = useStudy.getState()
   if (!code) return
   const s = useMaintenance.getState()

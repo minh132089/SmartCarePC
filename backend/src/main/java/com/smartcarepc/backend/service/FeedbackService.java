@@ -48,8 +48,12 @@ public class FeedbackService {
     private static final java.util.regex.Pattern SUBMISSION_ID = java.util.regex.Pattern.compile("[A-Za-z0-9-]{8,64}");
 
     @Transactional
-    public FeedbackSaved save(FeedbackRequest request) {
-        validateParticipant(request.answers());
+    public FeedbackSaved save(FeedbackRequest incoming) {
+        validateParticipant(incoming.answers());
+        // Khảo sát hứa ẩn danh: không lưu tên thật, kể cả khi trình duyệt còn bản app cũ gửi lên
+        var cleaned = new java.util.LinkedHashMap<>(incoming.answers());
+        cleaned.remove("participant_name");
+        FeedbackRequest request = new FeedbackRequest(incoming.participantCode(), incoming.phase(), incoming.machine(), cleaned);
         // Cùng một lần gửi (mã submission_id do app tạo) tới hai lần (bấm hai lần, gửi lại từ hàng đợi): trả bản đã lưu
         Object sid = request.answers().get("submission_id");
         String submission = sid instanceof String id && SUBMISSION_ID.matcher(id).matches() ? id : null;
@@ -71,13 +75,11 @@ public class FeedbackService {
         return new FeedbackSaved(saved.getId());
     }
 
-    /** Hồ sơ tùy chọn cho client cũ/local; nếu có phải đầy đủ, đúng kiểu và có giới hạn. */
+    /** Hồ sơ tùy chọn (tuổi, nghề); nếu có phải đầy đủ, đúng kiểu và có giới hạn. Tên (client cũ) bị bỏ khi lưu. */
     private static void validateParticipant(Map<String, Object> answers) {
-        if (!answers.containsKey("participant_name") && !answers.containsKey("participant_age")
-                && !answers.containsKey("participant_occupation")) return;
-        Object name = answers.get("participant_name"), age = answers.get("participant_age"), job = answers.get("participant_occupation");
-        if (!(name instanceof String n) || n.strip().length() < 2 || n.strip().length() > 80
-                || !(job instanceof String j) || j.strip().length() < 2 || j.strip().length() > 80
+        if (!answers.containsKey("participant_age") && !answers.containsKey("participant_occupation")) return;
+        Object age = answers.get("participant_age"), job = answers.get("participant_occupation");
+        if (!(job instanceof String j) || j.strip().length() < 2 || j.strip().length() > 80
                 || !(age instanceof Number a) || !Double.isFinite(a.doubleValue()) || a.doubleValue() != a.intValue()
                 || a.intValue() < 1 || a.intValue() > 120) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid participant details");

@@ -6,7 +6,7 @@ import { googleCalendarUrl, reminderIcs } from '../../data/maintenanceCalendar'
 import { useViewer } from '../../store'
 import { Choices, Dialog, PrimaryButton, Question, QuietButton, focus } from '../study/StudyParts'
 import { newSubmissionId, useStudy } from '../study/study'
-import { calendarLink, currentPC, flushMaintenanceQueue, recordEvent, startMaintenance, useMaintenance, type MaintenancePC } from './maintenanceState'
+import { calendarLink, currentPC, flushMaintenanceQueue, LOAD_ID, recordEvent, startMaintenance, useMaintenance, type MaintenancePC } from './maintenanceState'
 
 const TASK_IDS = Object.keys(TASKS) as MaintenanceTask[]
 const THUMB = { standard_tower: '01', compact_tower: '02', showcase_dual_chamber: '03', mini_sff: '04', full_tower: '06', gaming: '07' }
@@ -51,21 +51,28 @@ export function MaintenanceHub() {
     }
     return () => { window.removeEventListener('focus', onFocus); clearInterval(timer) }
   }, [open])
-  const due = TASK_IDS.find(task => dates[task] && dates[task]! <= today)
-  const shown = useRef('')
   const code = useStudy(s => s.code), phase = useStudy(s => s.phase)
+  const simulated = useMaintenance(s => s.simulated)
+  const snoozeSimulated = useMaintenance(s => s.snoozeSimulated)
+  // Nghiên cứu ngắn ngày: lời nhắc giả lập hiện ở lần mở app sau lần đặt, trước lời nhắc theo lịch thật
+  const simDue = code && simulated && simulated.setInLoad !== LOAD_ID ? simulated.task : undefined
+  const due = simDue ?? TASK_IDS.find(task => dates[task] && dates[task]! <= today)
+  const shown = useRef('')
   useEffect(() => {
     if (!due || guide || dialog || studyDialog || !code) return
-    const id = `${code}:${phase}:${due}:${dates[due]}`
+    const id = `${code}:${phase}:${due}:${simDue ? 'simulated' : dates[due]}`
     if (shown.current === id) return
     shown.current = id
-    recordEvent('reminder_shown', due, { scheduledFor: dates[due] })
-  }, [due, dates, guide, dialog, studyDialog, code, phase])
+    recordEvent('reminder_shown', due, simDue ? { simulated: true } : { scheduledFor: dates[due] })
+  }, [due, simDue, dates, guide, dialog, studyDialog, code, phase])
   return <>
     {due && !guide && !dialog && !studyDialog && <div className="fixed right-4 bottom-4 z-40 max-w-[350px] rounded-2xl bg-panel p-4 text-ink shadow-xl ring-1 ring-line" role="status">
       <p className="font-semibold">{due === 'dust' ? 'Time to clean your PC' : `Time for: ${TASKS[due].title.toLowerCase()}`}</p>
-      <p className="mt-1 text-[13px] text-ink-2">Your planned date: {dates[due]}. Work at a time that is safe for you.</p>
-      <p className="mt-1 text-[12px] text-ink-3">Calendar events must be rescheduled in your calendar.</p><div className="mt-3 flex flex-wrap gap-2"><PrimaryButton onClick={() => pc ? startMaintenance(pc, due) : open(due)}>Start guide</PrimaryButton><QuietButton onClick={() => snooze(due)}>Remind me in 1 week</QuietButton></div>
+      {simDue
+        ? <p className="mt-1 text-[13px] text-ink-2">Study reminder: imagine today is the day you planned for this. Work at a time that is safe for you.</p>
+        : <><p className="mt-1 text-[13px] text-ink-2">Your planned date: {dates[due]}. Work at a time that is safe for you.</p>
+          <p className="mt-1 text-[12px] text-ink-3">Calendar events must be rescheduled in your calendar.</p></>}
+      <div className="mt-3 flex flex-wrap gap-2"><PrimaryButton onClick={() => pc ? startMaintenance(pc, due) : open(due)}>Start guide</PrimaryButton><QuietButton onClick={() => simDue ? snoozeSimulated() : snooze(due)}>{simDue ? 'Remind me next time' : 'Remind me in 1 week'}</QuietButton></div>
     </div>}
     {dialog === 'choose' && !studyDialog && <ChoosePC key={pending} initial={advised ? currentPC() : pc} task={pending} fromCalendar={source === 'calendar'} advised={!!advised} onClose={close} />}
     {dialog === 'reminders' && !studyDialog && pc && <ReminderSetup pc={pc} onClose={close} />}
@@ -149,7 +156,7 @@ function ReminderSetup({ pc, onClose }: { pc: MaintenancePC; onClose: () => void
       <Question label="Has its CPU thermal paste ever been replaced?"><Choices name="paste-history" value={answered.has('paste') ? [a.paste] : []} options={[{ value: 'never', label: 'Never' }, { value: 'changed', label: 'Yes' }, { value: 'unknown', label: 'I don’t know' }]} onChange={v => update({ paste: v[0] })} />{a.paste === 'changed' && <label className="mt-2 block text-[13px]">Replacement date, if known<input type="date" max={today} value={a.lastPasteDate ?? ''} onChange={e => update({ lastPasteDate: e.target.value || undefined })} className={`${input} mt-1`} /></label>}</Question>
       <p className="mt-5 text-[14px] font-semibold">Your suggested plan</p>{!valid && <p className="mt-1 text-[12px] text-ink-3">Answer the cleaning history, PC age, symptoms and paste history before saving. Dates below update as you answer.</p>}
       {TASK_IDS.map(t => <section key={t} className="mt-2 rounded-xl bg-surface p-3 ring-1 ring-line"><h3 className="text-[14px] font-semibold">{TASKS[t].title}{plan[t].due ? ' · due now' : ''}</h3><p className="mt-1 text-[13px] text-ink-2">{plan[t].reason}</p>{plan[t].due ? <label className="mt-2 block text-[13px]">Choose a day in the next 1–14 days<input type="date" aria-label={`Date for ${TASKS[t].title}`} min={addDays(today, 1)} max={addDays(today, 14)} value={chosen[t]} onChange={e => setPicks({ ...picks, [t]: e.target.value })} className={`${input} mt-1`} /></label> : <p className="mt-2 text-[13px]">Next: {chosen[t]}</p>}</section>)}
-      <p className="mt-3 text-[12px] text-ink-3">PC reference: {pc.machine}. Future dates follow your maintenance history. We do not shorten intervals for the study.</p>
+      <p className="mt-3 text-[12px] text-ink-3">PC reference: {pc.machine}. Future dates follow your maintenance history.{useStudy.getState().code ? ' Because the study is short, a practice reminder also appears the next time you open the app.' : ''}</p>
     </>}
   </Dialog>
 }

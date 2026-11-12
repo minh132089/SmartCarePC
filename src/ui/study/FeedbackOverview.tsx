@@ -16,7 +16,7 @@ function Card({ eyebrow, title, children, note }: { eyebrow?: string; title: str
 export function FeedbackOverview({ rows }: { rows: FeedbackRow[] }) {
   const dark = useDark()
   const stars = average(rows.map((r) => score(r.answers.stars)))
-  const profiles = rows.filter((r) => { const p = participantOf(r); return p.name && p.age && p.occupation }).length
+  const profiles = rows.filter((r) => { const p = participantOf(r); return p.age && p.occupation }).length
   const distribution = [5, 4, 3, 2, 1].map((n) => ({ label: `${n}`, count: rows.filter((r) => score(r.answers.stars) === n).length }))
   const days = dailyCounts(rows)
   const occupations = occupationCounts(rows)
@@ -25,7 +25,7 @@ export function FeedbackOverview({ rows }: { rows: FeedbackRow[] }) {
   const items: MagicBentoItem[] = [
     { id: 'total', content: <Card eyebrow="OVERVIEW" title="Responses received"><ChatTeardropText className="feedback-stat-icon" size={22} aria-hidden /><p className="feedback-number">{rows.length}</p><p className="feedback-note">For the selected filter</p></Card> },
     { id: 'rating', content: <Card eyebrow="EXPERIENCE" title="Average rating"><Star className="feedback-stat-icon" size={22} aria-hidden /><p className="feedback-number">{stars ? stars.mean.toFixed(1) : '—'}<span>/5</span></p><p className="feedback-note">{stars ? `${stars.n} rated responses` : "No ratings yet"}</p></Card> },
-    { id: 'profiles', content: <Card eyebrow="PARTICIPANTS" title="With a complete profile"><UserCircle className="feedback-stat-icon" size={22} aria-hidden /><p className="feedback-number">{profiles}<span>/{rows.length}</span></p><p className="feedback-note">Responses with a name, age and occupation</p></Card> },
+    { id: 'profiles', content: <Card eyebrow="PARTICIPANTS" title="With a complete profile"><UserCircle className="feedback-stat-icon" size={22} aria-hidden /><p className="feedback-number">{profiles}<span>/{rows.length}</span></p><p className="feedback-note">Responses with an age and occupation</p></Card> },
     { id: 'trend', colSpan: 2, rowSpan: 2, content: <Card eyebrow="PARTICIPATION" title="Responses by day" note={days.length ? `14 days ending ${days.at(-1)!.label}. Each point counts responses, not unique people.` : "The chart appears when dated responses are available."}><ChartLineUp className="feedback-stat-icon" size={22} aria-hidden /><Trend days={days} /></Card> },
     { id: 'distribution', rowSpan: 2, content: <Card eyebrow="RATINGS" title="Star distribution" note="Includes responses with a star rating only."><Bars data={distribution} suffix=" stars" /></Card> },
     { id: 'questions', colSpan: 2, rowSpan: 2, content: <Card eyebrow="EXPERIENCE QUALITY" title="Scores by question" note="Scale of 1–5 · response counts shown in brackets."><div className="feedback-question-bars">{SCALES.map((q) => {

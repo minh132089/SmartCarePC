@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { recordUsage } from '../maintenance/maintenanceState'
 import { FAMILY_IDS, type FamilyId } from '../../data/families'
 import { playDone, playSubmit, playThinking } from '../sound/sfx'
 
@@ -169,6 +170,7 @@ function createChat(mode: ChatMode) {
       if (!content || get().busy) return
       const next: Msg[] = [...(history ?? get().messages), { role: 'user', content }]
       set({ messages: next, busy: true, stage: null, error: null })
+      if (mode === 'advice' || mode === 'upgrade') recordUsage(mode === 'advice' ? 'advice_asked' : 'upgrade_asked', { turn: next.filter((m) => m.role === 'user').length })
       playSubmit()
       playThinking()
       const ctrl = new AbortController()
