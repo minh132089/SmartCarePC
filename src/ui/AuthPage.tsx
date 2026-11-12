@@ -30,7 +30,7 @@ export function clearSession() {
 }
 
 /**
- * Màn đăng nhập / đăng ký: một tấm kính (GlassSurface của React Bits) nằm trên ảnh máy thật.
+ * Màn đăng nhập / đăng ký: một tấm kính sáng (GlassSurface của React Bits) trên nền trắng.
  * Chrome có khúc xạ thật qua bộ lọc SVG; Safari và Firefox tự lùi về kính mờ.
  */
 export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (session: Session) => void; onClose?: () => void; required?: boolean }) {
@@ -66,7 +66,7 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
       googleButton.current.replaceChildren()
       // Nút của Google có bề rộng cố định: lấy đúng bề rộng ô chứa để không tràn trên điện thoại
       const width = Math.min(400, Math.max(200, Math.floor(googleButton.current.clientWidth)))
-      window.google.accounts.id.renderButton(googleButton.current, { theme: 'filled_black', size: 'large', text: register ? 'signup_with' : 'continue_with', shape: 'pill', width })
+      window.google.accounts.id.renderButton(googleButton.current, { theme: 'outline', size: 'large', text: register ? 'signup_with' : 'continue_with', shape: 'pill', width })
     }
     if (window.google) initialize()
     else {
@@ -120,7 +120,6 @@ export function AuthPage({ onLogin, onClose, required = false }: { onLogin: (ses
   return (
     <MotionConfig reducedMotion="user" transition={SPRING}>
       <main className="auth-page">
-        <img className="auth-backdrop" src="/hero/advice-showcase-dark.jpg" alt="" aria-hidden />
         <motion.div
           className="auth-card-wrap"
           // Tấm kính "hiện hình": phóng nhẹ và hết mờ cùng lúc, thay vì chỉ hiện dần (giảm chuyển động thì chỉ hiện dần)
