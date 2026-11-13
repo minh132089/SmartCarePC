@@ -16,6 +16,21 @@ public final class Io {
     // Each task gets a new virtual thread, so nested price lookups inherit the request's deadline.
     private static final InheritableThreadLocal<Long> DEADLINE = new InheritableThreadLocal<>();
 
+    /**
+     * Như within nhưng bỏ hạn đang có của luồng: cho việc chạy nền (luồng nền tạo trong lúc một câu hỏi đang chạy thừa hưởng hạn
+     * của câu hỏi đó qua InheritableThreadLocal, hết hạn rồi thì mọi lượt sau tưởng đã hết giờ)
+     */
+    public static <T> T detached(java.time.Duration budget, Supplier<T> task) {
+        Long previous = DEADLINE.get();
+        DEADLINE.set(System.nanoTime() + budget.toNanos());
+        try {
+            return task.get();
+        } finally {
+            if (previous == null) DEADLINE.remove();
+            else DEADLINE.set(previous);
+        }
+    }
+
     public static <T> T within(java.time.Duration budget, Supplier<T> task) {
         Long previous = DEADLINE.get();
         long end = System.nanoTime() + budget.toNanos();

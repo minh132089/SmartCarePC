@@ -115,8 +115,47 @@ public class PriceEngine {
     });
 
     private static final int PAGE_PARSER_VERSION = 9;
-    private record Snapshot(Map<String, Cached> searches, Map<String, Offer> offers, Map<String, Long> pageRead, int parserVersion) {
+    /** used: từ khoá -> lần cuối có người tìm (để kho giá biết nên làm mới từ khoá nào); file cũ không có thì null */
+    private record Snapshot(Map<String, Cached> searches, Map<String, Offer> offers, Map<String, Long> pageRead, int parserVersion,
+            Map<String, Long> used) {
     }
+
+    /*
+     * Kho giá: mọi sản phẩm đã thấy (byUrl) trong INDEX_AGE gần đây là ứng viên tìm ngay, không phải mở web cửa hàng lúc người
+     * dùng đang chờ. Kho chỉ để CHỌN ứng viên: giá / còn hàng trong kho không bao giờ lên thẻ. Món nào lên thẻ vẫn phải đọc lại
+     * đúng trang sản phẩm trong VERIFIED_TTL (missingBuy / verified / quote ở ChatService), như trước khi có kho.
+     * Từ khoá trả bằng kho thì được tìm lại thật ở nền; tác vụ nền còn làm mới các từ khoá hay dùng và SEEDS mỗi WARM_EVERY.
+     */
+    static final Duration INDEX_AGE = Duration.ofHours(12);
+    /** Kho có ít nhất từng này ứng viên khớp thì trả ngay; ít hơn thì tìm thật như cũ */
+    static final int INDEX_MIN = 4;
+    static final Duration WARM_EVERY = Duration.ofMinutes(30);
+    /** Từ khoá có kết quả cũ hơn từng này thì tác vụ nền tìm lại */
+    static final Duration STALE_AFTER = Duration.ofMinutes(100);
+    /** Chỉ làm mới từ khoá có người dùng trong từng này */
+    static final Duration USED_WINDOW = Duration.ofHours(48);
+    static final int WARM_BATCH = 20;
+    /** Thời gian tối đa cho một lượt làm mới ở nền (chờ tới lượt + tìm) */
+    static final Duration REFRESH_BUDGET = Duration.ofSeconds(60);
+    /** Từ khoá linh kiện phổ biến, làm mới cả khi chưa ai hỏi (lần đầu chạy kho còn trống) */
+    static final List<String> SEEDS = List.of("Core i3 12100F", "Core i5 12400F", "Core i5 13400F", "Ryzen 5 5600", "Ryzen 5 7500F",
+            "B760M DDR4", "H610M DDR4", "B650M", "A520M", "RAM DDR4 16GB 3200", "RAM DDR5 16GB", "RAM DDR5 32GB",
+            "SSD NVMe 512GB", "SSD NVMe 1TB", "RTX 3050", "RTX 4060", "RTX 4060 Ti", "RTX 5060", "RX 6600", "RX 7600",
+            "nguồn 550W 80 Plus Bronze", "nguồn 650W 80 Plus Bronze", "nguồn 750W 80 Plus Gold", "vỏ case ATX", "vỏ case mATX",
+            "vỏ case kính cường lực ATX", "tản nhiệt khí CPU", "tản nhiệt nước AIO 240mm", "quạt case 120mm ARGB");
+    /** Công tắc kho giá (PRICE_INDEX=false để tắt khi cần, không phải build lại): tắt thì tìm thật như trước */
+    @Value("${app.search.index:true}")
+    private boolean indexOn = true;
+    /** Từ khoá -> lần cuối có người tìm */
+    private final Map<String, Long> used = new ConcurrentHashMap<>();
+    /** Từ khoá đang được tìm lại ở nền (không xếp hai lượt cho cùng từ khoá) */
+    private final Set<String> refreshing = ConcurrentHashMap.newKeySet();
+    /** Một luồng duy nhất cho việc làm mới: nền chỉ chiếm tối đa một trong SEARCH_SLOTS lượt tìm, người dùng vẫn được ưu tiên */
+    private final java.util.concurrent.ScheduledExecutorService refresher = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "price-index-refresh");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
 
@@ -134,17 +173,24 @@ public class PriceEngine {
                 if (snap.parserVersion() == PAGE_PARSER_VERSION && snap.pageRead() != null)
                     snap.pageRead().forEach((u, at) -> { if (at > verifiedSince) pageRead.put(u, at); });
                 if (snap.offers() != null) byUrl.putAll(snap.offers());
-                log.info("Nạp bộ nhớ đệm giá: {} từ khoá, {} link, {} trang đã đọc", cache.size(), byUrl.size(), pageRead.size());
+                long usedSince = System.currentTimeMillis() - USED_WINDOW.toMillis();
+                if (snap.used() != null) snap.used().forEach((k, at) -> { if (at != null && at > usedSince) used.put(k, at); });
+                log.info("Nạp bộ nhớ đệm giá: {} từ khoá, {} link, {} trang đã đọc, {} từ khoá hay dùng", cache.size(), byUrl.size(),
+                        pageRead.size(), used.size());
             } catch (RuntimeException e) {
                 log.warn("Không đọc được bộ nhớ đệm giá {}: {}", file, e.getMessage());
             }
         }
         saver.scheduleWithFixedDelay(this::saveCache, 5, 5, TimeUnit.MINUTES);
+        // Kho giá chạy nền khi engine bật (test tự tạo PriceEngine không có file cache nên không chạy)
+        if (enabled && indexOn) refresher.scheduleWithFixedDelay(this::warmIndex, 2, WARM_EVERY.toMinutes(), TimeUnit.MINUTES);
+        log.info("Kho giá: {}", enabled && indexOn ? "bật" : "tắt");
     }
 
     /** Tắt backend: dừng lịch lưu và chờ lượt đang chạy xong, rồi lưu lần cuối (không để hai lượt ghi cùng lúc) */
     @jakarta.annotation.PreDestroy
     void saveOnShutdown() {
+        refresher.shutdownNow();
         saver.shutdown();
         try {
             saver.awaitTermination(10, TimeUnit.SECONDS);
@@ -164,7 +210,10 @@ public class PriceEngine {
             var file = java.nio.file.Path.of(cacheFile);
             if (file.getParent() != null) java.nio.file.Files.createDirectories(file.getParent());
             var tmp = file.resolveSibling(file.getFileName() + ".tmp");
-            JSON.writeValue(tmp.toFile(), new Snapshot(keep, new LinkedHashMap<>(byUrl), new LinkedHashMap<>(pageRead), PAGE_PARSER_VERSION));
+            long usedSince = System.currentTimeMillis() - USED_WINDOW.toMillis();
+            used.values().removeIf(at -> at < usedSince);
+            JSON.writeValue(tmp.toFile(), new Snapshot(keep, new LinkedHashMap<>(byUrl), new LinkedHashMap<>(pageRead), PAGE_PARSER_VERSION,
+                    new LinkedHashMap<>(used)));
             java.nio.file.Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception e) {
             log.warn("Không lưu được bộ nhớ đệm giá: {}", e.getMessage());
@@ -411,6 +460,115 @@ public class PriceEngine {
     }
 
     private List<Offer> searchWithinBudget(String query) {
+        return searchWithinBudget(query, false);
+    }
+
+    /**
+     * Ứng viên trong kho giá cho từ khoá: sản phẩm đã thấy trong INDEX_AGE, không biết là hết hàng, không phải hàng cũ, không bị
+     * loại gần đây; xếp như kết quả tìm thật (rank). Giá ở đây chỉ để chọn, chưa phải giá đã xác minh.
+     */
+    List<Offer> indexed(String query) {
+        Instant since = Instant.now().minus(INDEX_AGE);
+        Set<String> want = tierVariants(query);
+        return rank(query, byUrl.values().stream()
+                .filter(o -> o.checkedAt() != null && o.checkedAt().isAfter(since) && !Boolean.FALSE.equals(o.inStock())
+                        && o.url() != null && !blocked(o.url()) && !usedGoods(o.title(), o.url()))
+                // Kho chứa mọi biến thể nên phải khớp đúng dòng: hỏi 4060 Ti không trả 4060, hỏi 4060 không trả 4060 Ti
+                // (tìm trực tiếp thì trang cửa hàng đã lọc giúp, rank() chỉ coi "ti" là điểm cộng)
+                .filter(o -> o.title() != null && tierVariants(o.title()).equals(want))
+                // Dung lượng ghi trong từ khoá (SSD 1TB, RAM 16GB) phải có trong tên: kho có cả 500GB, 2TB
+                .filter(o -> capacitiesMatch(query, o.title()))
+                .toList());
+    }
+
+    private static final Pattern SIZE = Pattern.compile("(\\d+)\\s?(gb|tb)\\b");
+
+    /** Dung lượng (GB) ghi trong chuỗi; TB tính 1000 GB */
+    static Set<Long> capacities(String s) {
+        Set<Long> out = new HashSet<>();
+        var m = SIZE.matcher(norm(s).replaceAll("(\\d) (gb|tb)\\b", "$1$2"));
+        while (m.find()) out.add(Long.parseLong(m.group(1)) * ("tb".equals(m.group(2)) ? 1000 : 1));
+        return out;
+    }
+
+    /** Mọi dung lượng trong từ khoá đều có trong tên (lệch tới 24 GB coi là cùng: 1TB / 1000GB / 1024GB) */
+    static boolean capacitiesMatch(String query, String title) {
+        Set<Long> have = capacities(title);
+        return capacities(query).stream().allMatch(q -> have.stream().anyMatch(t -> Math.abs(t - q) <= 24));
+    }
+
+    private static final Pattern TIER_SUFFIX = Pattern.compile("^\\d+(ti|super|xtx|xt|gre)$");
+
+    /** Các chữ dòng biến thể (ti, super, xt, xtx, gre) trong tên / từ khoá, kể cả viết liền số ("4060ti", "7900xtx") */
+    static Set<String> tierVariants(String s) {
+        Set<String> out = new HashSet<>();
+        for (String token : norm(s).split(" ")) {
+            if (TIER_VARIANTS.contains(token)) out.add(token);
+            var m = TIER_SUFFIX.matcher(token);
+            if (m.matches()) out.add(m.group(1));
+        }
+        return out;
+    }
+
+    /** Tìm lại thật từ khoá ở nền (một luồng, không trùng lượt), để lần sau kho có giá mới */
+    private void refreshLater(String query) {
+        String key = cacheKey(query);
+        if (!enabled || inFlight.containsKey(key) || !refreshing.add(key)) return;
+        try {
+            refresher.execute(() -> {
+                try {
+                    Io.detached(REFRESH_BUDGET, () -> searchWithinBudget(query, true));
+                } catch (RuntimeException e) {
+                    log.debug("Làm mới kho giá \"{}\" lỗi: {}", query, e.getMessage());
+                } finally {
+                    refreshing.remove(key);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            refreshing.remove(key);
+        }
+    }
+
+    /**
+     * Tác vụ nền mỗi WARM_EVERY: tìm lại các từ khoá có người dùng trong USED_WINDOW mà kết quả đã cũ hơn STALE_AFTER, rồi tới
+     * SEEDS, tối đa WARM_BATCH từ khoá mỗi lượt, lần lượt từng cái (giãn cách cửa hàng vẫn do PoliteFetcher lo). 3:00-7:00
+     * máy chủ tạm dừng nên không chạy.
+     */
+    void warmIndex() {
+        int hour = java.time.LocalTime.now().getHour();
+        if (hour >= 3 && hour < 7) return;
+        Instant stale = Instant.now().minus(STALE_AFTER);
+        List<String> todo = new ArrayList<>();
+        used.entrySet().stream().sorted(Map.Entry.<String, Long>comparingByValue().reversed()).map(Map.Entry::getKey)
+                .forEach(todo::add);
+        SEEDS.stream().map(PriceEngine::cacheKey).filter(k -> !todo.contains(k)).forEach(todo::add);
+        int done = 0;
+        long t0 = System.nanoTime();
+        for (String key : todo) {
+            if (done >= WARM_BATCH || Thread.currentThread().isInterrupted()) break;
+            var hit = cache.get(key);
+            if (hit != null && !hit.offers().isEmpty() && hit.at().isAfter(stale)) continue;
+            if (inFlight.containsKey(key) || !refreshing.add(key)) continue;
+            try {
+                Io.detached(REFRESH_BUDGET, () -> searchWithinBudget(key, true));
+                done++;
+            } catch (RuntimeException e) {
+                log.debug("Làm mới kho giá \"{}\" lỗi: {}", key, e.getMessage());
+            } finally {
+                refreshing.remove(key);
+            }
+        }
+        if (done > 0) log.info("Kho giá: làm mới {} từ khoá trong {} ms, kho có {} sản phẩm", done,
+                (System.nanoTime() - t0) / 1_000_000, byUrl.size());
+    }
+
+    /** Thêm một sản phẩm vào kho (cho test) */
+    void index(Offer offer) {
+        byUrl.put(offer.url(), offer);
+    }
+
+    /** refresh: tìm lại thật, bỏ qua cache từ khoá và kho giá (lượt làm mới ở nền) */
+    private List<Offer> searchWithinBudget(String query, boolean refresh) {
         // "RTX 3050 hoặc GTX 1660": tìm từng model rồi gộp, vì không sản phẩm nào có cả hai mã
         var parts = alternatives(query);
         if (parts.size() > 1) {
@@ -423,14 +581,24 @@ public class PriceEngine {
                     .limit(MAX).toList();
         }
         String key = cacheKey(query);
-        var hit = cache.get(key);
-        if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? (hit.incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE))) {
-            // Cache từ khoá chỉ là gợi ý; URL sản phẩm tìm được sau lần cache vẫn phải được xét và đọc lại.
-            return recoverIncomplete(query, hit.offers(), true);
+        if (!refresh) {
+            used.put(key, System.currentTimeMillis());
+            var hit = cache.get(key);
+            if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? (hit.incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE))) {
+                // Cache từ khoá chỉ là gợi ý; URL sản phẩm tìm được sau lần cache vẫn phải được xét và đọc lại.
+                return recoverIncomplete(query, hit.offers(), true);
+            }
+            // A different spelling of an already checked product does not need another crawl.
+            var known = verifiedKnown(query);
+            if (!known.isEmpty()) return known;
+            // Kho giá đủ ứng viên: trả ngay (vài mili giây thay vì 5-10 giây mở web cửa hàng), tìm lại thật ở nền
+            var fromIndex = indexOn ? indexed(query) : List.<Offer>of();
+            if (fromIndex.size() >= INDEX_MIN) {
+                log.info("So giá \"{}\": {} ứng viên từ kho giá, tìm lại ở nền", query, fromIndex.size());
+                refreshLater(query);
+                return fromIndex;
+            }
         }
-        // A different spelling of an already checked product does not need another crawl.
-        var known = verifiedKnown(query);
-        if (!known.isEmpty()) return known;
         // Cùng từ khoá đang được tìm (ba phương án chốt song song hay tìm trùng, vd "tản nhiệt khí CPU" 19 lần trong một câu):
         // chờ chung một lượt, không bắn thêm request vào cửa hàng (ca thật v10: quá tải, 272/401 lượt hết giờ, trả rỗng)
         var mine = new CompletableFuture<List<Offer>>();
