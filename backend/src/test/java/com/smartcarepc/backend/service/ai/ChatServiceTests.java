@@ -1880,7 +1880,7 @@ class ChatServiceTests {
     }
 
     @Test
-    void chatLuongKhongHonPhuHopThiNhacChonLaiRoiAnBanTrung() {
+    void chatLuongKhongHonPhuHopThiAnBanTrungNgayKhongNhacTroLy() {
         // v17: sau khi đổi vỏ nhỏ gọn, Chất lượng bằng y Phù hợp (cùng sản phẩm, cùng tổng)
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
         when(components.findByCode("ssd_m2_2280")).thenReturn(part("ssd_m2_2280", "ssd", "SSD"));
@@ -1900,9 +1900,10 @@ class ChatServiceTests {
 
         var res = service.reply(new ChatRequest(List.of(new Message("user", "học 2 triệu")), null, null, "advice"));
 
-        // Lần trả lời đầu bị chặn: trợ lý được nhắc chọn lại tier Chất lượng (tốt hơn Phù hợp)
-        assertThat(sent.get(3).get("messages").toString()).contains("Chất lượng").contains("does not improve on Best fit");
-        // Trợ lý không sửa: bản trùng không hiện, chỉ còn Phù hợp, câu trả lời nói rõ
+        // Không còn lượt nhắc trợ lý dựng lại (tốn ~40 giây): trả lời ngay sau câu trả lời đầu tiên
+        assertThat(sent).hasSize(3);
+        assertThat(sent.toString()).doesNotContain("does not improve on Best fit");
+        // Bản trùng không hiện, chỉ còn Phù hợp, câu trả lời nói rõ
         assertThat(res.options()).isNull();
         assertThat(res.build().tier()).isEqualTo("balanced");
         assertThat(res.reply()).contains("Option Upgraded duplicates Best fit");

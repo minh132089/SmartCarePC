@@ -514,8 +514,7 @@ public class ChatService {
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false, toolNudged = false, outputRetried = false;
         int outputLimit = maxTokens;
-        // Một lượt propose thêm khi ba phương án sai thứ tự (Chất lượng không hơn Phù hợp, Rẻ không rẻ hơn rõ rệt)
-        boolean orderNudged = false, repaired = false;
+        boolean repaired = false;
         int proposeLimit = MAX_PROPOSE_ROUNDS;
         String lastUser = String.valueOf(messages.getLast().get("content"));
         // Câu hỏi tiếp chỉ hỏi "vì sao" (vd "Sao không có phương án Rẻ?") mà không nhờ đổi gì: trả lời bằng lời, không cho gọi
@@ -613,20 +612,15 @@ public class ChatService {
                 // cho thêm một lượt propose_build cho đúng tier đó trước khi viết câu trả lời
                 // Rẻ không rẻ hơn Phù hợp rõ rệt (thường do Phù hợp đã được hạ thông số): dựng lại Rẻ từ Phù hợp, ép xuống dưới
                 // Phù hợp ít nhất TIER_GAP, một lần, trước khi nhắc trợ lý
-                if (turn.advice && !orderNudged && !repaired && search.enabled()) {
+                if (turn.advice && !repaired && search.enabled()) {
                     balancedFromQuality(turn);
                     cheapFromBalanced(turn);
                     qualityFromBalanced(turn);
                 }
-                String order = turn.advice && !orderNudged && search.enabled() ? orderProblem(turn) : null;
-                if (order != null) {
-                    orderNudged = true;
-                    proposeLimit = proposeRounds + 1;
-                    log.info("Chat vòng {}: ba phương án sai thứ tự, nhắc chọn lại: {}", round + 1, order);
-                    messages.add(Map.of("role", "assistant", "content", String.valueOf(message.getOrDefault("content", ""))));
-                    messages.add(Map.of("role", "user", "content", order));
-                    continue;
-                }
+                // Code đã tự sửa thứ tự ở trên. Còn sai thì không nhắc trợ lý dựng lại nữa (một lượt đó tốn ~40 giây vì kéo
+                // theo propose_build và tìm giá lại): respond() ẩn phương án sai thứ tự và nói rõ lý do
+                String order = turn.advice && search.enabled() ? orderProblem(turn) : null;
+                if (order != null) log.info("Chat vòng {}: ba phương án vẫn sai thứ tự sau khi code sửa, ẩn bản sai: {}", round + 1, order);
                 log.info("Chat vòng {}: AI {} ms, trả lời xong", round + 1, aiMs);
                 long tc = System.nanoTime();
                 if (!turn.tiers.isEmpty() && search.enabled()) progress.accept(STAGE_LINKS);
