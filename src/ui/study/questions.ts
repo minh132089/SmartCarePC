@@ -189,9 +189,13 @@ export const RATING_QUESTIONS: Record<RatingKind, StudyQuestion[]> = { build: FE
 /** Giá trị "form" gửi lên máy chủ cho từng hộp chấm sao (post_build giữ nguyên như dữ liệu cũ) */
 export const RATING_FORM: Record<RatingKind, string> = { build: 'post_build', maintenance: 'post_maintenance', upgrade: 'post_upgrade' }
 
-/** Bộ câu theo form của một phản hồi (trang /feedback): form chung và form sau khi lắp dùng FEEDBACK */
-export function questionsOfForm(form: unknown): StudyQuestion[] {
-  return form === 'post_maintenance' ? MAINTENANCE_FEEDBACK : form === 'post_upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
+/**
+ * Bộ câu của một phản hồi (trang /feedback): theo form chấm sao, hoặc theo "feature" của form góp ý chung. Form chung cũ
+ * (chưa có feature) và form sau khi lắp dùng FEEDBACK
+ */
+export function questionsOf(answers: Record<string, unknown>): StudyQuestion[] {
+  const kind = answers.form === 'post_maintenance' ? 'maintenance' : answers.form === 'post_upgrade' ? 'upgrade' : answers.form === 'general' ? answers.feature : 'build'
+  return kind === 'maintenance' ? MAINTENANCE_FEEDBACK : kind === 'upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
 }
 
 /* ---------- Ba nhóm câu lõi: hỏi y nguyên ở lần đầu và cuối nghiên cứu ---------- */

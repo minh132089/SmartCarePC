@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Flask, NotePencil, Star } from '@phosphor-icons/react'
 import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
-import { BASELINE, FEEDBACK, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, type Lang, type RatingKind } from './questions'
+import { BASELINE, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, type Lang, type RatingKind } from './questions'
 import { QuestionList } from './QuestionList'
 import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, pendingForm, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, LangToggle, PrimaryButton, Question, QuietButton } from './StudyParts'
@@ -171,23 +171,44 @@ function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
   )
 }
 
-/** Form phản hồi chung: bảy câu cũ (questions.ts). Gửi kèm máy đang xem. */
+const FEATURES: { value: RatingKind; en: string; vi: string }[] = [
+  { value: 'build', en: "Build a new PC", vi: 'Lắp máy mới' },
+  { value: 'maintenance', en: "Maintain my PC", vi: 'Bảo dưỡng máy' },
+  { value: 'upgrade', en: "Upgrade my PC", vi: 'Nâng cấp máy' },
+]
+
+/**
+ * Form góp ý chung, mở từ nút "Feedback" có trên mọi trang (mọi người dùng, lúc nào cũng được, không cần làm xong chức năng
+ * nào). Người dùng chọn phần muốn góp ý (mặc định theo trang đang mở), form hiện đúng bộ câu của phần đó; chấm sao không bắt
+ * buộc. Gửi form "general" kèm "feature".
+ */
 function FeedbackDialog() {
   const { open, markAnswered } = useStudy()
   const { lang, setLang } = useFormLang()
-  const machine = useViewer((s) => s.familyId ?? s.buildId)
+  const viewed = useViewer((s) => s.familyId ?? s.buildId)
+  const here = useViewer((s): RatingKind => (s.page === 'upgrade' ? 'upgrade' : s.page === 'build' && s.guide && s.guideKind === 'maintenance' ? 'maintenance' : 'build'))
+  const onBuildPage = useViewer((s) => s.page === 'build')
+  const run = useMaintenance((s) => s.run)
+  const [kind, setKind] = useState<RatingKind>(here)
+  const [stars, setStars] = useState(0)
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
   const [submissionId] = useState(newSubmissionId)
-  const { answers, empty } = collect(FEEDBACK, a)
+  const questions = RATING_QUESTIONS[kind]
+  const { answers, empty } = collect(questions, a)
+  const machine = kind === 'build' ? (onBuildPage ? viewed : null) : kind === 'maintenance' ? run?.machine ?? null : null
   // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
   const close = () => !busy && open(null)
 
   const submit = async () => {
-    const r = await sendFeedback({ machine, answers: { form: 'general', form_lang: lang, ...answers } }, submissionId)
+    const extra = kind === 'maintenance' && run ? { task: run.task } : {}
+    const r = await sendFeedback(
+      { machine, answers: { form: 'general', feature: kind, form_lang: lang, source: 'feedback_button', ...(stars ? { stars } : {}), ...extra, ...answers } },
+      submissionId,
+    )
     if (r === 'failed') return setFailed(true)
-    markAnswered('feedback')
+    markAnswered(ratingAnswered(kind))
     open(null)
   }
 
@@ -199,15 +220,23 @@ function FeedbackDialog() {
         <>
           {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
           <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
-          <PrimaryButton onClick={submit} disabled={busy || empty}>
+          <PrimaryButton onClick={submit} disabled={busy || (empty && stars === 0)}>
             {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Send", 'Gửi')}
           </PrimaryButton>
         </>
       }
     >
       <LangToggle lang={lang} onChange={setLang} />
-      <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">{tr(lang, "About two minutes. There are no right or wrong answers, and every question is optional.", 'Khoảng hai phút. Không có đúng hay sai, câu nào cũng bỏ qua được.')}</p>
-      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} lang={lang} />
+      <p className="mb-4 text-[14px] leading-[1.5] text-ink-2">{tr(lang, "About two minutes. There are no right or wrong answers, and every question is optional.", 'Khoảng hai phút. Không có đúng hay sai, câu nào cũng bỏ qua được.')}</p>
+      <Question label={tr(lang, "Which part of the app is your feedback about?", 'Bạn muốn góp ý về phần nào của app?')}>
+        <Choices name="feedback-feature" value={[kind]} options={FEATURES.map((f) => ({ value: f.value, label: tr(lang, f.en, f.vi) }))} onChange={(v) => v[0] && setKind(v[0])} />
+      </Question>
+      <Question label={tr(lang, "Overall rating", 'Đánh giá chung')} hint={tr(lang, "Optional", 'Không bắt buộc')}>
+        <Stars value={stars} onChange={setStars} lang={lang} />
+      </Question>
+      <div className="mt-5">
+        <QuestionList key={kind} questions={questions} answers={a} onChange={setA} lang={lang} />
+      </div>
     </Dialog>
   )
 }

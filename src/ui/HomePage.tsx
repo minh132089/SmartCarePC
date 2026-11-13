@@ -8,6 +8,7 @@ import { CircuitBoard } from '@/components/animate-ui/icons/circuit-board'
 import { Settings } from '@/components/animate-ui/icons/settings'
 import { useViewer } from '../store'
 import { AccountSlot } from './Account'
+import { FeedbackButton } from './study/FeedbackButton'
 import { Rise } from './Rise'
 import { useMaintenance } from './maintenance/maintenanceState'
 import { useStudy } from './study/study'
@@ -40,6 +41,7 @@ export function HomePage() {
                 Study participant? Enter your code
               </button>
             )}
+            <FeedbackButton />
             <AccountSlot />
           </div>
         </header>

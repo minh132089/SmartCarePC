@@ -9,6 +9,7 @@ import { INSPECTABLE } from '../data/hotspots'
 import { QUALITY_LABEL, type QualityPref } from '../perf/quality'
 import { firstUndone, guideSteps, loadDone } from '../data/guide'
 import { FlowSteps } from './AdvicePage'
+import { FeedbackButton } from './study/FeedbackButton'
 import { MaintenanceEntry } from './maintenance/MaintenanceHub'
 import { StudyBar } from './study/StudyBar'
 
@@ -82,7 +83,10 @@ export function Sidebar() {
   return (
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
       <div className="enter" style={{ '--i': 0 } as React.CSSProperties}>
-        <FlowSteps current={2} />
+        <div className="flex items-center justify-between gap-2">
+          <FlowSteps current={2} compact />
+          <FeedbackButton compact />
+        </div>
         <StudyBar />
         <p className="mt-6 text-[13px] font-semibold tracking-[0.01em] text-ink-2">PC SmartCare</p>
         <h1 className="display mt-1">Explore the inside of a PC.</h1>

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowCounterClockwise, House, PencilSimple } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, PencilSimple } from '@phosphor-icons/react'
 import { AutoHeight } from '@animate-ui/react/primitives/effects/auto-height'
-import { useViewer } from '../store'
 import { Rise } from './Rise'
 import { useUpgradeChat, type CaseSize, type UpgradeForm } from './chat/chatStore'
 import { Composer, IconButton, Thread } from './chat/ChatParts'
 import { AccountSlot } from './Account'
+import { BackHome } from './BackHome'
+import { FeedbackButton } from './study/FeedbackButton'
 import { ProposalView } from './chat/Proposal'
 import { Choices, PrimaryButton, Question, focus } from './study/StudyParts'
 import { StudyBar } from './study/StudyBar'
@@ -95,7 +96,6 @@ function toForm(d: Draft): UpgradeForm {
 }
 
 export function UpgradePage() {
-  const setPage = useViewer((s) => s.setPage)
   const { messages, busy, stage, error, send, retry, reset } = useUpgradeChat()
   const [draft, setDraft] = useState<Draft>(loadDraft)
   const [editing, setEditing] = useState(messages.length === 0)
@@ -149,9 +149,7 @@ export function UpgradePage() {
 
   const header = (
     <header className="flex items-center justify-between gap-3 px-4 pt-5 pb-2 md:px-8">
-      <button onClick={() => setPage('home')} className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[14px] font-medium text-link hover:bg-fill ${focus}`}>
-        <House size={16} aria-hidden /> Home
-      </button>
+      <BackHome />
       <div className="flex items-center gap-2">
         {!editing && (
           <>
@@ -161,6 +159,7 @@ export function UpgradePage() {
             <IconButton label="Start over" onClick={() => { reset(); setEditing(true) }} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           </>
         )}
+        <FeedbackButton />
         <AccountSlot />
       </div>
     </header>

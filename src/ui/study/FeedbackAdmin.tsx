@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowClockwise, DownloadSimple, Star } from '@phosphor-icons/react'
-import { questionsOfForm } from './questions'
+import { questionsOf } from './questions'
 import { PrimaryButton, QuietButton, focus } from './StudyParts'
 import { FeedbackOverview } from './FeedbackOverview'
 import { GapSummary } from './GapSummary'
@@ -17,6 +17,7 @@ import LatticeLoader from '../../components/LatticeLoader'
  */
 const KEY = 'pcsc-export-key'
 const PHASE: Record<string, string> = { before: "First use", after: "End of study" }
+const FEATURE: Record<string, string> = { build: "Building", maintenance: "Maintenance", upgrade: "Upgrade" }
 const FORM: Record<string, string> = { baseline: "First-use questions", followup: "End-of-study questions", post_build: "After assembly", post_maintenance: "After maintenance", post_upgrade: "After upgrade plan", general: "General feedback" }
 
 function readKey() {
@@ -249,7 +250,7 @@ export function FeedbackAdmin() {
                         {r.phase ? ` · ${PHASE[r.phase] ?? r.phase}` : ''}
                       </span>
                     )}
-                    {typeof r.answers.form === 'string' && <span className="rounded-full bg-fill px-2 py-0.5 text-ink-2">{FORM[r.answers.form] ?? r.answers.form}</span>}
+                    {typeof r.answers.form === 'string' && <span className="rounded-full bg-fill px-2 py-0.5 text-ink-2">{FORM[r.answers.form] ?? r.answers.form}{typeof r.answers.feature === 'string' && FEATURE[r.answers.feature] ? ` · ${FEATURE[r.answers.feature]}` : ''}</span>}
                     {r.machine && <span>PC: {r.machine}</span>}
                     {stars != null && (
                       <span className="flex items-center gap-0.5 text-[#f5a524]" aria-label={`${stars} stars`}>
@@ -271,7 +272,7 @@ export function FeedbackAdmin() {
                     return <p className="mt-2 text-[12.5px] tabular-nums text-ink-2">Confidence {m.confidence?.toFixed(2) ?? '—'} · Doing it yourself {m.independence?.toFixed(2) ?? '—'} · Decisions {m.decisions ?? '—'}/4 · Others asked {m.sources ?? '—'}{typeof r.answers.tech_bg === 'string' ? ` · Background: ${r.answers.tech_bg}` : ''}</p>
                   })()}
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {questionsOfForm(r.answers.form).filter((q) => q.type === 'scale').map((q, i) => {
+                    {questionsOf(r.answers).filter((q) => q.type === 'scale').map((q, i) => {
                       const v = num(r.answers[q.key])
                       return v == null ? null : (
                         <span key={q.key} title={q.text} className="rounded-full bg-fill px-2 py-0.5 text-[12px] tabular-nums text-ink-2">
@@ -280,7 +281,7 @@ export function FeedbackAdmin() {
                       )
                     })}
                   </div>
-                  {questionsOfForm(r.answers.form).filter((q) => q.type === 'text').map((q) => {
+                  {questionsOf(r.answers).filter((q) => q.type === 'text').map((q) => {
                     const v = r.answers[q.key]
                     return typeof v === 'string' && v.trim() ? (
                       <div key={q.key} className="mt-2">

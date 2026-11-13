@@ -6,6 +6,7 @@ import { firstUndone, guideSteps, loadDone, saveDone, sceneFor, type GuideStep }
 import type { PartId } from '../data/parts'
 import { useViewer } from '../store'
 import { FlowSteps } from './AdvicePage'
+import { FeedbackButton } from './study/FeedbackButton'
 import { useStudy } from './study/study'
 import { markRated, ratedBefore } from './study/rated'
 import { StudyBar } from './study/StudyBar'
@@ -164,7 +165,10 @@ export function GuidePanel() {
 
   return (
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
-      <FlowSteps current={2} maintenance={isMaintenance} />
+      <div className="flex items-center justify-between gap-2">
+        <FlowSteps current={2} maintenance={isMaintenance} compact />
+        <FeedbackButton compact />
+      </div>
       <StudyBar />
       <button
         onClick={() => setGuide(false)}

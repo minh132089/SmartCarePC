@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react'
-import { ArrowCounterClockwise, CaretRight, DiceFive, House, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, CaretRight, DiceFive, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
 import CardNav, { type CardNavItem, type CardNavLink } from '@/components/CardNav'
 import MicroSlats from '@/components/MicroSlats'
 import PixelSwap from '@/components/PixelSwap'
@@ -19,6 +19,8 @@ import { MaintenanceEntry } from './maintenance/MaintenanceHub'
 import { useMaintenance } from './maintenance/maintenanceState'
 import { StudyBar } from './study/StudyBar'
 import { AccountSlot } from './Account'
+import { BackHome } from './BackHome'
+import { FeedbackButton } from './study/FeedbackButton'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -142,15 +144,18 @@ export function AdvicePage() {
 
   const chat = (
     <div className="flex h-full flex-col bg-canvas">
-      <header className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-2 md:px-10">
+      {/* Màn hẹp: hàng bước và hàng nút xuống dòng thay vì tràn ngang */}
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-5 pb-2 md:px-10">
         <FlowSteps current={1} />
-        <div className="flex items-center gap-2">
-          <MaintenanceEntry />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Màn hẹp bỏ nút này (vẫn vào bảo dưỡng được bằng Back về màn chọn chức năng) cho thanh nút gọn một hàng */}
+          <MaintenanceEntry className="hidden sm:block" />
           {soundButton}
           <IconButton label="New conversation" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
           <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
             Skip to the 3D viewer ›
           </button>
+          <FeedbackButton />
           <AccountSlot />
         </div>
       </header>
@@ -395,6 +400,10 @@ function Intro({
             onLinkClick={onLink}
             ariaLabel="Navigation"
           />
+          <div className="mx-auto mt-3 flex max-w-[820px] items-center justify-between gap-2">
+            <BackHome />
+            <FeedbackButton />
+          </div>
         </div>
         <div className="absolute top-5 right-5 z-30 hidden xl:block">{soundButton}</div>
 
@@ -469,23 +478,21 @@ function useOpenMachine() {
 }
 
 /** Thanh hai bước ở đầu trang: 1 Tư vấn, 2 Lắp máy. Dùng chung cho cả hai trang. */
-export function FlowSteps({ current, maintenance = false }: { current: 1 | 2; maintenance?: boolean }) {
+export function FlowSteps({ current, maintenance = false, compact = false }: { current: 1 | 2; maintenance?: boolean; compact?: boolean }) {
   const setPage = useViewer((s) => s.setPage)
   const items = [
     { n: 1, label: "Choose your PC", short: "Advice", page: 'advice' as const },
     { n: 2, label: maintenance ? "Maintenance guide" : "Assembly guide", short: maintenance ? "Maintain" : "Assemble", page: 'build' as const },
   ]
   return (
-    <nav aria-label="Your steps" className="flex items-center gap-2 text-[13px]">
-      <button onClick={() => setPage('home')} aria-label="Home" title="Home" className={`grid size-7 place-items-center rounded-full text-ink-2 hover:bg-fill hover:text-ink ${focus}`}>
-        <House size={16} aria-hidden />
-      </button>
-      <span className="h-px w-3 bg-line-strong" aria-hidden />
+    <nav aria-label="Your steps" className={`flex items-center text-[13px] ${compact ? 'gap-1.5' : 'gap-2'}`}>
+      <BackHome />
+      <span className={`h-px bg-line-strong ${compact ? 'w-2' : 'w-3'}`} aria-hidden />
       {items.map((it, i) => {
         const on = it.n === current
         return (
-          <div key={it.n} className="flex items-center gap-2">
-            {i > 0 && <span className="h-px w-5 bg-line-strong" aria-hidden />}
+          <div key={it.n} className={`flex items-center ${compact ? 'gap-1.5' : 'gap-2'}`}>
+            {i > 0 && <span className={`h-px bg-line-strong ${compact ? 'w-3' : 'w-5'}`} aria-hidden />}
             <button
               onClick={() => setPage(it.page)}
               aria-current={on ? 'step' : undefined}
@@ -494,8 +501,8 @@ export function FlowSteps({ current, maintenance = false }: { current: 1 | 2; ma
               <span className={`grid size-5 place-items-center rounded-full text-[11px] font-semibold ${on ? 'bg-accent text-white' : 'bg-fill text-ink-2'}`}>
                 {it.n}
               </span>
-              <span className="whitespace-nowrap sm:hidden">{it.short}</span>
-              <span className="hidden whitespace-nowrap sm:inline">{it.label}</span>
+              <span className={`whitespace-nowrap ${compact ? '' : 'sm:hidden'}`}>{it.short}</span>
+              {!compact && <span className="hidden whitespace-nowrap sm:inline">{it.label}</span>}
             </button>
           </div>
         )
