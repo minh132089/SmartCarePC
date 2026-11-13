@@ -97,7 +97,9 @@ export const useViewer = create<ViewerState>((set) => ({
   maintenanceRunId: '',
   guideIndex: 0,
   // Mở hay đóng hướng dẫn đều đưa máy về trạng thái lắp đủ (exploded = false): đóng thì máy tự lắp lại từng bước
-  setGuide: (guide) => set({ guide, guideKind: 'assembly', maintenanceLift: false, step: 0, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null }),
+  // Bước 1 của hướng dẫn lắp là tháo nắp hông: mở hướng dẫn thì nắp mở sẵn (vừa xem bảo dưỡng hay vừa bấm đóng nắp thì nắp
+  // còn đóng, trong khi màn hướng dẫn trước đây không có nút mở lại)
+  setGuide: (guide) => set({ guide, guideKind: 'assembly', maintenanceLift: false, step: 0, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null, ...(guide ? { sideOpen: true } : {}) }),
   // Chọn một bước thì thoát toàn cảnh để hình quay về đúng bước đó
   setGuideIndex: (guideIndex) => set({ guideIndex, guideFull: false }),
   guidePart: null,

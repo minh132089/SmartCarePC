@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CaretLeft, Check, Cube, ListNumbers } from '@phosphor-icons/react'
+import { CaretLeft, Check, Cube, ListNumbers, SidebarSimple as SidePanel } from '@phosphor-icons/react'
 import { getBuild } from '../data/builds'
 import { FAMILIES } from '../data/families'
 import { firstUndone, guideSteps, loadDone, saveDone, sceneFor, type GuideStep } from '../data/guide'
@@ -412,6 +412,9 @@ export function GuideCaption() {
   const index = useViewer((s) => s.guideIndex)
   const full = useViewer((s) => s.guideFull)
   const setFull = useViewer((s) => s.setGuideFull)
+  const sideOpen = useViewer((s) => s.sideOpen)
+  const toggleSide = useViewer((s) => s.toggleSide)
+  const glass = familyId ? FAMILIES[familyId].side_open?.type === 'glass' || familyId === 'showcase_dual_chamber' : getBuild(buildId).case.glass
   const hasGpu = useViewer((s) => s.advisedBuild == null || s.advisedBuild.items.some((i) => i.category === 'gpu'))
   const kind = useViewer(s => s.guideKind)
   const task = useViewer(s => s.maintenanceTask)
@@ -435,6 +438,15 @@ export function GuideCaption() {
       >
         {full ? <ListNumbers size={15} aria-hidden /> : <Cube size={15} aria-hidden />}
         {full ? "Return to current step" : "Full view"}
+      </button>
+      {/* Màn hướng dẫn không có bảng nút của trang xem máy: mở / đóng nắp hông ngay trên hình để nhìn vào trong */}
+      <button
+        onClick={toggleSide}
+        aria-pressed={sideOpen}
+        className={`pointer-events-auto flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-link hover:text-ink ${pill} ${press} ${focus}`}
+      >
+        <SidePanel size={15} aria-hidden />
+        {glass ? (sideOpen ? "Fit glass panel" : "Remove glass panel") : sideOpen ? "Close side panel" : "Open side panel"}
       </button>
     </div>
   )
