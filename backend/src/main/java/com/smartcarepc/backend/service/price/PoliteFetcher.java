@@ -87,6 +87,21 @@ public class PoliteFetcher {
         }
     }
 
+    /**
+     * Trang này đang phải chờ quá maxWait mới tới lượt gọi (giãn cách theo robots.txt, vd An Phát 5 giây), không giữ chỗ.
+     * Để phân biệt "bỏ qua vì chưa tới lượt" với "trang lỗi / hết giờ"
+     */
+    public boolean mustWait(String url, Duration maxWait) {
+        String host;
+        try {
+            host = URI.create(url).getHost();
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        Long next = host == null ? null : nextSlot.get(host);
+        return next != null && next - System.currentTimeMillis() > maxWait.toMillis();
+    }
+
     /** Giữ chỗ lượt gọi kế tiếp của trang; chờ tới lượt nếu không quá maxWait */
     private boolean waitTurn(String host, Duration gap, Duration maxWait) {
         long now = System.currentTimeMillis();

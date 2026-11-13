@@ -1244,15 +1244,7 @@ public class ChatService {
         if (allowed == null) return c;
         final var models = allowed;
         boolean noGpu = c.request().items().stream().noneMatch(i -> "gpu".equals(categoryOf(i.code())));
-        List<ProductSearch.Product> pool = new ArrayList<>();
-        for (String model : allowed) {
-            String q = cpuQuery(model);
-            try {
-                pool.addAll(search.search(q));
-            } catch (RuntimeException e) {
-                log.debug("Tìm \"{}\" lỗi: {}", q, e.getMessage());
-            }
-        }
+        List<ProductSearch.Product> pool = searchAll(allowed.stream().map(ChatService::cpuQuery).toList());
         var list = pool.stream()
                 .filter(p -> p.title() != null && p.priceVnd() != null && p.priceVnd() < now.priceVnd() && !JUNK.matcher(p.title()).find())
                 .filter(p -> cpuModel(p.title()) != null && models.contains(cpuModel(p.title())) && (!noGpu || Boolean.TRUE.equals(ProductRules.hasIgpu(p.title()))))
@@ -1284,6 +1276,24 @@ public class ChatService {
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
+    /**
+     * Tìm nhiều từ khoá cùng lúc rồi gộp theo thứ tự từ khoá. Mỗi lượt có thể phải mở web cửa hàng vài giây: tìm lần lượt ba
+     * mẫu CPU từng mất ~17 giây trong một câu văn phòng (ca thật 13/11)
+     */
+    private List<ProductSearch.Product> searchAll(List<String> queries) {
+        var jobs = queries.stream().map(q -> Io.async(() -> {
+            try {
+                return search.search(q);
+            } catch (RuntimeException e) {
+                log.debug("Tìm \"{}\" lỗi: {}", q, e.getMessage());
+                return List.<ProductSearch.Product>of();
+            }
+        })).toList();
+        List<ProductSearch.Product> out = new ArrayList<>();
+        for (var job : jobs) out.addAll(Io.await(job, java.time.Duration.ofSeconds(60), List.<ProductSearch.Product>of()));
+        return out;
+    }
+
     /** Sửa cặp CPU/bo khác socket trước khi ép giá; chỉ đổi CPU khi người dùng chưa chốt CPU. */
     private Checked cpuForBoard(Checked c, List<String> notes) {
         var cpu = c.request().items().stream().filter(i -> "cpu".equals(categoryOf(i.code()))).findFirst().orElse(null);
@@ -1298,11 +1308,7 @@ public class ChatService {
         boolean hasGpu = c.request().items().stream().anyMatch(i -> "gpu".equals(categoryOf(i.code())));
         var allowed = (hasGpu ? GAME_CPUS : OFFICE_CPUS).get(socket);
         if (allowed == null) return c;
-        List<ProductSearch.Product> pool = new ArrayList<>();
-        for (String model : allowed) {
-            try { pool.addAll(search.search(cpuQuery(model))); }
-            catch (RuntimeException e) { log.debug("Không tìm được CPU cho bo {}: {}", socket, e.getMessage()); }
-        }
+        List<ProductSearch.Product> pool = searchAll(allowed.stream().map(ChatService::cpuQuery).toList());
         var candidates = pool.stream().filter(p -> p.title() != null && p.priceVnd() != null)
                 .filter(p -> cpuModel(p.title()) != null && allowed.contains(cpuModel(p.title())) && socket.equals(ProductRules.read("cpu", p.title()).socket()))
                 .filter(p -> hasGpu || Boolean.TRUE.equals(ProductRules.hasIgpu(p.title())))

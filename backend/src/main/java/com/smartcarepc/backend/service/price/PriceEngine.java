@@ -129,6 +129,15 @@ public class PriceEngine {
     static final Duration INDEX_AGE = Duration.ofHours(12);
     /** Kho có ít nhất từng này ứng viên khớp thì trả ngay; ít hơn thì tìm thật như cũ */
     static final int INDEX_MIN = 4;
+    /**
+     * Từ khoá có mã model (i3 12100, SE-214, B760M): ít cửa hàng bán đúng mã, tìm thật cũng chỉ ra 1-3 món (ca thật 13/11: "Core i3
+     * 12100" 13 giây được 2 món). Kho có từng này món đúng mã là đủ, khỏi chờ web cửa hàng
+     */
+    static final int INDEX_MIN_MODEL = 2;
+    /** Tác vụ nền chỉ bắt đầu tìm khi người dùng đã ngừng tìm từng này (một câu tư vấn có quãng nghỉ vài giây giữa các vòng AI) */
+    static final Duration QUIET = Duration.ofSeconds(30);
+    /** Nhường người dùng tối đa từng này rồi vẫn làm mới, để kho không cũ mãi khi máy chủ bận liên tục */
+    static final Duration MAX_YIELD = Duration.ofMinutes(5);
     static final Duration WARM_EVERY = Duration.ofMinutes(30);
     /** Từ khoá có kết quả cũ hơn từng này thì tác vụ nền tìm lại */
     static final Duration STALE_AFTER = Duration.ofMinutes(100);
@@ -150,6 +159,8 @@ public class PriceEngine {
     private final Map<String, Long> used = new ConcurrentHashMap<>();
     /** Từ khoá đang được tìm lại ở nền (không xếp hai lượt cho cùng từ khoá) */
     private final Set<String> refreshing = ConcurrentHashMap.newKeySet();
+    /** Lần cuối người dùng tìm (mili giây): tác vụ nền chờ yên QUIET rồi mới tìm, không tranh lượt An Phát / SEARCH_SLOTS */
+    private volatile long lastForeground;
     /** Một luồng duy nhất cho việc làm mới: nền chỉ chiếm tối đa một trong SEARCH_SLOTS lượt tìm, người dùng vẫn được ưu tiên */
     private final java.util.concurrent.ScheduledExecutorService refresher = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "price-index-refresh");
@@ -517,6 +528,7 @@ public class PriceEngine {
         try {
             refresher.execute(() -> {
                 try {
+                    yieldToUsers();
                     Io.detached(REFRESH_BUDGET, () -> searchWithinBudget(query, true));
                 } catch (RuntimeException e) {
                     log.debug("Làm mới kho giá \"{}\" lỗi: {}", query, e.getMessage());
@@ -527,6 +539,24 @@ public class PriceEngine {
         } catch (java.util.concurrent.RejectedExecutionException e) {
             refreshing.remove(key);
         }
+    }
+
+    /** Luồng nền: chờ tới khi người dùng ngừng tìm QUIET (tối đa MAX_YIELD) */
+    void yieldToUsers() {
+        long until = System.currentTimeMillis() + MAX_YIELD.toMillis();
+        while (busyWithUsers() && System.currentTimeMillis() < until) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /** Người dùng vừa tìm trong QUIET (đang có câu tư vấn chạy) */
+    boolean busyWithUsers() {
+        return System.currentTimeMillis() - lastForeground < QUIET.toMillis();
     }
 
     /**
@@ -550,6 +580,7 @@ public class PriceEngine {
             if (hit != null && !hit.offers().isEmpty() && hit.at().isAfter(stale)) continue;
             if (inFlight.containsKey(key) || !refreshing.add(key)) continue;
             try {
+                yieldToUsers();
                 Io.detached(REFRESH_BUDGET, () -> searchWithinBudget(key, true));
                 done++;
             } catch (RuntimeException e) {
@@ -560,6 +591,12 @@ public class PriceEngine {
         }
         if (done > 0) log.info("Kho giá: làm mới {} từ khoá trong {} ms, kho có {} sản phẩm", done,
                 (System.nanoTime() - t0) / 1_000_000, byUrl.size());
+    }
+
+    /** Số ứng viên kho cần có để trả ngay: từ khoá có mã model thì INDEX_MIN_MODEL, từ khoá chung thì INDEX_MIN */
+    static int indexMin(String query) {
+        for (String w : norm(query).split(" ")) if (isModel(w)) return INDEX_MIN_MODEL;
+        return INDEX_MIN;
     }
 
     /** Thêm một sản phẩm vào kho (cho test) */
@@ -582,6 +619,7 @@ public class PriceEngine {
         }
         String key = cacheKey(query);
         if (!refresh) {
+            lastForeground = System.currentTimeMillis();
             used.put(key, System.currentTimeMillis());
             var hit = cache.get(key);
             if (hit != null && hit.at().isAfter(Instant.now().minus(hit.offers().isEmpty() ? (hit.incomplete() ? FAILED_CACHE : EMPTY_CACHE) : CACHE))) {
@@ -593,7 +631,7 @@ public class PriceEngine {
             if (!known.isEmpty()) return known;
             // Kho giá đủ ứng viên: trả ngay (vài mili giây thay vì 5-10 giây mở web cửa hàng), tìm lại thật ở nền
             var fromIndex = indexOn ? indexed(query) : List.<Offer>of();
-            if (fromIndex.size() >= INDEX_MIN) {
+            if (fromIndex.size() >= indexMin(query)) {
                 log.info("So giá \"{}\": {} ứng viên từ kho giá, tìm lại ở nền", query, fromIndex.size());
                 refreshLater(query);
                 return fromIndex;
@@ -643,6 +681,7 @@ public class PriceEngine {
             Thread.currentThread().interrupt();
             return found;
         } finally {
+            if (!refresh) lastForeground = System.currentTimeMillis();
             if (slot) slots.release();
             mine.complete(found);
             inFlight.remove(key, mine);
@@ -666,10 +705,17 @@ public class PriceEngine {
         long lookupDeadline = System.nanoTime() + DEADLINE.toNanos();
         // Ô tìm kiếm của cửa hàng tìm theo mọi chữ: bỏ chữ thừa ("giá rẻ", số đo) để không ra rỗng
         String shopQuery = shopQuery(query);
+        var skipped = new java.util.concurrent.atomic.AtomicBoolean();
         var shops = Arrays.stream(ShopSearch.values())
                 .filter(s -> s.supports(shopQuery))
                 .flatMap(s -> s.urls(shopQuery).stream().map(url -> CompletableFuture.supplyAsync(() -> {
-                    // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có
+                    // An Phát yêu cầu cách 5 giây mỗi lần: chờ lâu hơn thì bỏ lần này, các cửa hàng khác vẫn có.
+                    // Bỏ vì chưa tới lượt không phải nguồn lỗi: không đọc lại cả loạt trang cũ (recoverIncomplete, tới 8 giây
+                    // mỗi lượt tìm), chỉ bù bằng sản phẩm đã thấy trong kho giá ở dưới
+                    if (fetcher.mustWait(url, s.maxWait)) {
+                        skipped.set(true);
+                        return List.<Offer>of();
+                    }
                     String html = fetcher.get(url, s.maxWait);
                     // Tải trang tìm kiếm thất bại (hết giờ, bị chặn): không phải "không có hàng", không nhớ kết quả rỗng
                     if (html == null) incomplete.set(true);
@@ -680,6 +726,8 @@ public class PriceEngine {
 
         Map<String, Offer> all = new LinkedHashMap<>();
         for (var f : shops) join(f, incomplete, lookupDeadline).forEach(o -> all.putIfAbsent(clean(o.url()), o));
+        // Cửa hàng bị bỏ lượt này: thêm ứng viên đã thấy trong kho (chỉ để chọn; món lên thẻ vẫn phải đọc lại trang)
+        if (skipped.get() && indexOn) indexed(query).forEach(o -> all.putIfAbsent(clean(o.url()), o));
         List<Offer> ranked = rank(query, all.values());
 
         // Đọc trang sản phẩm: link SearXNG chưa có trong kết quả cửa hàng, và vài món đầu để biết còn hàng / bảo hành

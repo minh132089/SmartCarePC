@@ -1,7 +1,12 @@
 package com.smartcarepc.backend.service.price;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -11,7 +16,8 @@ import org.junit.jupiter.api.Test;
 /** Kho giá: trả ứng viên ngay từ sản phẩm đã thấy, nhưng không coi giá trong kho là giá đã xác minh */
 class PriceIndexTests {
 
-    private final PriceEngine engine = new PriceEngine(mock(PoliteFetcher.class), mock(Searxng.class), true);
+    private final PoliteFetcher fetcher = mock(PoliteFetcher.class);
+    private final PriceEngine engine = new PriceEngine(fetcher, mock(Searxng.class), true);
 
     private static Offer gpu(String name, long price, Boolean inStock, Instant at) {
         String slug = name.toLowerCase().replaceAll("[^a-z0-9]+", "-");
@@ -72,5 +78,41 @@ class PriceIndexTests {
         seed(Instant.now());
         assertThat(engine.indexed("RTX 4060 Ti")).as("4060 thường không phải 4060 Ti").isEmpty();
         assertThat(engine.indexed("RX 7600")).isEmpty();
+    }
+
+    @Test
+    void tuKhoaCoMaModelChiCanHaiUngVien() {
+        assertThat(PriceEngine.indexMin("Core i3 12100")).isEqualTo(PriceEngine.INDEX_MIN_MODEL);
+        assertThat(PriceEngine.indexMin("tản nhiệt ID-COOLING SE-214")).isEqualTo(PriceEngine.INDEX_MIN_MODEL);
+        assertThat(PriceEngine.indexMin("SSD NVMe 256GB")).isEqualTo(PriceEngine.INDEX_MIN);
+        assertThat(PriceEngine.indexMin("nguồn 450W")).isEqualTo(PriceEngine.INDEX_MIN);
+
+        engine.index(new Offer("CPU Intel Core i3 12100 / 3.3GHz Turbo 4.3GHz", "GEARVN", 2_390_000L, null,
+                "https://gearvn.com/products/core-i3-12100", null, true, null, Instant.now()));
+        engine.index(new Offer("Bộ vi xử lý Intel Core i3-12100 Box", "An Phát", 2_450_000L, null,
+                "https://www.anphatpc.com.vn/cpu-intel-core-i3-12100.html", null, null, null, Instant.now()));
+        long t0 = System.nanoTime();
+        var found = engine.search("Core i3 12100");
+        assertThat(found).hasSize(2);
+        assertThat((System.nanoTime() - t0) / 1_000_000).as("trả từ kho, không mở web cửa hàng").isLessThan(1000);
+        verify(fetcher, never()).get(anyString(), any());
+    }
+
+    @Test
+    void boLuotVaChuaToiLuotKhongPhaiNguonLoiVaBuBangKho() {
+        // Chỉ 2 SSD 1TB trong kho (từ khoá chung cần 4): phải tìm thật. Mọi cửa hàng đang phải chờ giãn cách thì bỏ lượt,
+        // không coi là nguồn lỗi (không đọc lại trang cũ), kết quả có ứng viên trong kho
+        engine.index(new Offer("SSD Kingston NV3 1TB M.2 NVMe", "An Phát", 1_590_000L, null,
+                "https://www.anphatpc.com.vn/ssd-kingston-nv3-1tb.html", null, true, null, Instant.now()));
+        engine.index(new Offer("SSD Samsung 990 EVO 1TB M.2 NVMe", "GEARVN", 2_290_000L, null,
+                "https://gearvn.com/products/ssd-samsung-990-evo-1tb", null, true, null, Instant.now()));
+        when(fetcher.mustWait(anyString(), any())).thenReturn(true);
+
+        var found = engine.search("SSD NVMe 1TB");
+
+        assertThat(found).hasSize(2).allMatch(o -> o.title().contains("1TB"));
+        verify(fetcher, never()).get(anyString(), any());
+        verify(fetcher, never()).page(anyString(), any());
+        assertThat(engine.busyWithUsers()).as("vừa có người tìm: tác vụ nền nhường lượt").isTrue();
     }
 }
