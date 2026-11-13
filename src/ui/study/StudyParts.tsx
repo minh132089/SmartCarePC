@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { X } from '@phosphor-icons/react'
 import { IconButton } from '../chat/ChatParts'
 
@@ -9,6 +9,10 @@ export const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 foc
 export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode }) {
   const box = useRef<HTMLDivElement>(null)
   const titleId = useId()
+  // onClose đổi mỗi lần form vẽ lại (gõ một chữ). Giữ trong ref để effect dưới chỉ chạy một lần lúc mở: nếu chạy lại
+  // thì nó trả focus về hộp thoại, ô đang gõ mất con trỏ và phím cách làm form cuộn xuống
+  const closeRef = useRef(onClose)
+  useLayoutEffect(() => { closeRef.current = onClose })
   useEffect(() => {
     const back = document.activeElement as HTMLElement | null
     // Có ô nhập một dòng (ô mã) thì đặt con trỏ vào đó, không thì focus chính hộp thoại. Không nhảy vào ô góp ý
@@ -17,7 +21,7 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
     const target = field ?? box.current
     target?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') closeRef.current()
       if (e.key !== 'Tab') return
       const fields = [...(box.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') ?? [])].filter(el => el.offsetParent !== null)
       const first = fields[0], last = fields.at(-1)
@@ -30,7 +34,7 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
       window.removeEventListener('keydown', onKey)
       back?.focus()
     }
-  }, [onClose])
+  }, [])
 
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/30 p-3" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
