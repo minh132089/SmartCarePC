@@ -403,6 +403,8 @@ public class ChatService {
         final Map<String, Checked> tiers = new ConcurrentHashMap<>();
         /** Phương án đã bị nhắc vượt ngân sách (chỉ nhắc một lần, để trợ lý không chọn lại mãi tới hết lượt) */
         final Map<String, java.util.concurrent.atomic.AtomicInteger> overWarned = new ConcurrentHashMap<>();
+        /** Phương án đã chốt là không làm được trong ngân sách (code sửa hết mà vẫn vượt, hay vừa tiền thì thiếu yêu cầu) */
+        final java.util.Set<String> finalTiers = ConcurrentHashMap.newKeySet();
         /** Món của lần propose_build gần nhất theo tier: lần sửa mà trợ lý chỉ gửi vài món thì lấy lại các món còn thiếu */
         final Map<String, List<Map<String, Object>>> lastItems = new ConcurrentHashMap<>();
         /** Toàn bộ kết quả của từng lần search_products, theo nhóm id ("s3" cho s3-1 ... s3-6) */
@@ -689,6 +691,22 @@ public class ChatService {
             }
             if (readyToReply(turn)) {
                 log.info("Chat: đủ ba phương án đã kiểm tra, trả kết quả không chờ thêm lượt AI");
+                progress.accept(STAGE_WRITE);
+                return respond(BUILDS_READY, turn);
+            }
+            // Mỗi phương án đã hiện được hoặc đã chốt là không làm được trong ngân sách: trả kết quả ngay (mỗi lượt đề xuất thêm
+            // tốn 10-20 giây mà không vừa thêm được; câu tóm tắt và lý do ẩn phương án do respond() viết, như nhánh đủ ba phương án)
+            if (turn.advice && search.enabled() && !turn.finalTiers.isEmpty() && turn.tiers.keySet().containsAll(TIERS)
+                    && TIERS.stream().allMatch(t -> turn.finalTiers.contains(t)
+                            || showable(turn.tiers.get(t), tierCap(turn.tiers.get(t).budgetVnd(), t)))) {
+                log.info("Chat: phương án {} không vừa ngân sách sau khi code đã sửa, trả kết quả không thử lại", turn.finalTiers);
+                progress.accept(STAGE_WRITE);
+                return respond(BUILDS_READY, turn);
+            }
+            // Đã hết lượt đề xuất mà trợ lý vẫn gọi propose_build (nhà cung cấp có khi bỏ qua tool_choice none): không tốn thêm
+            // một lượt AI chỉ để viết lời, trả kết quả đang có
+            if (proposeClosed && names.contains("propose_build") && turn.advice && search.enabled() && !turn.tiers.isEmpty()) {
+                log.info("Chat: hết lượt đề xuất mà trợ lý vẫn gọi propose_build, trả kết quả đang có");
                 progress.accept(STAGE_WRITE);
                 return respond(BUILDS_READY, turn);
             }
@@ -3203,6 +3221,11 @@ public class ChatService {
     static final int MAX_PROPOSE_ROUNDS = 3;
     /** Số lần nhắc một phương án vượt trần trước khi chấp nhận (mỗi lần sửa với DeepSeek chỉ vài giây) */
     static final int MAX_OVER_WARNINGS = 2;
+    /**
+     * Còn vượt trần quá từng này SAU khi code đã thử hết cách hạ giá (finalizeTier): chốt không làm được, không nhắc trợ lý thử
+     * lại. Bằng SQUEEZE_GAP: vượt ít hơn thì trợ lý còn có thể bớt một thông số (SSD, RAM) cho vừa
+     */
+    static final long FINAL_GAP = SQUEEZE_GAP;
 
     private static List<Map<String, Object>> withoutSearch(List<Map<String, Object>> tools) {
         return tools.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList();
@@ -5221,11 +5244,35 @@ public class ChatService {
                                 + "that no purchasable build was found.");
                         log.info("propose_build {}: chưa hiện được: {}", tier, why);
                     }
-                    if (turn.advice && cap != null && totalMax > cap
-                            && turn.overWarned.computeIfAbsent(tier, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet() > MAX_OVER_WARNINGS) {
+                    // Lần trước phương án này vượt trần, lần này vừa tiền nhưng thiếu yêu cầu (vd card dưới mức VRAM cần): không
+                    // làm được cả hai trong ngân sách, thử thêm chỉ lặp lại (ca thật 13/11: 7 vòng, 96 giây)
+                    boolean budgetVsNeeds = turn.advice && cap != null && totalMax <= cap && turn.overWarned.containsKey(tier)
+                            && !requirementIssues(checked).isEmpty();
+                    if (budgetVsNeeds) {
+                        turn.finalTiers.add(tier);
+                        log.info("propose_build {}: vừa tiền thì thiếu yêu cầu {}, chốt không làm được", tier, requirementIssues(checked));
+                        saved.put("over_budget_final", "Within " + millions(cap) + " this option no longer meets the requirements ("
+                                + String.join("; ", requirementIssues(checked)) + "), so the app will NOT show option \"" + tier
+                                + "\". Do not call propose_build again for this tier. Explain that " + TIER_NAME.get(tier)
+                                + " cannot meet the requirements within " + millions(cap) + "; do not recommend this build.");
+                    }
+                    // Code (finalizeTier) đã thử hết cách hạ giá mà vẫn vượt quá FINAL_GAP: trợ lý thử lại cũng hiếm khi vào được
+                    // trần, chốt luôn thay vì nhắc thêm
+                    // Vượt trần mà card còn dưới mức VRAM cần: code đã hạ tới sàn VRAM (lowerGpu), bớt tiền thêm thì card càng
+                    // yếu, trợ lý thử lại cũng không vừa cả hai (ca thật 13/11: vượt 246 nghìn, card dưới 6GB)
+                    boolean vramShort = turn.advice && cap != null && totalMax > cap
+                            && requirementIssues(checked).stream().anyMatch(s -> s.contains("VRAM"));
+                    boolean beyondRepair = turn.advice && cap != null && (totalMax - cap > FINAL_GAP || vramShort);
+                    if (budgetVsNeeds) {
+                        // đã chốt ở trên
+                    } else if (turn.advice && cap != null && totalMax > cap && (beyondRepair
+                            || turn.overWarned.computeIfAbsent(tier, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet() > MAX_OVER_WARNINGS)) {
                         // Đã nhắc đủ số lần mà vẫn vượt: phương án này không được hiện (luật cứng, respond); trợ lý phải nói
                         // thật là chưa tìm được, không giới thiệu cấu hình vượt trần
-                        log.info("propose_build {}: vẫn vượt trần ({} > {}) sau {} lần nhắc, sẽ không hiện", tier, totalMax, cap, MAX_OVER_WARNINGS);
+                        turn.overWarned.computeIfAbsent(tier, k -> new java.util.concurrent.atomic.AtomicInteger());
+                        turn.finalTiers.add(tier);
+                        log.info("propose_build {}: vẫn vượt trần ({} > {}){}, sẽ không hiện", tier, totalMax, cap,
+                                beyondRepair ? " sau khi code đã hạ giá hết cách" : " sau " + MAX_OVER_WARNINGS + " lần nhắc");
                         saved.put("over_budget_final", "Still exceeds the limit of " + cap + " VND, so the app will NOT show option \""
                                 + tier + "\". Do not call propose_build again for this tier. Explain that no build "
                                 + TIER_NAME.get(tier) + " with purchase links was found within " + millions(cap) + "; do not recommend this build.");

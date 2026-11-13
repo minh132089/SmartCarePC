@@ -1461,6 +1461,37 @@ class ChatServiceTests {
         assertThat(ChatService.budgetOf(List.of(), 30_000_000L)).isEqualTo(30_000_000L);
     }
 
+    /** Một card giá price, ngân sách 12 triệu: lần propose_build đầu trả gì cho trợ lý */
+    private String firstProposeResult(long price) {
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true, List.of(), List.of()));
+        when(components.findByCode("gpu_280")).thenReturn(part("gpu_280", "gpu", "Card"));
+        when(search.enabled()).thenReturn(true);
+        var card = new ProductSearch.Product("Card MSI RTX 4060 Ventus 2X 8G", "A", price, "https://a.vn/4060", null);
+        when(search.search("card")).thenReturn(List.of(card));
+        verifiedOffers(List.of(card));
+        when(search.directLink(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s", "search_products", "{\"query\":\"card\"}"), toolCall("p1", "propose_build", """
+                {"tier":"balanced","summary":"Game","budget_vnd":12000000,"items":[{"code":"gpu_280","spec":"RTX 4060","reason":"Đủ","product_id":"s1-1"}]}
+                """), answer("Xong."));
+        service.reply(new ChatRequest(List.of(new Message("user", "chơi game, có 12 triệu")), null, null, "advice"));
+        return (String) messages(2).get(5).get("content");
+    }
+
+    @Test
+    void vuotXaSauKhiCodeDaHaGiaThiChotLuonKhongNhacThuLai() {
+        // 15 triệu so với trần 12 triệu: vượt 3 triệu > FINAL_GAP sau mọi bước hạ giá của code (ca thật 13/11: 7 vòng, 96 giây)
+        String result = firstProposeResult(15_000_000L);
+        assertThat(result).contains("over_budget_final").contains("Do not call propose_build again");
+        assertThat(result).doesNotContain("cheaper_options");
+    }
+
+    @Test
+    void vuotItThiVanChoTroLyBotThongSo() {
+        // 12,8 triệu so với 12 triệu: vượt 0,8 triệu, trợ lý còn có thể bớt SSD / RAM cho vừa
+        String result = firstProposeResult(12_800_000L);
+        assertThat(result).contains("cheaper_options").doesNotContain("over_budget_final");
+    }
+
     @Test
     void troLyGhiSaiNganSachThiVanKiemTheoLoiNguoiDung() {
         // Người dùng nói 12 triệu, trợ lý ghi budget_vnd 20 triệu: trần Phù hợp là 12 triệu
