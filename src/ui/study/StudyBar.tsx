@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { Flask, NotePencil, Star } from '@phosphor-icons/react'
 import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
-import { BASELINE, FEEDBACK, FOLLOWUP, type Lang } from './questions'
+import { BASELINE, FEEDBACK, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, type Lang, type RatingKind } from './questions'
 import { QuestionList } from './QuestionList'
 import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, pendingForm, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, LangToggle, PrimaryButton, Question, QuietButton } from './StudyParts'
 import { tr, useFormLang } from './lang'
 import { useMaintenance } from '../maintenance/maintenanceState'
+import { ratingAnswered } from './rated'
 import { useParticipant, validParticipant, type Participant } from './participant'
 
 /** Nút nhỏ "Tham gia thử nghiệm" cho người chưa có mã (người dùng bình thường bỏ qua được) */
@@ -244,34 +245,60 @@ function Stars({ value, onChange, lang }: { value: number; onChange: (v: number)
   )
 }
 
+/** Chữ của hộp chấm sao theo chức năng vừa xong */
+const RATING_COPY: Record<RatingKind, { title: [string, string]; ask: [string, string]; source: string }> = {
+  build: {
+    title: ["Your PC is assembled!", 'Bạn đã lắp xong máy!'],
+    ask: ["How was your experience choosing and assembling a PC with the app?", 'Trải nghiệm chọn và lắp máy với app của bạn thế nào?'],
+    source: 'guide_done',
+  },
+  maintenance: {
+    title: ["Maintenance finished!", 'Bạn đã bảo dưỡng xong!'],
+    ask: ["How was your experience maintaining your PC with the guide?", 'Trải nghiệm bảo dưỡng máy theo hướng dẫn của app thế nào?'],
+    source: 'maintenance_done',
+  },
+  upgrade: {
+    title: ["Your upgrade plan is ready", 'Kế hoạch nâng cấp đã xong'],
+    ask: ["How useful is this upgrade plan for you?", 'Kế hoạch nâng cấp này có ích với bạn đến đâu?'],
+    source: 'upgrade_plan',
+  },
+}
+
 /**
- * Hiện khi người dùng đánh dấu xong mọi bước lắp (mọi người dùng, không cần mã thử nghiệm): chấm sao trải nghiệm,
- * dưới là các câu phản hồi cũ (questions.ts), câu nào cũng bỏ qua được. Gửi chung một lần, kèm máy đang xem.
+ * Hiện khi xong một chức năng (mọi người dùng, không cần mã thử nghiệm): đánh dấu xong mọi bước lắp, bấm "Finish maintenance",
+ * hay nhận kế hoạch nâng cấp đầu tiên. Chấm sao trải nghiệm, dưới là các câu phản hồi của chức năng đó (questions.ts), câu nào
+ * cũng bỏ qua được. Gửi chung một lần.
  */
 function RatingDialog() {
-  const { open, markAnswered } = useStudy()
+  const { open, markAnswered, ratingFor: kind } = useStudy()
   const { lang, setLang } = useFormLang()
-  const machine = useViewer((s) => s.familyId ?? s.buildId)
+  const viewed = useViewer((s) => s.familyId ?? s.buildId)
+  const run = useMaintenance((s) => s.run)
   const [stars, setStars] = useState(0)
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
   const [submissionId] = useState(newSubmissionId)
-  const { answers } = collect(FEEDBACK, a)
+  const questions = RATING_QUESTIONS[kind]
+  const copy = RATING_COPY[kind]
+  const { answers } = collect(questions, a)
+  // Máy của phản hồi: máy đang xem khi lắp; bản bảo dưỡng vừa làm (họ máy, tản, có card); nâng cấp là máy của người dùng
+  const machine = kind === 'build' ? viewed : kind === 'maintenance' ? run?.machine ?? null : null
   // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
   const close = () => !busy && open(null)
 
   const submit = async () => {
-    const r = await sendFeedback({ machine, answers: { form: 'post_build', form_lang: lang, stars, source: 'guide_done', ...answers } }, submissionId)
+    const extra = kind === 'maintenance' && run ? { task: run.task } : {}
+    const r = await sendFeedback({ machine, answers: { form: RATING_FORM[kind], form_lang: lang, stars, source: copy.source, ...extra, ...answers } }, submissionId)
     // Không tới được máy chủ và không cất được trên máy: giữ form và câu trả lời để thử lại
     if (r === 'failed') return setFailed(true)
-    markAnswered('feedback')
+    markAnswered(ratingAnswered(kind))
     open(null)
   }
 
   return (
     <Dialog
-      title={tr(lang, "Your PC is assembled!", 'Bạn đã lắp xong máy!')}
+      title={tr(lang, ...copy.title)}
       onClose={close}
       footer={
         <>
@@ -284,12 +311,12 @@ function RatingDialog() {
       }
     >
       <LangToggle lang={lang} onChange={setLang} />
-      <p className="text-[14px] leading-[1.5] text-ink-2">{tr(lang, "How was your experience choosing and assembling a PC with the app?", 'Trải nghiệm chọn và lắp máy với app của bạn thế nào?')}</p>
+      <p className="text-[14px] leading-[1.5] text-ink-2">{tr(lang, ...copy.ask)}</p>
       <div className="mt-3">
         <Stars value={stars} onChange={setStars} lang={lang} />
       </div>
       <p className="mt-5 mb-1 text-[13px] text-ink-3">{tr(lang, "Have two more minutes? Your answers help the team improve the app. Every question is optional.", 'Còn hai phút nữa không? Câu trả lời giúp nhóm cải thiện app. Câu nào cũng bỏ qua được.')}</p>
-      <QuestionList questions={FEEDBACK} answers={a} onChange={setA} lang={lang} />
+      <QuestionList questions={questions} answers={a} onChange={setA} lang={lang} />
     </Dialog>
   )
 }

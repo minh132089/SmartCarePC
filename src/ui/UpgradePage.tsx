@@ -9,6 +9,8 @@ import { AccountSlot } from './Account'
 import { ProposalView } from './chat/Proposal'
 import { Choices, PrimaryButton, Question, focus } from './study/StudyParts'
 import { StudyBar } from './study/StudyBar'
+import { useStudy } from './study/study'
+import { markRated, ratedBefore } from './study/rated'
 
 /**
  * Trang nâng cấp máy đang có. Người dùng điền từng linh kiện (ô trống là không biết), mục đích và số tiền dành cho nâng
@@ -105,8 +107,23 @@ export function UpgradePage() {
   const ready = form.purpose.length > 0 && budget != null && !budgetError && !draft.laptop
   // Thẻ theo câu trả lời mới nhất: câu đó kết luận không nên mua gì thì không còn trưng thẻ mua hàng cũ
   const latest = messages.findLast((m) => m.role === 'assistant')?.build ?? null
+  const rate = useStudy((s) => s.rate)
+  const askFeedback = useStudy((s) => !s.answered.includes('feedback_upgrade'))
+  // Mỗi kế hoạch một lần: khoá theo câu hỏi đầu (máy, nhu cầu, ngân sách), hỏi lại đúng kế hoạch cũ thì không bật nữa
+  const planKey = messages[0]?.role === 'user' ? `upgrade:${messages[0].content}` : null
+  const hasPlan = !!latest && !busy
 
   useEffect(() => saveDraft(draft), [draft])
+  // Kế hoạch nâng cấp vừa hiện: chờ vài giây cho người dùng xem thẻ rồi mới hiện hộp chấm sao (đang mở hộp thoại khác thì thôi)
+  useEffect(() => {
+    if (!hasPlan || !planKey || ratedBefore(planKey)) return
+    const t = setTimeout(() => {
+      if (useStudy.getState().dialog) return
+      markRated(planKey)
+      rate('upgrade')
+    }, 6000)
+    return () => clearTimeout(t)
+  }, [hasPlan, planKey, rate])
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
@@ -265,6 +282,11 @@ export function UpgradePage() {
                 <AutoHeight className="rounded-[24px] bg-panel ring-1 ring-line" deps={[messages.length]}>
                   <div className="p-5 md:p-6">
                     <ProposalView card={latest} />
+                    {askFeedback && !busy && (
+                      <button onClick={() => rate('upgrade')} className={`mt-4 rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-fill-hover ${focus}`}>
+                        Rate this plan
+                      </button>
+                    )}
                   </div>
                 </AutoHeight>
               </Rise>

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { participantAnswers } from './participant'
+import type { RatingKind } from './questions'
 
 /**
  * Chế độ thử nghiệm 4 tuần của nhóm nghiên cứu. Người tham gia mở link có ?thunghiem=P07 hoặc tự nhập mã,
@@ -54,9 +55,13 @@ interface StudyState {
    * hoặc chấm sao sau khi lắp xong cả máy (form phản hồi nằm dưới)
    */
   dialog: 'join' | 'baseline' | 'followup' | 'feedback' | 'rating' | null
+  /** Hộp chấm sao đang hỏi về chức năng nào (lắp máy, bảo dưỡng, nâng cấp) */
+  ratingFor: RatingKind
   join: (code: string, phase: Phase) => void
   leave: () => void
   open: (dialog: StudyState['dialog']) => void
+  /** Mở hộp chấm sao của một chức năng vừa xong */
+  rate: (kind: RatingKind) => void
   markAnswered: (key: string) => void
   setOwnPc: (value: string) => void
 }
@@ -94,6 +99,7 @@ function initial(): Pick<StudyState, 'code' | 'phase' | 'answered' | 'ownPc' | '
 
 export const useStudy = create<StudyState>((set, get) => ({
   ...initial(),
+  ratingFor: 'build',
   join: (code, phase) => {
     const s = get()
     const c = code.trim().toUpperCase()
@@ -107,7 +113,8 @@ export const useStudy = create<StudyState>((set, get) => ({
     write(KEY, null)
     set({ code: null, phase: 'before', answered: [], ownPc: null, dialog: null })
   },
-  open: (dialog) => set({ dialog }),
+  open: (dialog) => set(dialog === 'rating' ? { dialog, ratingFor: 'build' } : { dialog }),
+  rate: (ratingFor) => set({ dialog: 'rating', ratingFor }),
   markAnswered: (key) => {
     const s = get()
     if (!s.code || s.answered.includes(key)) return

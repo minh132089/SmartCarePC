@@ -85,6 +85,115 @@ export const FEEDBACK: StudyQuestion[] = [
   },
 ]
 
+/** Hộp chấm sao hiện sau khi xong một chức năng: lắp máy, bảo dưỡng, hay nhận kế hoạch nâng cấp */
+export type RatingKind = 'build' | 'maintenance' | 'upgrade'
+
+const AGENCY = { low: "Ask someone else to do it", high: "Do it myself without help" }
+const AGENCY_VI = { low: 'Nhờ người khác làm hộ', high: 'Tự làm, không cần hỏi ai' }
+const CONFIDENCE_SCALE = { hint: "3 means no change", low: "Much less confident", high: "Much more confident" }
+const CONFIDENCE_SCALE_VI = { hint: '3 là không thay đổi', low: 'Kém tự tin hơn nhiều', high: 'Tự tin hơn nhiều' }
+
+/** Sau khi bấm "Finish maintenance". Mã câu riêng (maint_*) để không lẫn số liệu với câu của hướng dẫn lắp */
+export const MAINTENANCE_FEEDBACK: StudyQuestion[] = [
+  {
+    key: 'maint_guide',
+    text: "1. How satisfied are you with the step-by-step maintenance guide?",
+    ...SATISFACTION,
+    vi: { text: '1. Bạn hài lòng đến đâu với phần hướng dẫn bảo dưỡng từng bước?', ...SATISFACTION_VI },
+  },
+  {
+    key: 'maint_safety',
+    text: "2. How clear were the safety instructions, such as unplugging the PC and what not to touch?",
+    type: 'scale',
+    low: "Not clear at all",
+    high: "Very clear",
+    vi: { text: '2. Phần dặn dò an toàn (rút điện, chỗ không được chạm) rõ ràng đến đâu?', low: 'Không rõ chút nào', high: 'Rất rõ' },
+  },
+  {
+    key: 'maint_confidence',
+    text: "3. After using the guide, how has your confidence in maintaining your own PC changed?",
+    type: 'scale',
+    ...CONFIDENCE_SCALE,
+    vi: { text: '3. Sau khi dùng hướng dẫn, bạn thấy mình tự tin hơn khi tự bảo dưỡng máy đến đâu?', ...CONFIDENCE_SCALE_VI },
+  },
+  {
+    key: 'maint_next_time',
+    text: "4. Next time your PC needs cleaning or new thermal paste, how independently would you do it?",
+    type: 'scale',
+    ...AGENCY,
+    vi: { text: '4. Lần tới máy cần vệ sinh hay thay keo tản nhiệt, bạn sẽ tự làm đến đâu?', ...AGENCY_VI },
+  },
+  {
+    key: 'difficulties',
+    text: "5. What difficulties did you encounter? Was there anything the guide could not help you with?",
+    type: 'text',
+    placeholder: "For example: a step that was hard to follow, or a part you could not find in your PC",
+    vi: { text: '5. Bạn gặp những khó khăn gì? Có chỗ nào hướng dẫn chưa giúp được bạn không?', placeholder: 'Ví dụ: bước nào khó làm theo, linh kiện nào không tìm thấy trong máy' },
+  },
+  {
+    key: 'suggestions',
+    text: "6. What would make the maintenance guide better?",
+    type: 'text',
+    placeholder: "Use your own words",
+    vi: { text: '6. Hãy góp ý để phần hướng dẫn bảo dưỡng tốt hơn.', placeholder: 'Viết bằng lời của bạn' },
+  },
+]
+
+/** Khi kế hoạch nâng cấp đầu tiên hiện ra. Mã câu riêng (upgrade_*) */
+export const UPGRADE_FEEDBACK: StudyQuestion[] = [
+  {
+    key: 'upgrade_budget_fit',
+    text: "1. How satisfied are you that the suggested upgrade fits your budget?",
+    ...SATISFACTION,
+    vi: { text: '1. Bạn hài lòng đến đâu với việc phương án nâng cấp vừa với ngân sách của bạn?', ...SATISFACTION_VI },
+  },
+  {
+    key: 'upgrade_need_fit',
+    text: "2. How satisfied are you that the suggested parts fix what you need, or what feels slow now?",
+    ...SATISFACTION,
+    vi: { text: '2. Bạn hài lòng đến đâu với việc linh kiện được gợi ý đúng nhu cầu, hoặc đúng chỗ máy đang chậm?', ...SATISFACTION_VI },
+  },
+  {
+    key: 'upgrade_trust',
+    text: "3. How sure are you that the suggested parts will fit your current PC?",
+    type: 'scale',
+    low: "Not sure at all",
+    high: "Completely sure",
+    vi: { text: '3. Bạn chắc đến đâu rằng các linh kiện được gợi ý lắp vừa máy hiện tại?', low: 'Hoàn toàn không chắc', high: 'Hoàn toàn chắc' },
+  },
+  {
+    key: 'upgrade_next_time',
+    text: "4. How independently would you buy and install this upgrade?",
+    type: 'scale',
+    ...AGENCY,
+    vi: { text: '4. Bạn sẽ tự mua và lắp phần nâng cấp này đến đâu?', ...AGENCY_VI },
+  },
+  {
+    key: 'difficulties',
+    text: "5. What was unclear or missing in the upgrade plan?",
+    type: 'text',
+    placeholder: "For example: a part you did not understand, or a question the plan did not answer",
+    vi: { text: '5. Kế hoạch nâng cấp có chỗ nào khó hiểu hay còn thiếu không?', placeholder: 'Ví dụ: linh kiện nào chưa hiểu, câu hỏi nào kế hoạch chưa trả lời' },
+  },
+  {
+    key: 'suggestions',
+    text: "6. What would make the upgrade advice better?",
+    type: 'text',
+    placeholder: "Use your own words",
+    vi: { text: '6. Hãy góp ý để phần tư vấn nâng cấp tốt hơn.', placeholder: 'Viết bằng lời của bạn' },
+  },
+]
+
+export const RATING_QUESTIONS: Record<RatingKind, StudyQuestion[]> = { build: FEEDBACK, maintenance: MAINTENANCE_FEEDBACK, upgrade: UPGRADE_FEEDBACK }
+
+/** Giá trị "form" gửi lên máy chủ cho từng hộp chấm sao (post_build giữ nguyên như dữ liệu cũ) */
+export const RATING_FORM: Record<RatingKind, string> = { build: 'post_build', maintenance: 'post_maintenance', upgrade: 'post_upgrade' }
+
+/** Bộ câu theo form của một phản hồi (trang /feedback): form chung và form sau khi lắp dùng FEEDBACK */
+export function questionsOfForm(form: unknown): StudyQuestion[] {
+  return form === 'post_maintenance' ? MAINTENANCE_FEEDBACK : form === 'post_upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
+}
+
 /* ---------- Ba nhóm câu lõi: hỏi y nguyên ở lần đầu và cuối nghiên cứu ---------- */
 
 const CONFIDENCE_ITEMS: [string, string, string][] = [

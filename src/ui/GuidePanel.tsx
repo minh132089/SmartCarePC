@@ -7,6 +7,7 @@ import type { PartId } from '../data/parts'
 import { useViewer } from '../store'
 import { FlowSteps } from './AdvicePage'
 import { useStudy } from './study/study'
+import { markRated, ratedBefore } from './study/rated'
 import { StudyBar } from './study/StudyBar'
 import { playTick } from './sound/sfx'
 import { maintenanceSteps, TASKS } from '../data/maintenance'
@@ -58,7 +59,9 @@ export function GuidePanel() {
   const current = steps[Math.min(index, steps.length - 1)]
   // Lắp xong cả máy: mời chấm sao + phản hồi (mọi người dùng). Người tham gia thử nghiệm đã gửi phản hồi thì thôi mời
   const askFeedback = useStudy((s) => !s.answered.includes('feedback'))
+  const askMaintenanceFeedback = useStudy((s) => !s.answered.includes('feedback_maintenance'))
   const openStudy = useStudy((s) => s.open)
+  const rate = useStudy((s) => s.rate)
 
   useEffect(() => saveDone(machine, done), [machine, done])
 
@@ -142,6 +145,18 @@ export function GuidePanel() {
     wasDone.current = allDone
   }, [allDone, machine, openStudy, isMaintenance, steps.length])
 
+  // Vừa bấm "Finish maintenance" (lần bảo dưỡng này chưa xong -> xong): hiện hộp chấm sao, mỗi lần bảo dưỡng một lần.
+  // Mở lại trang của lần đã xong thì không bật nữa (nút trong ô "Maintenance recorded" vẫn mở được)
+  const wasRecorded = useRef(isMaintenance && !!run?.completed)
+  useEffect(() => {
+    const recorded = isMaintenance && !!run?.completed
+    if (recorded && !wasRecorded.current && run && !ratedBefore(`maint:${run.id}`)) {
+      markRated(`maint:${run.id}`)
+      rate('maintenance')
+    }
+    wasRecorded.current = recorded
+  }, [isMaintenance, run, rate])
+
   // Mở hướng dẫn lắp (mỗi máy một lần mỗi lần mở)
   useEffect(() => {
     if (!isMaintenance) recordUsage('build_guide_opened', { machine })
@@ -205,7 +220,9 @@ export function GuidePanel() {
       )}
 
       {allDone && isMaintenance && <div ref={completionRef} className="mt-5 rounded-2xl bg-surface p-4 ring-1 ring-line">
-        {run?.completed ? <><p className="font-semibold text-ok">Maintenance recorded</p><p className="mt-1 text-[13px] text-ink-2">Your next reminder date has been updated in this browser. Update any calendar events separately.</p><MaintenanceEntry className="mt-3" /></> : <>
+        {run?.completed ? <><p className="font-semibold text-ok">Maintenance recorded</p><p className="mt-1 text-[13px] text-ink-2">Your next reminder date has been updated in this browser. Update any calendar events separately.</p>
+          {askMaintenanceFeedback && <button onClick={() => rate('maintenance')} className={`mt-3 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}>Rate this guide</button>}
+          <MaintenanceEntry className="mt-3" /></> : <>
           <Question label="Who did the work?"><Choices name="maintenance-who" value={[who]} options={[{ value: 'me-alone', label: 'Me alone' }, { value: 'with-help', label: 'Me with someone’s help' }, { value: 'someone-else', label: 'Someone else did it' }]} onChange={v => setWho(v[0])} /></Question>
           {task === 'check' && <Question label="What did you notice?"><Symptoms value={symptoms} onChange={setSymptoms} /></Question>}
           {task === 'paste' && <Question label="After 10 minutes of heavy use, what do you notice?" hint="New paste usually lowers temperatures within minutes.">
@@ -382,26 +399,6 @@ function StepBody({
 /** Spring Check của ReactBits; tiêu đề bước vẫn là nút riêng để mở hướng dẫn. */
 function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return <SpringCheck checked={checked} onChange={onChange} label={null} ariaLabel={label} color="var(--color-ink)" fillColor="var(--color-accent)" checkColor="#fff" boxSize={24} boxRadius={8} bounce={0.16} strike="none" className="shrink-0" />
-}
-
-const RATED = 'pcsc-rated'
-
-/** Máy này đã tự hiện hộp chấm sao chưa (lưu trên trình duyệt; bị chặn lưu thì coi như chưa) */
-function ratedBefore(machine: string) {
-  try {
-    return (JSON.parse(localStorage.getItem(RATED) ?? '[]') as string[]).includes(machine)
-  } catch {
-    return false
-  }
-}
-
-function markRated(machine: string) {
-  try {
-    const list = JSON.parse(localStorage.getItem(RATED) ?? '[]') as string[]
-    localStorage.setItem(RATED, JSON.stringify([...list.filter((m) => m !== machine), machine].slice(-50)))
-  } catch {
-    /* bỏ qua */
-  }
 }
 
 /** Dòng chữ trên hình 3D: đang ở bước nào */
