@@ -12,10 +12,12 @@ import { Sidebar } from './ui/Sidebar'
 import { StudyDialogs } from './ui/study/StudyBar'
 import { UpgradePage } from './ui/UpgradePage'
 import { AccountSlot, AuthOverlay } from './ui/Account'
+import { UpdateBanner } from './ui/UpdateBanner'
 
 export default function App() {
   const guide = useViewer((s) => s.guide)
   const page = useViewer((s) => s.page)
+  const inspecting = useViewer((s) => s.inspecting)
   const machine = useViewer((s) => `${s.familyId ?? s.buildId}:${s.guideKind}:${s.maintenanceTask}:${s.maintenanceCooler}:${s.maintenanceHasGpu}:${s.maintenanceRunId}`)
   // Màn đầu chọn hướng; tư vấn máy mới và tư vấn nâng cấp không vẽ cảnh 3D; trang build là mô hình 3D kèm hướng dẫn
   if (page !== 'build')
@@ -26,6 +28,7 @@ export default function App() {
         </Fade>
         <StudyDialogs />
         <AuthOverlay />
+        <UpdateBanner />
       </>
     )
   return (
@@ -38,13 +41,17 @@ export default function App() {
         <GuideCaption />
         <InspectButton />
         <Inspector />
-        <div className="absolute right-4 top-4 z-30">
-          <AccountSlot hideSignIn />
-        </div>
+        {/* Đang xem cận cảnh linh kiện thì ẩn ô tài khoản: nó nằm đè đúng nút đóng của khung xem (người dùng bị kẹt) */}
+        {!inspecting && (
+          <div className="absolute right-4 top-4 z-30">
+            <AccountSlot hideSignIn />
+          </div>
+        )}
         <ChatPanel />
       </main>
       <StudyDialogs />
       <AuthOverlay />
+      <UpdateBanner />
     </div>
   )
 }

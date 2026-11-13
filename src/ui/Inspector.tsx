@@ -254,10 +254,10 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
         </div>
         <button
           onClick={() => inspect(null)}
-          aria-label="Close"
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2 transition-transform duration-100 hover:text-ink active:scale-[0.94]"
+          aria-label="Close and go back to the PC"
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-fill py-2 pr-4 pl-3 text-[14px] font-medium text-ink transition-transform duration-100 hover:bg-fill-hover active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          <X size={16} aria-hidden />
+          <X size={15} aria-hidden /> Back to the PC
         </button>
       </div>
 

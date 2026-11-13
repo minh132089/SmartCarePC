@@ -73,7 +73,9 @@ export function GuidePanel() {
       setStep(0)
       setGuidePart(full ? null : current.part)
       select(full ? null : current.part as PartId | null)
-      useViewer.setState({ maintenanceLift: !full && !!current.coolerOut, sideOpen: !full && !!current.panelOpen, powered: false })
+      // Nắp theo bước (bước chưa tháo nắp thì đóng), trừ khi người dùng đã tự mở để xem bên trong: giữ mở khi sang bước khác.
+      // Toàn cảnh thì mở để thấy linh kiện được sắp xếp thế nào
+      useViewer.setState({ maintenanceLift: !full && !!current.coolerOut, sideOpen: full || !!current.panelOpen || useViewer.getState().sideManual, powered: false })
       return
     }
     if (full) {

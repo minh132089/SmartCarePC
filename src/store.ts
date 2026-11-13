@@ -27,6 +27,8 @@ interface ViewerState {
   step: number
   setStep: (n: number) => void
   sideOpen: boolean
+  /** Người dùng tự mở nắp bằng nút (không phải bước hướng dẫn mở): hướng dẫn bảo dưỡng giữ nắp mở khi sang bước khác */
+  sideManual: boolean
   selected: PartId | null
   hovered: PartId | null
   inspecting: PartId | null
@@ -83,6 +85,7 @@ export const useViewer = create<ViewerState>((set) => ({
   exploded: false,
   step: 0,
   sideOpen: true,
+  sideManual: false,
   selected: null,
   hovered: null,
   inspecting: null,
@@ -99,7 +102,7 @@ export const useViewer = create<ViewerState>((set) => ({
   // Mở hay đóng hướng dẫn đều đưa máy về trạng thái lắp đủ (exploded = false): đóng thì máy tự lắp lại từng bước
   // Bước 1 của hướng dẫn lắp là tháo nắp hông: mở hướng dẫn thì nắp mở sẵn (vừa xem bảo dưỡng hay vừa bấm đóng nắp thì nắp
   // còn đóng, trong khi màn hướng dẫn trước đây không có nút mở lại)
-  setGuide: (guide) => set({ guide, guideKind: 'assembly', maintenanceLift: false, step: 0, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null, ...(guide ? { sideOpen: true } : {}) }),
+  setGuide: (guide) => set({ guide, guideKind: 'assembly', maintenanceLift: false, step: 0, guideFull: false, guidePart: null, exploded: false, selected: null, inspecting: null, ...(guide ? { sideOpen: true, sideManual: false } : {}) }),
   // Chọn một bước thì thoát toàn cảnh để hình quay về đúng bước đó
   setGuideIndex: (guideIndex) => set({ guideIndex, guideFull: false }),
   guidePart: null,
@@ -117,7 +120,7 @@ export const useViewer = create<ViewerState>((set) => ({
   setFamily: (familyId) => set({ familyId, advisedBuild: null, selected: null, exploded: false, step: 0, inspecting: null }),
   toggleExploded: () => set((s) => ({ exploded: !s.exploded })),
   setStep: (step) => set({ step }),
-  toggleSide: () => set((s) => ({ sideOpen: !s.sideOpen })),
+  toggleSide: () => set((s) => ({ sideOpen: !s.sideOpen, sideManual: !s.sideOpen })),
   select: (selected) => set({ selected }),
   hover: (hovered) => set({ hovered }),
   inspect: (inspecting) => set(inspecting ? { inspecting, selected: inspecting } : { inspecting: null }),

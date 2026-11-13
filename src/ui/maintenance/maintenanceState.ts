@@ -103,7 +103,7 @@ export function startMaintenance(pc: MaintenancePC, task: MaintenanceTask) {
   if (!same) { if (pc.machine === 'gaming') v.setBuild('gaming'); else v.setFamily(pc.machine) }
   const steps = maintenanceSteps(task, pc.machine === 'gaming' ? null : pc.machine, 'gaming', pc.hasGpu, pc.cooler)
   const done = loadDone(key), first = steps.findIndex(s => !done.has(s.id))
-  useViewer.setState({ page: 'build', guide: true, guideKind: 'maintenance', maintenanceTask: task, maintenanceRunId: run.id, maintenanceCooler: pc.cooler, maintenanceHasGpu: pc.hasGpu, maintenanceLift: false, guideIndex: first < 0 ? 0 : first, guidePart: null, guideFull: false, exploded: false, step: 0, powered: false, selected: null, inspecting: null, sideOpen: false })
+  useViewer.setState({ page: 'build', guide: true, guideKind: 'maintenance', maintenanceTask: task, maintenanceRunId: run.id, maintenanceCooler: pc.cooler, maintenanceHasGpu: pc.hasGpu, maintenanceLift: false, guideIndex: first < 0 ? 0 : first, guidePart: null, guideFull: false, exploded: false, step: 0, powered: false, selected: null, inspecting: null, sideOpen: false, sideManual: false })
   recordRun('maintenance_started', { resumed: !!resume, cooler: pc.cooler })
 }
 export function recordStep(stepId: string, alone: boolean) {
