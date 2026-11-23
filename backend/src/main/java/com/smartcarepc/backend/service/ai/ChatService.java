@@ -5602,6 +5602,9 @@ public class ChatService {
     /** Bỏ phần suy nghĩ <think>...</think> mà vài model suy luận để lẫn trong câu trả lời */
     private static String clean(Object content) {
         String t = content == null ? "" : content.toString().replaceAll("(?s)<think>.*?</think>", "").strip();
+        // Thẻ gọi công cụ dạng chữ của DeepSeek còn sót (LlmClient đã đọc lại phần lớn): không hiện cho người dùng
+        var dsml = LlmClient.DSML_ANY.matcher(t);
+        if (dsml.find()) t = t.substring(0, dsml.start()).strip();
         return t.isEmpty() ? "I could not answer this question. Please try rephrasing it." : t;
     }
 }
