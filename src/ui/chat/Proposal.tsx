@@ -5,8 +5,22 @@ import { PARTS, type PartId } from '../../data/parts'
 import { compatText, quantityLabel, totalOf, vnd, vndRange, type BuildCard, type BuildLine, type Issue, type Verdict } from './chatStore'
 import { VERDICT_INFO } from './verdict'
 import { conditionSummary } from './conditionSummary'
+import { INSTALL_HELP } from '../../data/beginnerHelp'
+import { guideSteps } from '../../data/guide'
+import { useViewer } from '../../store'
 
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+
+const isUpgrade = (line: BuildLine) => line.code.startsWith('upgrade_')
+
+/** Mở hướng dẫn lắp 3D đúng bước của loại linh kiện này (máy mẫu đang xem), để thấy linh kiện nằm ở đâu và lắp thế nào */
+function showIn3d(category: string) {
+  const v = useViewer.getState()
+  v.setGuide(true)
+  const i = guideSteps(v.familyId, v.buildId, true).findIndex((s) => s.part === category)
+  if (i >= 0) v.setGuideIndex(i)
+  v.setPage('build')
+}
 
 /**
  * Gom linh kiện theo việc chúng làm, để người mới đọc 3 hoặc 4 nhóm ngắn thay vì một danh sách 8 dòng.
@@ -43,6 +57,8 @@ export function ProposalView({ card, action }: { card: BuildCard; action?: React
       {card.verdict && <VerdictBox verdict={card.verdict} issues={[...card.warnings, ...(card.unknowns ?? [])]} />}
 
       {total && <Total min={total.min} max={total.max} budget={card.budgetVnd ?? null} />}
+
+      {card.items.length > 0 && card.items.every(isUpgrade) && <NextSteps />}
 
       <div className="mt-6 space-y-6">
         {groupLines(card.items).map((g) => (
@@ -177,6 +193,7 @@ function PartRow({ line, total }: { line: BuildLine; total: { min: number; max: 
             </div>
           </>
         )}
+        {isUpgrade(line) && <InstallSteps category={line.category} />}
       </div>
     </li>
   )
@@ -336,4 +353,53 @@ function hostOf(url: string) {
   } catch {
     return 'trang web'
   }
+}
+
+/**
+ * Kế hoạch nâng cấp: việc cần làm tiếp theo thứ tự. Phản hồi 22/11: người dùng hiểu ý chính nhưng "chưa đủ tự tin tự thực
+ * hiện", điểm "tự mua và lắp" thấp nhất (3,1/5).
+ */
+function NextSteps() {
+  return (
+    <section data-sm-item className="mt-5 rounded-2xl bg-surface p-4">
+      <h3 className="text-[15px] font-semibold text-ink">What to do next</h3>
+      <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[14px] leading-[1.45] text-ink-2 marker:text-ink-3">
+        <li>Read the checks under each part and anything marked “Confirm before buying”.</li>
+        <li>Buy from the store links, or show this plan to a shop and ask them to match it.</li>
+        <li>Install one part at a time. Each part below has “How to install it yourself” and a 3D view of where it goes.</li>
+        <li>After each part, start the PC and do the check listed for it before moving on.</li>
+      </ol>
+      <p className="mt-2 text-[12.5px] text-ink-3">Not comfortable opening the PC? Most computer shops fit RAM, an SSD or a graphics card while you wait.</p>
+    </section>
+  )
+}
+
+/** Từng linh kiện nâng cấp: mức độ, thời gian, các bước tự lắp, cách kiểm tra sau khi lắp, và nút xem vị trí trên mô hình 3D */
+function InstallSteps({ category }: { category: string }) {
+  const [open, setOpen] = useState(false)
+  const help = INSTALL_HELP[category as PartId]
+  if (!help) return null
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className={`mt-1 block text-[13px] font-medium text-link hover:underline ${focus}`}>
+        {open ? "Hide installation steps" : `How to install it yourself (${help.level.toLowerCase()})`}
+      </button>
+      <div className="reveal" data-open={open}>
+        <div>
+          <div className="pt-1.5 text-[13px] leading-[1.45] text-ink-2">
+            <p className="text-ink-3">{help.level} · {help.time}. Shut down and unplug the PC before you start.</p>
+            <ol className="mt-1.5 list-decimal space-y-1 pl-4 marker:text-ink-3">
+              {help.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="mt-1.5"><span className="font-semibold text-ink">Check: </span>{help.after}</p>
+            <button onClick={() => showIn3d(category)} className={`mt-1.5 text-[13px] font-medium text-link hover:underline ${focus}`}>
+              See where it goes in 3D ›
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

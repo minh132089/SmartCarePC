@@ -16,6 +16,7 @@ import { maintenanceKey, recordStep, recordUsage, useMaintenance } from './maint
 import { MaintenanceEntry, Symptoms } from './maintenance/MaintenanceHub'
 import { Choices, Question } from './study/StudyParts'
 import SpringCheck from '../components/SpringCheck'
+import { findOnYourPc } from '../data/beginnerHelp'
 
 /** Bước nới ốc bơm / tản: nhấc nhẹ một đoạn ngắn (10% đường nhấc) để thấy đế đã rời khỏi CPU */
 const NUDGE = 0.1
@@ -186,7 +187,7 @@ export function GuidePanel() {
       <p className="mt-4 text-[13px] font-semibold text-ink-2">PC SmartCare · {machineLabel.trim()}</p>
       <h1 className="display mt-1">{isMaintenance ? TASKS[task].title : 'Assembly guide'}</h1>
       <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">
-        {isMaintenance ? 'One task at a time. Follow the safety checks. When a step is finished, record whether you did it yourself or with help.' : 'Follow the steps in order. Mark each one complete as you go; the 3D view follows your progress.'}
+        {isMaintenance ? 'One task at a time. Follow the safety checks. When a step is finished, record whether you did it yourself or with help. You can stop at any step: close the case, plug it back in and ask a technician.' : 'Follow the steps in order. Mark each one complete as you go; the 3D view follows your progress.'}
       </p>
       {isMaintenance && <><p className="mt-3 text-[12px] text-ink-3">{[`Reference illustration: ${machineLabel.trim()}.`, cooler === 'unknown' ? 'Cooler not identified: compare it with the pictures before loosening anything.' : '', 'Written instructions follow your chosen cooler. Use your component manual for exact catches and mounting hardware.'].filter(Boolean).join(' ')}</p><MaintenanceEntry className="mt-3" /></>}
       {isMaintenance && storageWarning && <p className="mt-3 text-[13px] text-info">Browser storage is unavailable. Progress and reminder dates last for this tab only; use a calendar export to keep reminders.</p>}
@@ -329,9 +330,20 @@ function StepBody({
   onReplay: (() => void) | null
 }) {
   const tab = tabbable ? 0 : -1
+  // Bảo dưỡng trên máy thật: chỉ cách nhận ra linh kiện (phản hồi 22/11: "không tìm thấy linh kiện ở máy")
+  const cooler = useViewer((s) => s.maintenanceCooler)
+  const find = maintenance ? findOnYourPc(step.part ?? step.id, cooler) : null
   return (
     <div className="pr-4 pb-4 pl-[50px] text-[14px] leading-[1.45]">
       <p className="text-ink-2">{step.why}</p>
+
+      {find && (
+        <div className="mt-3 rounded-xl bg-surface px-3 py-2 ring-1 ring-line">
+          <p className="text-[12px] font-semibold text-ink-2">Finding it on your PC</p>
+          <p className="mt-0.5 text-[13px] text-ink">{find}</p>
+          <p className="mt-1 text-[12px] text-ink-3">Your PC may look different from the 3D model. If you cannot find it, select Get help with this step and describe what you see, or stop here.</p>
+        </div>
+      )}
 
       {behind && (
         <p className="mt-3 rounded-xl bg-info-bg px-3 py-2 text-[13px] text-info">
