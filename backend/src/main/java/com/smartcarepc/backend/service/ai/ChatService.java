@@ -4253,7 +4253,17 @@ public class ChatService {
     static boolean ofKind(String category, String title) {
         String want = KIND_OF.get(category);
         String got = com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(title));
-        return want == null || want.equals(got);
+        if (want == null || want.equals(got)) return true;
+        // Tên không có chữ chỉ loại ("MSI GeForce RTX 4070 SUPER 12G VENTUS 2X OC", không có "card" / "VGA"): kind = null. Trước
+        // đây bị tính là sai loại, 12 - 15 card NVIDIA thật bị loại ở bước tự tìm card (bộ ca 24/11 h09 - h11). Xét theo dấu hiệu
+        // riêng của loại đó; các bước lọc sau (cỡ mẫu 3D, giá hợp lý, lắp chung) vẫn chạy như cũ
+        if (got != null) return false;
+        return switch (category) {
+            case "gpu" -> gpuChip(title) != null;
+            case "cpu" -> cpuModel(title) != null;
+            case "ram", "ssd" -> amount(category, title) != null;
+            default -> false;
+        };
     }
 
     /** Món thay giữ đúng thông số của món đang chọn (xem candidates); loại linh kiện khác thì không xét */

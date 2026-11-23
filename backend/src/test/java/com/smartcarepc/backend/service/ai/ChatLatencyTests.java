@@ -83,6 +83,16 @@ class ChatLatencyTests {
     }
 
     @Test
+    void tenCardKhongGhiChuCardVanDungLoai() {
+        // Bộ ca 24/11 h09 - h11: tên tiếng Anh không có "card" / "VGA" bị tính sai loại ở bước tự tìm card
+        assertThat(ChatService.ofKind("gpu", "MSI GeForce RTX 4070 SUPER 12G VENTUS 2X OC")).isTrue();
+        assertThat(ChatService.ofKind("gpu", "Card màn hình ASUS Dual GeForce RTX 4060 8GB")).isTrue();
+        // Không đọc ra chip, hay rõ là loại khác: vẫn loại
+        assertThat(ChatService.ofKind("gpu", "MSI MAG A650BN 650W 80 Plus Bronze")).isFalse();
+        assertThat(ChatService.ofKind("gpu", "Nguồn máy tính Corsair RM750e 750W")).isFalse();
+    }
+
+    @Test
     void nganSachVietHoaCoDauVanNhanDuoc() {
         // Ca thật 23/11: "tôi muốn build PC 20 TRIỆU" bị hỏi lại ngân sách (Ệ hoa không khớp "triệu" khi thiếu UNICODE_CASE)
         assertThat(ChatService.hasBudget("tôi muốn build PC 20 TRIỆU và chơi được game nặng AAA")).isTrue();
@@ -118,8 +128,10 @@ class ChatLatencyTests {
     }
 
     @Test
-    void missingTierKeepsTheNormalModelAndRepairPath() {
-        run(false, 3);
+    void missingTierIsBuiltByCodeWithoutAnotherModelRound() {
+        // 24/11: tên hàng không ghi chữ chỉ loại ("Intel Core i3-12100 BOX") không còn bị coi là sai loại, nên code tự dựng được
+        // Chất lượng từ Phù hợp và trả kết quả ngay, không cần lượt AI thứ ba (trước đây 3 lượt)
+        run(false, 2);
     }
 
     private void run(boolean includeQuality, int expectedModelCalls) {
@@ -182,7 +194,7 @@ class ChatLatencyTests {
         var answer = service.reply(new ChatRequest(List.of(new ChatRequest.Message("user", "Máy học Word Excel, ngân sách 8 triệu")),
                 null, null, "advice"));
         assertThat(answer.build()).isNotNull();
-        if (includeQuality) assertThat(answer.options()).extracting(o -> o.tier()).containsExactly("cheap", "balanced", "quality");
+        assertThat(answer.options()).extracting(o -> o.tier()).containsExactly("cheap", "balanced", "quality");
         assertThat(answer.reply().split("\\s+")).hasSizeLessThan(100);
         assertThat(answer.reply()).doesNotContain("Kingston", "Corsair", "MSI", "khác Phù hợp");
         verify(client, times(expectedModelCalls)).complete(any());
