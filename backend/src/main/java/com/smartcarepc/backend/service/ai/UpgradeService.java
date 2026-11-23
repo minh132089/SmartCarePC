@@ -134,9 +134,9 @@ public class UpgradeService {
                                     "required", List.of("category", "product_id")))),
                             "required", List.of("items"))));
 
-    private static final Pattern WATTS = Pattern.compile("(\\d{3,4})\\s*w\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern NVME = Pattern.compile("\\b(nvme|m\\.?2|pcie)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern SFX = Pattern.compile("\\bsfx", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern WATTS = Pattern.compile("(\\d{3,4})\\s*w\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern NVME = Pattern.compile("\\b(nvme|m\\.?2|pcie)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern SFX = Pattern.compile("\\bsfx", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     private final LlmClient client;
     private final ProductSearch search;
@@ -966,14 +966,14 @@ public class UpgradeService {
     }
 
     private static final Pattern AI_USE = Pattern.compile(
-            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern GAMING_USE = Pattern.compile(
-            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Việc cần nhiều RAM ngoài game: có thì không chặn mua thêm RAM */
     private static final Pattern HEAVY_USE = Pattern.compile(
             "\\b(stream(ing)?|video|edit(ing)?|premiere|resolve|render|3d|blender|program(ming)?|docker|android studio|virtual machine|vm|ai|"
-                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /**
      * Công suất nguồn hãng khuyên cho cả máy, bổ sung GPU_PSU cho card yếu / mạnh mà máy cũ hay có. GPU_PSU của trang lắp máy
      * mới để mặc định 550W và sàn 450W khi chọn nguồn mới; với nguồn ĐANG CÓ thì phải theo đúng mức của card (GTX 1650,
@@ -1135,11 +1135,11 @@ public class UpgradeService {
     /** Chipset đời cũ phần lớn không có khe M.2 (Intel 6x/7x/8x, AMD FM2+/AM3+); vài mẫu có, nên chỉ cảnh báo */
     static final Set<String> NO_M2 = Set.of("h61", "h67", "p67", "z68", "b75", "h77", "z77", "q77", "h81", "b85", "h87", "z87", "q87",
             "a68h", "a78", "a88x", "970", "990fx", "990x");
-    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     /** Mã chipset trong tên bo ("ASUS H81M-K" -> "h81"), null nếu không đọc được */
     static String chipsetToken(String board) {
@@ -1288,16 +1288,16 @@ public class UpgradeService {
         return out.toString();
     }
 
-    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern DONG = Pattern.compile(
             "(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
-                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Số kiểu hàng nghìn ("10,000,000", "1.190.000") hoặc từ 6 chữ số (mã CPU như 12400 có 5), không kèm đơn vị đo (MHz, GB, W, mm...) */
     private static final Pattern BARE = Pattern.compile(
             "(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Chữ "giá / costs / priced" đi kèm một con số ngay sau: coi là báo giá */
-    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LINK = Pattern.compile("\\[([^\\]]*)\\]\\(\\s*https?://[^)]*\\)|https?://\\S+|www\\.\\S+");
 
     /** Câu có nhắc tiền: số có đơn vị tiền, số kiểu hàng nghìn / từ 5 chữ số không đơn vị đo, hay chữ "giá / costs" kèm số */
@@ -1335,7 +1335,7 @@ public class UpgradeService {
      * câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
      */
     /** Chữ của công cụ bị trợ lý chép lại ("Plan accepted.") không phải lời tư vấn */
-    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     static String checkedReply(String draft, Turn turn) {
         if (draft == null) return null;
@@ -1396,12 +1396,12 @@ public class UpgradeService {
     private static final Pattern PREVIOUS_PRICE = Pattern.compile("\\((\\d{4,12}) VND\\)");
     private static final Pattern CHEAPER = Pattern.compile(
             "\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LAPTOP_WORDS = Pattern.compile(
-            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern MOBILE_CPU = Pattern.compile(
             "\\bi[3579][\\s-]*\\d{4,5}(u|h|hs|hx|hk|g[1-7]|p|y)\\b|\\bryzen\\s*[3579]\\s*\\d{4}(u|h|hs|hx)\\b|\\bultra\\s*[579]\\s*\\d{3}(h|u|v)\\b",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     /** Laptop (theo lời người dùng hay mã CPU di động như i5-1135G7, Ryzen 5 5500U): app chỉ tư vấn máy để bàn */
     static boolean laptop(UpgradeInfo pc) {

@@ -1017,6 +1017,22 @@ class ChatServiceTests {
     }
 
     @Test
+    void cauTiepTheoNhoDoiLinhKienThiKhongHoiLaiMucGame() {
+        // Bộ chấm cuối 24/11: "Đổi RAM lên 32GB và SSD lên 1TB, giữ 32 triệu" bị hỏi lại "game nhẹ hay nặng"
+        when(search.enabled()).thenReturn(true);
+        reply(answer("Will you mainly play lighter esports games or demanding AAA games?"), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "PC game32 triệu RAM16GB, SSD512GB."),
+                new Message("assistant", "Mình sẽ kiểm tra cấu hình theo yêu cầu tiếp theo."),
+                new Message("user", "Đổi RAM lên 32GB và SSD lên 1TB, giữ 32 triệu.")), null, null, "advice"));
+
+        // Câu hỏi không được gửi cho người dùng: trợ lý được nhắc giả định rồi làm luôn
+        assertThat(sent).hasSize(2);
+        assertThat(sent.get(1).get("messages").toString()).contains("Assume common requirements");
+        assertThat(res.reply()).doesNotContain("esports");
+    }
+
+    @Test
     void sauHaiVongTimThiPhaiChot() {
         when(search.enabled()).thenReturn(true);
         when(search.search(any())).thenReturn(List.of());
