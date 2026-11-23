@@ -65,9 +65,9 @@ public class ChatService {
             2. Thiếu ngân sách hoặc mục đích thì hỏi thông tin còn thiếu. Đã có ngân sách nhưng chỉ nói chung "thiết kế \
             đồ họa" thì hỏi ngắn: chủ yếu 2D (Photoshop/Illustrator) hay 3D/render, và phần mềm nếu biết. Chỉ nói "chơi game" \
             thì hỏi game nhẹ/esports hay game nặng/AAA, hoặc tên game hay chơi. Có cả hai nhu cầu chưa rõ thì gộp một lượt hỏi. \
-            Đã nêu cấu hình cụ thể (card hoặc hãng card, VRAM, dung lượng RAM, độ phân giải) thì KHÔNG hỏi thêm về nhu cầu \
-            (game nào, chạy AI / CUDA để làm gì, phần mềm gì): giả định việc phổ biến hợp với cấu hình đó (game: Full HD), nêu \
-            giả định trong một câu và làm luôn. \
+            Đã nêu card hoặc hãng card, VRAM, độ phân giải, kiểu vỏ (Mini-ITX / mATX) hay CUDA / PyTorch thì KHÔNG hỏi thêm về \
+            nhu cầu (game nào, chạy AI để làm gì): giả định việc phổ biến hợp với yêu cầu đó (game: Full HD), nêu giả định trong \
+            một câu và làm luôn. Chỉ nêu RAM / SSD thì chưa đủ: vẫn hỏi như trên. \
             Nếu đã nêu phần mềm, tên game hoặc mức nặng/nhẹ thì dùng thông tin đó, không hỏi lại điểm đã rõ. Đọc cả hội thoại: \
             câu trả lời "chỉ 2D", "3D", "nhẹ" là bổ sung cho câu hỏi trước, giữ ngân sách và ràng buộc đã có. \
             Chưa rõ workload thì chưa tìm giá hay dựng thẻ. Chỉ hỏi thêm một lượt về workload; sau khi khách trả lời thì tư vấn. \
@@ -1535,14 +1535,19 @@ public class ChatService {
         String text = String.join(" ", userTexts).toLowerCase(java.util.Locale.ROOT);
         int topics = text.matches("(?s).*(2\\s*d\\b|3\\s*d\\b|render|photoshop|illustrator|lightroom|premiere|after effects|davinci|blender|sketchup|3ds max|cinema 4d).*") ? 1 : 0;
         if (text.matches("(?s).*(light gaming|casual gaming|demanding gaming|heavy gaming|game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) topics |= 2;
-        // Đã nêu cấu hình cụ thể (card, hãng card, RAM, độ phân giải) thì coi như biết mức game, không hỏi lại (23/11: GPT hỏi
-        // "game nhẹ hay nặng" với "PC game 31 triệu, đúng RTX 4060, RAM 32GB", người dùng phải trả lời thêm một lượt)
+        // Đã nêu card, hãng card, độ phân giải hay kiểu vỏ (Mini-ITX / mATX) thì coi như biết mức game, không hỏi lại (23/11: GPT
+        // hỏi "game nhẹ hay nặng" với "PC game 31 triệu, đúng RTX 4060"). RAM / SSD thì không nói lên mức game: "chơi game 25
+        // triệu, RAM 16GB SSD 512GB" vẫn hỏi (bộ ca context ask-game)
         if (text.matches("(?s).*\\b(game|gaming|chơi)\\b.*") && text.matches(
-                "(?s).*(full ?hd|1080p?|1440p?|\\b2k\\b|\\b4k\\b|\\brtx\\b|\\bgtx\\b|\\brx ?\\d{4}|radeon|nvidia|nvida|geforce|card amd|\\d+ ?gb ram|ram \\d+ ?gb).*")) topics |= 2;
+                "(?s).*(full ?hd|1080p?|1440p?|\\b2k\\b|\\b4k\\b|\\brtx\\b|\\bgtx\\b|\\brx ?\\d{4}|radeon|nvidia|nvida|geforce|card amd"
+                + "|mini ?-?itx|\\bitx\\b|\\bm-?atx\\b|micro ?-?atx).*")) topics |= 2;
         // Máy AI / CUDA / đồ họa đã nêu GPU cụ thể (hãng hoặc VRAM) thì cũng không hỏi lại việc chạy (ca kiểm tra 24/11 h11:
         // "chạy CUDA, GPU NVIDIA ít nhất 12GB, RAM 32GB" vẫn bị hỏi "bạn chạy CUDA để làm gì")
         if (text.matches("(?s).*(cuda|\\bai\\b|deep learning|machine learning|học máy|render|đồ họa|do hoa|dựng phim).*") && text.matches(
                 "(?s).*(nvidia|nvida|radeon|geforce|\\brtx\\b|vram|gpu[^.]{0,30}\\d+ ?gb|\\d+ ?gb[^.]{0,15}(vram|gpu)).*")) topics |= 3;
+        // CUDA / PyTorch / TensorFlow đã nói lên việc chạy (máy học AI trên card NVIDIA): không hỏi "chạy AI để làm gì" (bộ ca
+        // development dev-ai40: "máy học AI CUDA 40 triệu, RAM 32GB")
+        if (text.matches("(?s).*\\b(cuda|pytorch|tensorflow|stable diffusion|llm)\\b.*")) topics |= 3;
         return topics;
     }
 
@@ -5340,6 +5345,11 @@ public class ChatService {
                         if (cap != null && totalMax > cap) why.add("exceeds the limit of " + cap + " VND");
                         var missing = missingBuy(checked);
                         if (!missing.isEmpty()) why.add("items without an available purchase link or stock: " + missing);
+                        // Không có bo ATX nào còn hàng (thường gặp lúc kho ít bo ATX): nói rõ cách sửa, không để trợ lý chọn lại ATX
+                        // (bộ ca creator-igpu 24/11: hai lần propose_build liền đều mb_atx, cả hai thiếu link)
+                        if (String.valueOf(missing).contains("mb_atx") && (turn.needs == null || !turn.needs.miniItx()))
+                            why.add("no in-stock ATX motherboard was found: switch to mb_matx with case_compact_tower (same CPU socket "
+                                    + "and RAM type) unless the user asked for a full ATX build");
                         if (!result.compatible() || !productErrors.isEmpty()) why.add("the components are not compatible");
                         why.addAll(requirementIssues(checked));
                         saved.put("not_shown", why);

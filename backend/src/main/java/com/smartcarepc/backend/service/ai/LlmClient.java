@@ -56,17 +56,65 @@ public class LlmClient {
             throw new AiUnavailableException(HttpStatus.SERVICE_UNAVAILABLE,
                     "The AI assistant is unavailable because its server credentials are not configured.");
         }
+        // Lỗi tạm thời của cổng AI (502 / 503 / 504 / 529, mất kết nối): thử lại một lần sau RETRY_PAUSE nếu còn thời gian
+        // (ca kiểm tra 24/11: cổng trả 502 ba lần trong 3 giây, hai câu hỏi báo lỗi ngay dù gọi lại là được)
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return send(body);
+            } catch (HttpStatusCodeException e) {
+                if (attempt == 0 && transientStatus(e.getStatusCode().value()) && canRetry()) {
+                    log.warn("API AI trả lỗi {} (tạm thời), thử lại một lần", e.getStatusCode().value());
+                    pause();
+                    continue;
+                }
+                throw unavailable(e);
+            } catch (ResourceAccessException e) {
+                if (attempt == 0 && canRetry()) {
+                    log.warn("Không kết nối được API AI ({}), thử lại một lần", e.getMessage());
+                    pause();
+                    continue;
+                }
+                log.warn("Không kết nối được API AI: {}", e.getMessage());
+                throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
+                        "Cannot connect to the AI service. Check your connection and try again.");
+            }
+        }
+    }
+
+    static final java.time.Duration RETRY_PAUSE = java.time.Duration.ofMillis(1500);
+
+    static boolean transientStatus(int status) {
+        return status == 502 || status == 503 || status == 504 || status == 529;
+    }
+
+    /** Còn đủ thời gian của câu trả lời cho một lần gọi lại (nghỉ + ít nhất 15 giây) */
+    private static boolean canRetry() {
+        return com.smartcarepc.backend.service.Io.remainingNanos(Long.MAX_VALUE) > RETRY_PAUSE.plusSeconds(15).toNanos();
+    }
+
+    private static void pause() {
         try {
-            return checkReply(http.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .body(Map.class));
-        } catch (HttpStatusCodeException e) {
+            Thread.sleep(RETRY_PAUSE.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> send(Map<String, Object> body) {
+        return checkReply(http.post()
+                .uri("/chat/completions")
+                .header("Authorization", "Bearer " + apiKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(Map.class));
+    }
+
+    private static AiUnavailableException unavailable(HttpStatusCodeException e) {
+        {
             log.warn("API AI trả lỗi {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
-            throw new AiUnavailableException(HttpStatus.BAD_GATEWAY, switch (e.getStatusCode().value()) {
+            return new AiUnavailableException(HttpStatus.BAD_GATEWAY, switch (e.getStatusCode().value()) {
                 case 401, 403 -> "The AI provider rejected the server credentials. "
                         + "Ask the administrator to check the configuration.";
                 case 400, 404 -> "The AI provider could not accept the request. Ask the administrator to check the model and endpoint configuration.";
@@ -74,10 +122,6 @@ public class LlmClient {
                 case 429, 503, 529 -> "The assistant is busy. Please try again in a few minutes.";
                 default -> "The AI service encountered an error. Please try again.";
             });
-        } catch (ResourceAccessException e) {
-            log.warn("Không kết nối được API AI: {}", e.getMessage());
-            throw new AiUnavailableException(HttpStatus.BAD_GATEWAY,
-                    "Cannot connect to the AI service. Check your connection and try again.");
         }
     }
 

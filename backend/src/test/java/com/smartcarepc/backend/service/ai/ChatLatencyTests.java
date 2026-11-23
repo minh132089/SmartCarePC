@@ -46,6 +46,11 @@ class ChatLatencyTests {
         assertThat(ChatService.knownWorkloadTopics(List.of("PC game 31 triệu, bắt buộc đúng RTX 4060 8GB, RAM 32GB, SSD 1TB.")) & 2).isEqualTo(2);
         assertThat(ChatService.knownWorkloadTopics(List.of("Build PC chơi game Full HD 27 triệu, card nvida, RAM 16GB.")) & 2).isEqualTo(2);
         assertThat(ChatService.knownWorkloadTopics(List.of("Cần PC Mini-ITX chơi game 33 triệu, RAM 16GB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game 30 triệu, không cần mini ITX, dùng mATX bình thường.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Cần máy học AI CUDA 40 triệu, RAM 32GB, SSD 1TB."))).isEqualTo(3);
+        // RAM / SSD không nói lên mức game hay loại đồ họa: vẫn hỏi
+        assertThat(ChatService.knownWorkloadTopics(List.of("Mình cần PC chơi game,25 triệu, RAM16GB SSD512GB.")) & 2).isZero();
+        assertThat(ChatService.knownWorkloadTopics(List.of("Mình cần PC thiết kế đồ họa,30 triệu, RAM32GB SSD1TB.")) & 1).isZero();
         assertThat(ChatService.knownWorkloadTopics(List.of("Tôi chạy CUDA, cần PC 43 triệu, GPU NVIDIA ít nhất 12GB, RAM 32GB và SSD 1TB."))).isEqualTo(3);
         // Chỉ nói "chơi game" và ngân sách: vẫn hỏi mức game
         assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game 20 triệu")) & 2).isZero();

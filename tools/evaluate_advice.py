@@ -16,7 +16,7 @@ MAX_CAPTURE_GAP_SECONDS = 600
 
 # Mẫu câu hỏi lại trong bộ ca viết bằng tiếng Việt; app hỏi bằng tiếng Anh. Thêm từ tương đương, không nới luật
 EN_EQUIV = {"ngân sách": "budget", "bao nhiêu": "how much", "chủ yếu": "main use", "mục đích": "use", "làm gì": "use the PC for",
-            "việc gì": "what for"}
+            "việc gì": "what for", "chưa kiểm chứng": "not been verified", "chưa xác minh": "not verified"}
 
 
 def english_pattern(pattern):
@@ -96,7 +96,7 @@ def evaluate_case(gold, result):
                              r"|Option .*(?:missing|over|not found|could not|no )|not (?:yet )?verified|(?:RAM|VRAM|SSD|CPU|card|GPU).*(?:missing|not enough|too low)", explanation, re.I)
         if not expected.get("allowUnavailable") or not specific:
             issues.append("chưa có phương án và chưa giải thích được lý do")
-    if expected.get("mustExplainMoney") and not re.search(r"\d+(?:[.,]\d+)?\s*(?:triệu|tr\b)", result.get("reply", ""), re.I):
+    if expected.get("mustExplainMoney") and not re.search(r"\d+(?:[.,]\d+)?\s*(?:triệu|tr\b|million)", result.get("reply", ""), re.I):
         issues.append("thiếu giải thích bằng số tiền")
     if expected.get("replyPattern") and not re.search(english_pattern(expected["replyPattern"]), result.get("reply", ""), re.I):
         issues.append("chưa hỏi lại hoặc giải thích đúng điểm cần xác nhận")
