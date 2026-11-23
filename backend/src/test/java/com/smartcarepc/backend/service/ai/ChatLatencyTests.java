@@ -31,6 +31,24 @@ import tools.jackson.databind.json.JsonMapper;
 
 class ChatLatencyTests {
     @Test
+    void moiLanGoiAiChuaLaiThoiGianDungTheVaKhongQua40Giay() {
+        // Còn nhiều thời gian: chờ tối đa 40 giây; còn 20 giây: chờ 12 giây (chừa 8 cho bước dựng thẻ); còn 5 giây: không gọi nữa
+        assertThat(Io.within(java.time.Duration.ofSeconds(85), ChatService::aiWait)).isEqualTo(java.time.Duration.ofSeconds(40));
+        assertThat(Io.within(java.time.Duration.ofSeconds(20), ChatService::aiWait).toSeconds()).isBetween(11L, 12L);
+        assertThat(Io.within(java.time.Duration.ofSeconds(5), ChatService::aiWait)).isZero();
+        assertThat(Io.within(java.time.Duration.ofSeconds(20), ChatService::wrapUp)).isTrue();
+        assertThat(Io.within(java.time.Duration.ofSeconds(85), ChatService::wrapUp)).isFalse();
+    }
+
+    @Test
+    void nganSachVietHoaCoDauVanNhanDuoc() {
+        // Ca thật 23/11: "tôi muốn build PC 20 TRIỆU" bị hỏi lại ngân sách (Ệ hoa không khớp "triệu" khi thiếu UNICODE_CASE)
+        assertThat(ChatService.hasBudget("tôi muốn build PC 20 TRIỆU và chơi được game nặng AAA")).isTrue();
+        assertThat(ChatService.hasBudget("NGÂN SÁCH 15 Triệu")).isTrue();
+        assertThat(ChatService.hasBudget("chơi game AAA")).isFalse();
+    }
+
+    @Test
     void slowModelCannotExtendTheWholeRequestDeadline() {
         var client = mock(LlmClient.class);
         var search = mock(ProductSearch.class);

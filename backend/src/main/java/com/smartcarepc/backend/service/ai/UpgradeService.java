@@ -133,9 +133,9 @@ public class UpgradeService {
                                     "required", List.of("category", "product_id")))),
                             "required", List.of("items"))));
 
-    private static final Pattern WATTS = Pattern.compile("(\\d{3,4})\\s*w\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NVME = Pattern.compile("\\b(nvme|m\\.?2|pcie)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern SFX = Pattern.compile("\\bsfx", Pattern.CASE_INSENSITIVE);
+    private static final Pattern WATTS = Pattern.compile("(\\d{3,4})\\s*w\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern NVME = Pattern.compile("\\b(nvme|m\\.?2|pcie)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern SFX = Pattern.compile("\\bsfx", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private final LlmClient client;
     private final ProductSearch search;
@@ -259,20 +259,29 @@ public class UpgradeService {
         }
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false, retried = false;
+        long started = System.nanoTime();
         for (int round = 0; round < MAX_ROUNDS && !Io.expired(); round++) {
+            // Sắp hết giờ mà kế hoạch đã kiểm tra xong: trả kế hoạch, không chờ AI viết thêm (xem ChatService.ANSWER_BUDGET)
+            if (round > 0 && ChatService.wrapUp() && turn.plan != null) {
+                log.info("Upgrade vòng {}: còn {} ms, đã có kế hoạch, trả kết quả không chờ thêm lượt AI", round + 1,
+                        Io.remainingNanos(Long.MAX_VALUE) / 1_000_000);
+                return respond(null, turn);
+            }
+            boolean lateSearch = System.nanoTime() - started > ChatService.SEARCH_CUTOFF.toNanos();
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", maxTokens);
             if (disableThinking) body.put("thinking", Map.of("type", "disabled"));
             body.put("messages", messages);
-            body.put("tools", searchRounds >= MAX_SEARCH_ROUNDS
+            body.put("tools", searchRounds >= MAX_SEARCH_ROUNDS || lateSearch
                     ? TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList()
                     : TOOLS);
             if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
             var first = Io.async(() -> client.complete(body));
             Map<String, Object> res;
             try {
-                res = Io.await(first, Duration.ofSeconds(40), null);
+                var wait = ChatService.aiWait();
+                res = wait.isZero() ? null : Io.await(first, wait, null);
             } catch (AiUnavailableException e) {
                 if (turn.plan == null) throw e;
                 log.warn("Upgrade: provider failed after the plan was checked; returning the checked card");
@@ -281,8 +290,9 @@ public class UpgradeService {
             // AI chậm một lượt (nhà cung cấp quá tải): còn thời gian thì gọi thêm một lần, vẫn giữ lượt đầu, nhận lượt nào xong trước
             if (res == null && turn.plan == null && !retried && Io.remainingNanos(Long.MAX_VALUE) > Duration.ofSeconds(25).toNanos()) {
                 retried = true;
-                log.warn("Upgrade: AI không trả lời trong 40 giây, gọi thêm một lần");
-                res = Io.await(firstSuccess(first, Io.async(() -> client.complete(body))), Duration.ofSeconds(40), null);
+                log.warn("Upgrade: AI không trả lời kịp, gọi thêm một lần");
+                var again = ChatService.aiWait();
+                res = again.isZero() ? null : Io.await(firstSuccess(first, Io.async(() -> client.complete(body))), again, null);
             }
             if (res == null) {
                 if (turn.plan != null) return respond(null, turn);
@@ -307,7 +317,7 @@ public class UpgradeService {
             }
             messages.add(message);
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
-            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS;
+            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS || lateSearch;
             boolean proposeClosed = proposeRounds >= MAX_PROPOSE_ROUNDS;
             if (names.contains("search_products") && !searchClosed) {
                 searchRounds++;
@@ -846,14 +856,14 @@ public class UpgradeService {
     }
 
     private static final Pattern AI_USE = Pattern.compile(
-            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE);
+            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern GAMING_USE = Pattern.compile(
-            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE);
+            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     /** Việc cần nhiều RAM ngoài game: có thì không chặn mua thêm RAM */
     private static final Pattern HEAVY_USE = Pattern.compile(
             "\\b(stream(ing)?|video|edit(ing)?|premiere|resolve|render|3d|blender|program(ming)?|docker|android studio|virtual machine|vm|ai|"
-                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE);
-    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE);
+                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     /**
      * Công suất nguồn hãng khuyên cho cả máy, bổ sung GPU_PSU cho card yếu / mạnh mà máy cũ hay có. GPU_PSU của trang lắp máy
      * mới để mặc định 550W và sàn 450W khi chọn nguồn mới; với nguồn ĐANG CÓ thì phải theo đúng mức của card (GTX 1650,
@@ -1015,11 +1025,11 @@ public class UpgradeService {
     /** Chipset đời cũ phần lớn không có khe M.2 (Intel 6x/7x/8x, AMD FM2+/AM3+); vài mẫu có, nên chỉ cảnh báo */
     static final Set<String> NO_M2 = Set.of("h61", "h67", "p67", "z68", "b75", "h77", "z77", "q77", "h81", "b85", "h87", "z87", "q87",
             "a68h", "a78", "a88x", "970", "990fx", "990x");
-    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE);
-    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     /** Mã chipset trong tên bo ("ASUS H81M-K" -> "h81"), null nếu không đọc được */
     static String chipsetToken(String board) {
@@ -1166,16 +1176,16 @@ public class UpgradeService {
         return out.toString();
     }
 
-    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern DONG = Pattern.compile(
             "(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
-                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE);
+                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     /** Số kiểu hàng nghìn ("10,000,000", "1.190.000") hoặc từ 6 chữ số (mã CPU như 12400 có 5), không kèm đơn vị đo (MHz, GB, W, mm...) */
     private static final Pattern BARE = Pattern.compile(
             "(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
-            Pattern.CASE_INSENSITIVE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     /** Chữ "giá / costs / priced" đi kèm một con số ngay sau: coi là báo giá */
-    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern LINK = Pattern.compile("\\[([^\\]]*)\\]\\(\\s*https?://[^)]*\\)|https?://\\S+|www\\.\\S+");
 
     /** Câu có nhắc tiền: số có đơn vị tiền, số kiểu hàng nghìn / từ 5 chữ số không đơn vị đo, hay chữ "giá / costs" kèm số */
@@ -1213,7 +1223,7 @@ public class UpgradeService {
      * câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
      */
     /** Chữ của công cụ bị trợ lý chép lại ("Plan accepted.") không phải lời tư vấn */
-    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     static String checkedReply(String draft, Turn turn) {
         if (draft == null) return null;
@@ -1274,12 +1284,12 @@ public class UpgradeService {
     private static final Pattern PREVIOUS_PRICE = Pattern.compile("\\((\\d{4,12}) VND\\)");
     private static final Pattern CHEAPER = Pattern.compile(
             "\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
-            Pattern.CASE_INSENSITIVE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern LAPTOP_WORDS = Pattern.compile(
-            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE);
+            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern MOBILE_CPU = Pattern.compile(
             "\\bi[3579][\\s-]*\\d{4,5}(u|h|hs|hx|hk|g[1-7]|p|y)\\b|\\bryzen\\s*[3579]\\s*\\d{4}(u|h|hs|hx)\\b|\\bultra\\s*[579]\\s*\\d{3}(h|u|v)\\b",
-            Pattern.CASE_INSENSITIVE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     /** Laptop (theo lời người dùng hay mã CPU di động như i5-1135G7, Ryzen 5 5500U): app chỉ tư vấn máy để bàn */
     static boolean laptop(UpgradeInfo pc) {

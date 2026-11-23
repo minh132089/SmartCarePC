@@ -446,7 +446,31 @@ public class ChatService {
         return Io.within(ANSWER_BUDGET, () -> replyWithinBudget(request, progress));
     }
 
+    /*
+     * Thời gian cho một câu trả lời (phản hồi 22-23/11: "AI phản hồi quá lâu"; log 23/11: mỗi vòng AI chậm dần 15 → 27 → 37 giây,
+     * vòng thứ tư hết giờ và người dùng nhận lỗi). Mục tiêu: người dùng có kết quả trong dưới 90 giây.
+     * - SEARCH_CUTOFF: quá mốc này thì không cho tìm thêm, trợ lý chốt với hàng đã có.
+     * - WRAP_UP: còn ít hơn chừng này mà đã có phương án thì trả luôn, không chờ thêm một vòng AI.
+     * - RESPOND_RESERVE: mỗi lần gọi AI chừa lại chừng này cho bước dựng thẻ (đổi link cửa hàng, đọc giá).
+     */
+    // 85 giây (đo 23/11) làm số câu báo lỗi tăng 9 → 11/20 vì AI hôm đó chậm (mỗi vòng 15-38 giây): giữ 110 giây, chỉ giữ các mốc
+    // dưới để câu nhanh hơn khi đã có phương án
     static final java.time.Duration ANSWER_BUDGET = java.time.Duration.ofSeconds(110);
+    static final java.time.Duration SEARCH_CUTOFF = java.time.Duration.ofSeconds(35);
+    static final java.time.Duration WRAP_UP = java.time.Duration.ofSeconds(30);
+    static final java.time.Duration RESPOND_RESERVE = java.time.Duration.ofSeconds(8);
+    static final java.time.Duration AI_CALL_MAX = java.time.Duration.ofSeconds(40);
+
+    /** Chờ một lần gọi AI: tối đa AI_CALL_MAX, và luôn chừa RESPOND_RESERVE trước hạn của câu trả lời */
+    static java.time.Duration aiWait() {
+        long left = Io.remainingNanos(Long.MAX_VALUE) - RESPOND_RESERVE.toNanos();
+        return java.time.Duration.ofNanos(Math.max(0, Math.min(AI_CALL_MAX.toNanos(), left)));
+    }
+
+    /** Còn ít thời gian: đã có kết quả thì nên trả ngay thay vì thêm một vòng AI */
+    static boolean wrapUp() {
+        return Io.remainingNanos(Long.MAX_VALUE) < WRAP_UP.toNanos();
+    }
 
     @SuppressWarnings("unchecked")
     private ChatResponse replyWithinBudget(ChatRequest request, java.util.function.Consumer<String> progress) {
@@ -485,7 +509,7 @@ public class ChatService {
         turn.cpuLocked = userTexts.stream().anyMatch(t -> CPU_MODEL.matcher(t.toLowerCase(java.util.Locale.ROOT)).find()
                 || t.toLowerCase(java.util.Locale.ROOT).matches("(?s).*\\bcpu\\s+(amd|intel)\\b.*"));
         for (String raw : userTexts) {
-            var memoryType = java.util.regex.Pattern.compile("\\bDDR\\s*([45])\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(raw);
+            var memoryType = java.util.regex.Pattern.compile("\\bDDR\\s*([45])\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE).matcher(raw);
             if (memoryType.find()) { turn.ramType = "DDR" + memoryType.group(1); break; }
         }
         String initial = userTexts.isEmpty() ? "" : userTexts.getFirst();
@@ -529,8 +553,18 @@ public class ChatService {
             if (reason != null) return new ChatResponse(reason);
             log.info("Chat: câu hỏi vì sao, trả lời bằng lời, không dựng lại phương án");
         }
+        long started = System.nanoTime();
         for (int round = 0; round < MAX_ROUNDS; round++) {
             if (Io.expired()) break;
+            // Sắp hết giờ mà đã có phương án: gửi phương án đang có, không chờ AI viết thêm
+            if (round > 0 && wrapUp() && (!turn.tiers.isEmpty() || turn.last != null)) {
+                log.info("Chat vòng {}: còn {} ms, đã có phương án, trả kết quả không chờ thêm lượt AI", round + 1,
+                        Io.remainingNanos(Long.MAX_VALUE) / 1_000_000);
+                progress.accept(STAGE_WRITE);
+                return respond(BUILDS_READY, turn);
+            }
+            // Đã tìm quá SEARCH_CUTOFF giây: đóng công cụ tìm như khi hết số vòng tìm
+            boolean lateSearch = System.nanoTime() - started > SEARCH_CUTOFF.toNanos();
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", outputLimit);
@@ -538,7 +572,7 @@ public class ChatService {
             body.put("messages", messages);
             // Đã tìm đủ MAX_SEARCH_ROUNDS vòng: bỏ công cụ tìm để trợ lý chốt với kết quả đã có (mỗi vòng tìm thêm tốn
             // 15 - 35 giây; món chưa ưng thì app tự đổi lúc dựng thẻ)
-            var offered = searchRounds >= MAX_SEARCH_ROUNDS ? withoutSearch(tools) : tools;
+            var offered = searchRounds >= MAX_SEARCH_ROUNDS || lateSearch ? withoutSearch(tools) : tools;
             // Đã đề xuất đủ MAX_PROPOSE_ROUNDS vòng: chỉ còn viết câu trả lời (mỗi vòng đề xuất tốn ~50 giây; giá thật
             // quá cao so với ngân sách thì trợ lý đề xuất lại mãi). Bước dựng thẻ vẫn lọc option theo trần giá
             body.put("tools", offered);
@@ -547,7 +581,8 @@ public class ChatService {
             long t0 = System.nanoTime();
             Map<String, Object> res;
             try {
-                res = Io.await(Io.async(() -> client.complete(body)), java.time.Duration.ofSeconds(40), null);
+                var wait = aiWait();
+                res = wait.isZero() ? null : Io.await(Io.async(() -> client.complete(body)), wait, null);
                 if (res == null) {
                     if (!turn.tiers.isEmpty() || turn.last != null) return respond(BUILDS_READY, turn);
                     throw new AiUnavailableException(HttpStatus.GATEWAY_TIMEOUT, "The advice service is responding slowly. Please try again.");
@@ -647,7 +682,7 @@ public class ChatService {
             // Chạy song song các công cụ của cùng một lượt (thường là nhiều search_products), rồi trả kết quả theo đúng thứ tự
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
             // Trợ lý có khi vẫn gọi search_products sau khi công cụ đã bị bỏ (chép theo các lượt trước): không chạy
-            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS;
+            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS || lateSearch;
             boolean proposeClosed = proposeRounds >= proposeLimit;
             if (names.contains("propose_build") && !proposeClosed) proposeRounds++;
             if (names.contains("search_products") && !searchClosed) {
@@ -1490,7 +1525,7 @@ public class ChatService {
 
     /** Người dùng nói rõ máy mini / ITX / SFF (không phải "nhỏ gọn": đó là vỏ Micro-ATX) */
     private static final java.util.regex.Pattern MINI_ITX = java.util.regex.Pattern.compile(
-            "\\bitx\\b|\\bmini\\b|\\bsff\\b|very small|tiny case|siêu nhỏ|rất nhỏ", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\bitx\\b|\\bmini\\b|\\bsff\\b|very small|tiny case|siêu nhỏ|rất nhỏ", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     private static final java.util.regex.Pattern RAM_ASKED = java.util.regex.Pattern.compile(
             "\\bram\\s*(?:(?:at least|minimum|to|of|lên|xuống|thành|còn|tối thiểu|ít nhất|là)\\s*)?(\\d+)\\s*gb|(\\d+)\\s*gb\\s*ram\\b",
@@ -2516,10 +2551,10 @@ public class ChatService {
 
     /** Hàng không nên đưa người mới tham khảo */
     static final java.util.regex.Pattern JUNK =
-            java.util.regex.Pattern.compile("like ?new|cũ|đã qua sử dụng|2nd|trưng bày|thanh lý|tray|bóc máy", java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.compile("like ?new|cũ|đã qua sử dụng|2nd|trưng bày|thanh lý|tray|bóc máy", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     /** "2x8GB", "2 x 16GB", "kit": bộ nhiều thanh */
     private static final java.util.regex.Pattern KIT =
-            java.util.regex.Pattern.compile("\\d\\s*x\\s*\\d+\\s*gb|\\bkit\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.compile("\\d\\s*x\\s*\\d+\\s*gb|\\bkit\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /**
      * Món thay thế tốt nhất (tối đa 4 lần thử): còn hàng và giá đã kiểm tra, rồi giá đã kiểm tra, rồi có trang sản
@@ -2606,20 +2641,20 @@ public class ChatService {
 
     private static final java.util.regex.Pattern TIER_MENTION = java.util.regex.Pattern.compile(
             "\\*\\*\\s*(Budget|Best fit|Upgraded|Rẻ|Phù hợp|Chất lượng)|(Budget|Best fit|Upgraded|Rẻ|Phù hợp( cho bạn)?|Chất lượng)\\s*[:\\-–—(]|(?:option|build|phương án|bản)\\s+[\"“]?(budget|best fit|upgraded|rẻ|phù hợp|chất lượng)",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     /** Người dùng nhờ tra cứu / kiểm tra lại (vd "kiểm tra lại cửa hàng còn hàng giúp tôi"): vẫn cho dùng công cụ */
     private static final java.util.regex.Pattern LOOKUP_ASK = java.util.regex.Pattern.compile(
-            "look up|search|verify|recheck|kiểm tra|tìm (lại|thêm|giúp)|xem lại|tra lại|check|xác minh", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "look up|search|verify|recheck|kiểm tra|tìm (lại|thêm|giúp)|xem lại|tra lại|check|xác minh", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Người dùng hỏi lý do ("sao không có...", "vì sao", "tại sao", "why") */
     private static final java.util.regex.Pattern WHY_ASK = java.util.regex.Pattern.compile(
-            "\\b(vì sao|tại sao|sao không|sao lại|sao chỉ|why)\\b|^\\s*sao\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\b(vì sao|tại sao|sao không|sao lại|sao chỉ|why)\\b|^\\s*sao\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Người dùng yêu cầu đổi cấu hình đã có (đổi / thay / chuyển / nâng / hạ / bỏ / thêm món, làm lại phương án) */
     private static final java.util.regex.Pattern CHANGE_ASK = java.util.regex.Pattern.compile(
-            "\\b(change|replace|swap|switch|upgrade|downgrade|remove|add|rebuild|đổi|thay|chuyển|nâng|hạ|bỏ|thêm|chọn lại|làm lại|dựng lại)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\b(change|replace|swap|switch|upgrade|downgrade|remove|add|rebuild|đổi|thay|chuyển|nâng|hạ|bỏ|thêm|chọn lại|làm lại|dựng lại)\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern MONEY_MENTION = java.util.regex.Pattern.compile(
-            "\\d+(?:[.,]\\d+)?\\s*(million|m\\b|triệu|tr\\b)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\d+(?:[.,]\\d+)?\\s*(million|m\\b|triệu|tr\\b)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern DONG_MENTION = java.util.regex.Pattern.compile(
             "\\d[\\d.,]*\\s*(?:đ(?:ồng)?|vnd)(?!\\p{L})", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
@@ -2663,7 +2698,7 @@ public class ChatService {
         }));
         List<String> kept = new ArrayList<>();
         for (String line : reply.split("\n")) {
-            if (line.strip().matches("(?i)(would you like|do you want|i can|bạn (có )?muốn|mình có thể).*\\?")) continue;
+            if (line.strip().matches("(?iu)(would you like|do you want|i can|bạn (có )?muốn|mình có thể).*\\?")) continue;
             String lower = line.toLowerCase(java.util.Locale.ROOT);
             if (cards.size() != 3 && (lower.contains("three options") || lower.contains("all three"))) continue;
             var amountsInLine = MONEY_MENTION.matcher(line).results()
@@ -2990,15 +3025,15 @@ public class ChatService {
     /** Loại món được đổi sang hãng / model khác nếu thông số (dung lượng, công suất, loại DDR) không thấp hơn */
     private static final java.util.Set<String> SPEC_SWAPPABLE = java.util.Set.of("ram", "ssd", "psu");
     private static final java.util.regex.Pattern KIT_SIZE =
-            java.util.regex.Pattern.compile("(\\d)\\s*x\\s*(\\d+)\\s*gb", java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.compile("(\\d)\\s*x\\s*(\\d+)\\s*gb", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern GSKILL_KIT = java.util.regex.Pattern.compile(
-            "\\bF[345]-[A-Z0-9]+G[XA]([248])(?:-|\\b)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\bF[345]-[A-Z0-9]+G[XA]([248])(?:-|\\b)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern KINGSTON_KIT = java.util.regex.Pattern.compile(
-            "\\bKF[0-9A-Z]+K([248])/[0-9]+\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
-    private static final java.util.regex.Pattern GB = java.util.regex.Pattern.compile("(\\d+)\\s*gb\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
-    private static final java.util.regex.Pattern TB = java.util.regex.Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*tb\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
-    private static final java.util.regex.Pattern SSD_CODE = java.util.regex.Pattern.compile("(\\d{3,4})g\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
-    private static final java.util.regex.Pattern WATT = java.util.regex.Pattern.compile("(\\d{3,4})\\s*w\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\bKF[0-9A-Z]+K([248])/[0-9]+\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    private static final java.util.regex.Pattern GB = java.util.regex.Pattern.compile("(\\d+)\\s*gb\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    private static final java.util.regex.Pattern TB = java.util.regex.Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*tb\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    private static final java.util.regex.Pattern SSD_CODE = java.util.regex.Pattern.compile("(\\d{3,4})g\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    private static final java.util.regex.Pattern WATT = java.util.regex.Pattern.compile("(\\d{3,4})\\s*w\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /**
      * Sản phẩm rẻ nhất trong nhóm tìm kiếm thay được cho món đang chọn, null nếu không có. RAM, SSD, nguồn được đổi sang
@@ -3436,7 +3471,7 @@ public class ChatService {
 
     private static final java.util.regex.Pattern USER_STICKS = java.util.regex.Pattern.compile(
             "(\\d)\\s*x\\s*(\\d+)\\s*gb|(\\d)\\s*(?:thanh|sticks?|modules?)(?:\\s*(?:of|ram))?\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*[,(]?\\s*(\\d)\\s*(?:thanh|sticks?|modules?)",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /**
      * Cách chia thanh RAM người dùng nói rõ, dạng "NxGB" ("2x8GB", "1 thanh 16GB" là "1x16"), tin mới nhất trước; null nếu
@@ -3925,7 +3960,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern SERVER_RAM = java.util.regex.Pattern.compile(
-            "máy chủ|\\bserver\\b|\\becc\\b|\\brdimm\\b|registered|\\bksm\\d", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "máy chủ|\\bserver\\b|\\becc\\b|\\brdimm\\b|registered|\\bksm\\d", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** RAM máy chủ (ECC, Registered / RDIMM): bo và CPU máy bàn phổ thông không bảo đảm chạy được, không chọn */
     static boolean serverRam(String title) {
@@ -4003,7 +4038,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern RAM_SPLIT = java.util.regex.Pattern.compile(
-            "(\\d)\\s*x\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*x\\s*(\\d)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d)\\s*x\\s*(\\d+)\\s*gb|(\\d+)\\s*gb\\s*x\\s*(\\d)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.Set<Integer> STICK_SIZES = java.util.Set.of(4, 8, 16, 24, 32, 48, 64);
 
     /**
@@ -4080,9 +4115,9 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern FANS_3 = java.util.regex.Pattern.compile(
-            "\\b(trio|triple|tri[\\s-]?frozr|3\\s*x\\b|x3\\b|3\\s*fans?\\b|3\\s*quạt|windforce\\s*3)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\b(trio|triple|tri[\\s-]?frozr|3\\s*x\\b|x3\\b|3\\s*fans?\\b|3\\s*quạt|windforce\\s*3)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern FANS_2 = java.util.regex.Pattern.compile(
-            "\\b(dual|twin|2\\s*x\\b|x2\\b|2\\s*fans?\\b|2\\s*quạt|windforce\\s*2)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\b(dual|twin|2\\s*x\\b|x2\\b|2\\s*fans?\\b|2\\s*quạt|windforce\\s*2)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Số quạt card đồ họa ghi trên tên (2 hoặc 3), null nếu không ghi */
     static Integer gpuFans(String title) {
@@ -4105,7 +4140,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern LOW_PROFILE = java.util.regex.Pattern.compile(
-            "low[\\s-]*profile|\\bthấp\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "low[\\s-]*profile|\\bthấp\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Tản khí thấp (low-profile, top-flow) cho vỏ nhỏ */
     static boolean lowProfile(String title) {
@@ -4114,11 +4149,11 @@ public class ChatService {
 
     /** Đế / quạt tản cho laptop: không phải tản CPU máy bàn */
     private static final java.util.regex.Pattern LAPTOP_COOLER =
-            java.util.regex.Pattern.compile("đế\\s+tản|laptop|notebook|cooling\\s+pad", java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.compile("đế\\s+tản|laptop|notebook|cooling\\s+pad", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Vỏ có kính (người dùng thích kính thì đổi vỏ rẻ hơn vẫn phải có kính) */
     static boolean glass(String title) {
-        return title != null && java.util.regex.Pattern.compile("kính|glass|tempered|\\btg\\b", java.util.regex.Pattern.CASE_INSENSITIVE)
+        return title != null && java.util.regex.Pattern.compile("kính|glass|tempered|\\btg\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE)
                 .matcher(title).find();
     }
 
@@ -4434,7 +4469,7 @@ public class ChatService {
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
-    private static final java.util.regex.Pattern VRAM = java.util.regex.Pattern.compile("\\b(4|6|8|10|12|16|20|24)\\s*g(b)?\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern VRAM = java.util.regex.Pattern.compile("\\b(4|6|8|10|12|16|20|24)\\s*g(b)?\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Dung lượng bộ nhớ card ghi trên tên ("8GB", "8G"), null nếu không ghi */
     static Integer vram(String title) {
@@ -4466,7 +4501,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern PSU_FORM = java.util.regex.Pattern.compile(
-            "sfx(-l)?\\s*[/,&-]\\s*atx|atx\\s*[/,&-]\\s*sfx(-l)?|(psu|nguồn)\\s*(chuẩn\\s*)?atx|atx\\s*(psu|power)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "sfx(-l)?\\s*[/,&-]\\s*atx|atx\\s*[/,&-]\\s*sfx(-l)?|(psu|nguồn)\\s*(chuẩn\\s*)?atx|atx\\s*(psu|power)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Cỡ bo lớn nhất vỏ chứa được: như boardSize nhưng bỏ phần ghi chuẩn nguồn ("nguồn ATX", "SFX/ATX") */
     static Integer caseBoardSize(String title) {
@@ -4480,7 +4515,7 @@ public class ChatService {
     /** Dòng vỏ chỉ chứa bo Mini ITX (tên mẫu) */
     private static final java.util.regex.Pattern ITX_CASES = java.util.regex.Pattern.compile(
             "\\b(sugo|sg1[0-9]|nr200p?|a4-h2o|q58|ghost\\s*s1|meshlicious|ncase|terra|dan\\s*a4|jonsbo\\s*(a4|n1|v8|v10|z20i)|nzxt\\s*h1|h210i?|ridge)\\b",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     private static final java.util.regex.Pattern BOARD_CHIP = java.util.regex.Pattern.compile("\\b(?:a620a|[abhzx]\\d{3})-?([mie]?)\\b");
 
@@ -4548,7 +4583,7 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern BUDGET = java.util.regex.Pattern.compile(
-            "\\d+([.,]\\d+)?\\s*(million|triệu|tr\\b|củ|m\\b)|\\d{1,3}([.,]\\d{3}){2,}", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\d+([.,]\\d+)?\\s*(million|triệu|tr\\b|củ|m\\b)|\\d{1,3}([.,]\\d{3}){2,}", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Câu của người dùng có nói ngân sách (vd "12 triệu", "25tr", "40.000.000") */
     static boolean hasBudget(String text) {
@@ -4556,9 +4591,9 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern MONEY = java.util.regex.Pattern.compile(
-            "(\\d+(?:[.,]\\d+)?)\\s*(?:million|triệu|tr\\b|củ|m\\b)|(\\d{1,3}(?:[.,]\\d{3}){2,})", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d+(?:[.,]\\d+)?)\\s*(?:million|triệu|tr\\b|củ|m\\b)|(\\d{1,3}(?:[.,]\\d{3}){2,})", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
     private static final java.util.regex.Pattern BUDGET_WORD = java.util.regex.Pattern.compile(
-            "(budget(?: of)?|around|about|under|maximum|up to|have|ngân sách|tầm|khoảng|dưới|tối đa|trong|mức|có)\\s*:?\\s*$", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(budget(?: of)?|around|about|under|maximum|up to|have|ngân sách|tầm|khoảng|dưới|tối đa|trong|mức|có)\\s*:?\\s*$", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /**
      * Các khoản tiền có thể là ngân sách trong lời người dùng (tin mới nhất trước). Trong một tin: số đứng sau "ngân
@@ -4655,8 +4690,8 @@ public class ChatService {
             Map.entry("ssd_m2_2280", "SSD NVMe M.2 512GB"), Map.entry("fan120", "quạt case 120mm"));
 
     private static final java.util.regex.Pattern GPU_CORE = java.util.regex.Pattern.compile(
-            "\\b(rtx|gtx|rx|arc)[™®\\s]*([a-z]?\\d{3,4})(\\s*(ti\\s*super|ti|super|xtx|xt|gre))?", java.util.regex.Pattern.CASE_INSENSITIVE);
-    private static final java.util.regex.Pattern BOARD_CORE = java.util.regex.Pattern.compile("\\b(a620a|[abhzx]\\d{3})m?\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\b(rtx|gtx|rx|arc)[™®\\s]*([a-z]?\\d{3,4})(\\s*(ti\\s*super|ti|super|xtx|xt|gre))?", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    private static final java.util.regex.Pattern BOARD_CORE = java.util.regex.Pattern.compile("\\b(a620a|[abhzx]\\d{3})m?\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /**
      * Từ khoá lõi của một dòng (bậc giữa thông số đầy đủ và từ khoá chung): card "VGA RTX 4060", bo "mainboard B550 DDR4",
