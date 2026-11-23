@@ -103,9 +103,27 @@ export function startMaintenance(pc: MaintenancePC, task: MaintenanceTask) {
   if (!same) { if (pc.machine === 'gaming') v.setBuild('gaming'); else v.setFamily(pc.machine) }
   const steps = maintenanceSteps(task, pc.machine === 'gaming' ? null : pc.machine, 'gaming', pc.hasGpu, pc.cooler)
   const done = loadDone(key), first = steps.findIndex(s => !done.has(s.id))
-  useViewer.setState({ page: 'build', guide: true, guideKind: 'maintenance', maintenanceTask: task, maintenanceRunId: run.id, maintenanceCooler: pc.cooler, maintenanceHasGpu: pc.hasGpu, maintenanceLift: false, guideIndex: first < 0 ? 0 : first, guidePart: null, guideFull: false, exploded: false, step: 0, powered: false, selected: null, inspecting: null, sideOpen: false, sideManual: false })
+  useViewer.setState({ page: 'build', guide: true, guideKind: 'maintenance', maintenanceTask: task, maintenanceRunId: run.id, maintenanceCooler: pc.cooler, maintenanceHasGpu: pc.hasGpu, maintenanceLift: 0, guideIndex: first < 0 ? 0 : first, guidePart: null, guideFull: false, exploded: false, step: 0, powered: false, selected: null, inspecting: null, sideOpen: false, sideManual: false })
   recordRun('maintenance_started', { resumed: !!resume, cooler: pc.cooler })
 }
+/**
+ * Quay lại bài bảo dưỡng đang làm dở, đúng máy của bài đó. Đang xem đúng máy của bài thì giữ nguyên bước đang xem;
+ * người dùng đã đổi sang máy khác trên trang mô hình thì mở lại máy của bài (trước đây mở checklist theo máy mới nhưng
+ * vẫn ghi kết quả vào bài của máy cũ). Không còn bài dở thì mở hộp chọn bài.
+ */
+export function resumeRun() {
+  const { pc, run } = useMaintenance.getState()
+  const v = useViewer.getState()
+  if (!pc || !run || run.completed) {
+    useMaintenance.getState().open()
+    return
+  }
+  const sameMachine = run.machine === maintenanceKey(currentPC(), run.task) && v.maintenanceRunId === run.id
+  if (sameMachine) v.resumeMaintenance()
+  else startMaintenance(pc, run.task)
+}
+/** Có bài bảo dưỡng đang làm dở (để hiện lối quay lại) */
+export const useRunInProgress = () => useMaintenance((s) => !!s.pc && !!s.run && !s.run.completed)
 export function recordStep(stepId: string, alone: boolean) {
   const run = useMaintenance.getState().run
   if (!run || run.completed) return

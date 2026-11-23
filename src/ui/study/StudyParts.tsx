@@ -190,9 +190,9 @@ export function PrimaryButton({ children, onClick, disabled }: { children: React
   )
 }
 
-export function QuietButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+export function QuietButton({ children, onClick, disabled }: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
   return (
-    <button onClick={onClick} className={`rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}>
+    <button onClick={onClick} disabled={disabled} className={`rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-fill-hover disabled:opacity-50 ${press} ${focus}`}>
       {children}
     </button>
   )

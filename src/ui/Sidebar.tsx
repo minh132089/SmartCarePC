@@ -12,6 +12,7 @@ import { FlowSteps } from './AdvicePage'
 import { FeedbackButton } from './study/FeedbackButton'
 import { MaintenanceEntry } from './maintenance/MaintenanceHub'
 import { StudyBar } from './study/StudyBar'
+import { resumeRun, useRunInProgress } from './maintenance/maintenanceState'
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -71,6 +72,10 @@ export function Sidebar() {
   ) as PartId[]
   const current = familyId ?? 'gaming'
   const listRef = useRef<HTMLDivElement>(null)
+  // Vừa bấm "Back to the model and components" từ bài bảo dưỡng: trang mô hình vẫn thuộc luồng bảo dưỡng
+  // Ngữ cảnh bảo dưỡng chỉ khi còn bài dở: làm xong rồi thì trang mô hình trở lại bình thường
+  const inProgress = useRunInProgress()
+  const maintenanceContext = useViewer((s) => s.guideKind === 'maintenance') && inProgress
 
   // Chọn linh kiện bằng cách bấm vào hình 3D: cuộn danh sách tới đúng dòng đó
   useEffect(() => {
@@ -84,7 +89,7 @@ export function Sidebar() {
     <aside className="h-[46%] w-full shrink-0 overflow-y-auto px-5 pt-6 pb-8 md:h-full md:w-[400px] md:px-7 md:pt-10">
       <div className="enter" style={{ '--i': 0 } as React.CSSProperties}>
         <div className="flex items-center justify-between gap-2">
-          <FlowSteps current={2} compact />
+          <FlowSteps current={2} maintenance={maintenanceContext} compact />
           <FeedbackButton compact />
         </div>
         <StudyBar />
@@ -145,6 +150,15 @@ export function Sidebar() {
         <PowerButton />
       </div>
       <QualityPicker />
+      {maintenanceContext && (
+        <div className="enter mt-6 rounded-2xl bg-info-bg p-4" style={{ '--i': 3 } as React.CSSProperties}>
+          <p className="text-[15px] font-semibold text-ink">Maintenance in progress</p>
+          <p className="mt-1 text-[14px] leading-[1.45] text-ink-2">Your progress is kept. Continue from the step you were on.</p>
+          <button onClick={resumeRun} className={`mt-3 rounded-full bg-accent px-5 py-2.5 text-[15px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}>
+            Back to the maintenance guide
+          </button>
+        </div>
+      )}
       <GuideCard />
       <div className="mt-4 rounded-2xl bg-surface p-4"><p className="mb-2 text-[14px] text-ink-2">Already have a PC? Keep it clean and plan your next check.</p><MaintenanceEntry /></div>
 

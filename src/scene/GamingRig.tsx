@@ -143,11 +143,11 @@ const CASE_FAN = ['blades']
  * (z ≤ -32, không chạm khung quạt), vòng qua đầu két ở x ≥ 146 rồi đi lên vào hai cút dưới bình két.
  */
 function AioHoses() {
-  const lift = useViewer(s => s.guide && s.guideKind === 'maintenance' && s.maintenanceLift)
+  const lift = useViewer(s => (s.guide && s.guideKind === 'maintenance' ? s.maintenanceLift : 0))
   const tubes = useMemo(() => {
     const pump = onBoard(ON_BOARD.pump)
     return PUMP_FITTINGS.map((f, i) => {
-      const offset = lift ? installPath('gaming', 'cooler.1', [0, 0, 1.9]).map(n => n * 100) as Mm3 : [0, 0, 0] as Mm3
+      const offset = installPath('gaming', 'cooler.1', [0, 0, 1.9]).map(n => n * 100 * lift) as Mm3
       const a = add(add(pump, f), offset)
       const b = add(CASE_PARTS.radiator, RAD_FITTINGS[i])
       const dz = i === 0 ? -7 : 7

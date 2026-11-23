@@ -43,7 +43,7 @@ export function AccountSlot({ hideSignIn = false }: { hideSignIn?: boolean }) {
   return (
     <button
       onClick={openAuth}
-      className="flex items-center gap-1.5 rounded-full bg-fill px-3 py-1.5 text-[13.5px] font-medium text-ink hover:bg-fill-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-fill px-3 py-1.5 text-[13.5px] font-medium text-ink hover:bg-fill-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <SignIn size={15} aria-hidden /> Sign in
     </button>

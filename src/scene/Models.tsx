@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { Box3, Color, Group, Mesh, MeshStandardMaterial, Vector3, type Object3D } from 'three'
 import type { BuildId, CoolerKind, FormFactor } from '../data/builds'
-import { usePartState } from './partContext'
+import { useLightsOff, usePartState } from './partContext'
 import { useViewer } from '../store'
 
 /*
@@ -41,16 +41,30 @@ const NATIVE = {
 } as const
 
 /** Đổi màu tự sáng của vật liệu. Vật liệu three.js vốn được thiết kế để sửa trực tiếp. */
-function applyHighlight(materials: MeshStandardMaterial[], selected: boolean, hovered: boolean) {
+/**
+ * Vật liệu đèn trong các model (LED quạt ARGB, viền đèn RAM, dải đèn vỏ, vòng đèn bơm, đèn trạng thái bo mạch / ổ cứng).
+ * Đèn này tô bằng màu gốc sáng chứ không chỉ bằng emissive, nên tắt emissive thôi vẫn trông như đang sáng (QA review 23/11).
+ */
+const LED_MATERIAL = /^(argb_led|case_accent|cyan.*|hdd_led|led_.*|rgb.*)$/
+/** Đèn tắt: hệ số trong không gian màu tuyến tính, nhìn ra còn khoảng 20% độ sáng màu gốc, như nhựa tản sáng khi không có điện */
+export const LED_OFF = 0.035
+
+function applyHighlight(materials: MeshStandardMaterial[], selected: boolean, hovered: boolean, lightsOff = false) {
   const color = new Color(selected ? '#0071e3' : '#2997ff')
   for (const m of materials) {
     if (!m.userData.baseEmissive) {
       m.userData.baseEmissive = m.emissive.clone()
       m.userData.baseIntensity = m.emissiveIntensity
+      m.userData.baseColor = m.color.clone()
     }
+    if (LED_MATERIAL.test(m.name)) m.color.copy(m.userData.baseColor).multiplyScalar(lightsOff ? LED_OFF : 1)
     if (selected || hovered) {
       m.emissive.copy(color)
       m.emissiveIntensity = selected ? 0.45 : 0.2
+    } else if (lightsOff) {
+      // Hướng dẫn bảo dưỡng: máy đã tắt và rút điện, đèn RGB không sáng
+      m.emissive.set('#000000')
+      m.emissiveIntensity = 0
     } else {
       m.emissive.copy(m.userData.baseEmissive)
       m.emissiveIntensity = m.userData.baseIntensity
@@ -74,7 +88,8 @@ function useHighlightedClone(scene: Object3D) {
     return { root, materials }
   }, [scene])
 
-  useEffect(() => applyHighlight(materials, selected, hovered), [selected, hovered, materials])
+  const lightsOff = useLightsOff()
+  useEffect(() => applyHighlight(materials, selected, hovered, lightsOff), [selected, hovered, materials, lightsOff])
 
   return root
 }
@@ -179,9 +194,6 @@ function spinAround(o: Object3D, dt: number) {
 
 export const MODEL_SIZE = NATIVE
 
-for (const url of [AIO_RADIATOR_URL, ...Object.values(URL), ...Object.values(BOARD_URL), ...Object.values(COOLER_URL), ...Object.values(RAM_URL), ...CASE_IDS.map(caseUrl)]) {
-  useGLTF.preload(url)
-}
 
 /*
  * Bộ linh kiện riêng cho máy Gaming, dựng bằng tools/build_gaming.py theo bản vẽ của Codex (design/gaming/).
@@ -277,4 +289,15 @@ export function GlbSpinner({
   return <primitive object={root} />
 }
 
-for (const name of GAMING_PARTS) useGLTF.preload(G(name))
+let preloaded = false
+/**
+ * Tải trước toàn bộ model 3D. Không gọi lúc nạp module nữa: trang chủ không vẽ 3D mà vẫn kéo hơn 30 file GLB (QA 23/11).
+ * Gọi khi người dùng sắp vào màn 3D (trang tư vấn mua mới, hoặc khi cảnh 3D mở).
+ */
+export function preloadModels() {
+  if (preloaded) return
+  preloaded = true
+  for (const url of [AIO_RADIATOR_URL, ...Object.values(URL), ...Object.values(BOARD_URL), ...Object.values(COOLER_URL), ...Object.values(RAM_URL), ...CASE_IDS.map(caseUrl)])
+    useGLTF.preload(url)
+  for (const name of GAMING_PARTS) useGLTF.preload(G(name))
+}

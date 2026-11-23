@@ -11,3 +11,8 @@ export function usePartState() {
   const hovered = useViewer((s) => id !== null && s.hovered === id)
   return { selected, hovered }
 }
+
+/** Hướng dẫn bảo dưỡng: máy đã tắt và rút điện thì mọi đèn RGB trên mô hình tắt theo (trừ bước làm khi máy chạy, vd nghe quạt) */
+export function useLightsOff() {
+  return useViewer((s) => s.guide && s.guideKind === 'maintenance' && !s.powered)
+}

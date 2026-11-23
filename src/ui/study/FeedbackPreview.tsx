@@ -17,7 +17,7 @@ const rows: FeedbackRow[] = Array.from({ length: 31 }, (_, i) => ({
 export default function FeedbackPreview() {
   const [loading, setLoading] = useState(false)
   return <div className="feedback-dashboard h-full overflow-y-auto bg-canvas"><main className="mx-auto max-w-[1240px] px-5 py-8">
-    <a href="/" className="text-[13px] text-link hover:underline">← Back to SmartCare PC</a>
+    <a href="/" className="text-[13px] text-link hover:underline">← Back to PC SmartCare</a>
     <p className="mt-6 text-[11px] font-semibold tracking-[.12em] text-ink-3">UI PREVIEW · SAMPLE DATA</p>
     <h1 className="display mt-2">Feedback data</h1>
     <p className="mt-3 max-w-[600px] text-[14px] text-ink-2">These figures are generated to preview the charts and layout. This preview does not connect to the backend or save feedback.</p>

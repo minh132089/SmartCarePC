@@ -8,7 +8,10 @@ import { defineConfig, type ProxyOptions } from 'vite'
  * Bỏ header Origin: mở bằng địa chỉ khác localhost (link tunnel khi demo) thì backend không chặn vì CORS.
  */
 const apiProxy: ProxyOptions = {
-  target: 'http://localhost:8083',
+  // Máy không chạy backend (vd Mac sau khi backend chuyển sang laptop): đặt API_TARGET trỏ tới backend khác, ví dụ
+  // API_TARGET=https://<địa chỉ tunnel>.trycloudflare.com npm run dev. Không đặt thì như cũ: backend trên máy này, cổng 8083
+  target: process.env.API_TARGET ?? 'http://localhost:8083',
+  changeOrigin: !!process.env.API_TARGET,
   configure: (proxy) => proxy.on('proxyReq', (req) => req.removeHeader('origin')),
 }
 

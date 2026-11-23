@@ -16,6 +16,8 @@ import { useViewer } from '../store'
 import { QUALITY } from '../perf/quality'
 import { RenderControl } from '../perf/RenderControl'
 
+const MAINTENANCE_BASE = 'This copper base touches the CPU. When you replace the paste, wipe the old paste off here and on the CPU with isopropyl alcohol, and let both dry first.'
+
 // Hướng nhìn ban đầu cho từng linh kiện, chọn để mặt có nhiều chi tiết nhất quay về phía người xem
 const VIEW: Partial<Record<PartId, [number, number, number]>> = {
   ram: [0.25, 0.35, 1],
@@ -37,6 +39,13 @@ function familyView(f: Family, id: PartId): [number, number, number] | null {
 }
 
 /** Model riêng của máy Gaming (dựng theo bản vẽ design/gaming). */
+/** Bơm của tản nước trong khung xem cận cảnh. Đang bảo dưỡng thì bơm đã lắp từ lâu: không vẽ màng bảo vệ đế đồng nữa */
+function InspectPump() {
+  const maintenance = useViewer((s) => s.guide && s.guideKind === 'maintenance')
+  return <GamingModel name="aio_pump" hide={maintenance ? PEEL : undefined} />
+}
+const PEEL = ['peel_film']
+
 function GamingPartModel({ id }: { id: PartId }) {
   switch (id) {
     case 'motherboard':
@@ -58,7 +67,7 @@ function GamingPartModel({ id }: { id: PartId }) {
         <>
           <GamingSpinner name="aio_radiator" nodes={['blades_1', 'blades_2']} axis="y" />
           <group position={[0, -1.1, 0]}>
-            <GamingModel name="aio_pump" />
+            <InspectPump />
           </group>
         </>
       )
@@ -91,7 +100,7 @@ function FamilyPartModel({ id, f }: { id: PartId; f: Family }) {
           <>
             <GlbSpinner url={MODEL_URL.radiator.aio_360} nodes={AIO360_FANS} axis="y" />
             <group position={[0, -1.1, 0]}>
-              <GamingModel name="aio_pump" />
+              <InspectPump />
             </group>
           </>
         )
@@ -218,6 +227,7 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
   const inspect = useViewer((s) => s.inspect)
   const buildId = useViewer((s) => s.buildId)
   const familyId = useViewer((s) => s.familyId)
+  const maintenance = useViewer((s) => s.guide && s.guideKind === 'maintenance')
   const quality = useViewer((s) => s.quality)
   const family = familyId ? FAMILIES[familyId] : null
   const [active, setActive] = useState<number | null>(null)
@@ -230,7 +240,7 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
   }, [inspect])
 
   const build = getBuild(buildId)
-  const spots = inspecting === 'tools'
+  const raw = inspecting === 'tools'
     ? TOOL_HOTSPOTS
     : family
     ? familyHotspots(family, inspecting)
@@ -241,6 +251,10 @@ function InspectorPanel({ inspecting }: { inspecting: PartId }) {
           board: build.formFactor,
           cooler: build.cooler,
         })
+  // Đang bảo dưỡng: ghi chú "bóc màng bảo vệ trước khi lắp" chỉ đúng với tản mới; đổi thành việc cần làm khi thay keo (QA 23/11 UX-06)
+  const spots = maintenance && inspecting === 'cooler'
+    ? raw.map((s) => (/protective film/i.test(`${s.title} ${s.text}`) ? { ...s, title: s.title === 'Protective film' ? 'Copper base' : s.title, text: MAINTENANCE_BASE } : s))
+    : raw
   const dir = (family && familyView(family, inspecting)) || VIEW[inspecting] || [1, 0.5, 1]
   const len = Math.hypot(...dir)
   const cam: [number, number, number] = [(dir[0] / len) * 8, (dir[1] / len) * 8, (dir[2] / len) * 8]

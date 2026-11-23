@@ -1,5 +1,7 @@
 import { Fade } from '@animate-ui/react/primitives/effects/fade'
+import { useEffect } from 'react'
 import { Scene } from './scene/Scene'
+import { preloadModels } from './scene/Models'
 import { useViewer } from './store'
 import { AdvicePage } from './ui/AdvicePage'
 import { AssemblySteps } from './ui/AssemblySteps'
@@ -19,6 +21,14 @@ export default function App() {
   const page = useViewer((s) => s.page)
   const inspecting = useViewer((s) => s.inspecting)
   const machine = useViewer((s) => `${s.familyId ?? s.buildId}:${s.guideKind}:${s.maintenanceTask}:${s.maintenanceCooler}:${s.maintenanceHasGpu}:${s.maintenanceRunId}`)
+  // Trang tư vấn mua mới dẫn thẳng tới mô hình 3D: tải model lúc trình duyệt rảnh để vào bước lắp không phải chờ
+  useEffect(() => {
+    if (page !== 'advice') return
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500))
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout
+    const id = idle(() => preloadModels())
+    return () => cancel(id)
+  }, [page])
   // Màn đầu chọn hướng; tư vấn máy mới và tư vấn nâng cấp không vẽ cảnh 3D; trang build là mô hình 3D kèm hướng dẫn
   if (page !== 'build')
     return (

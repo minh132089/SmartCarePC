@@ -183,8 +183,8 @@ export function FeedbackAdmin() {
   return (
     <div className="feedback-dashboard h-full overflow-y-auto bg-canvas">
       <div className="mx-auto max-w-[1240px] px-4 py-8 md:px-8">
-        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Back to SmartCare PC</a>
-        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">SMARTCARE PC · USER EXPERIENCE RESEARCH</p>
+        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Back to PC SmartCare</a>
+        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">PC SMARTCARE · USER EXPERIENCE RESEARCH</p>
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="display min-w-0 flex-1">Feedback data</h1>
           <QuietButton onClick={() => void load(key)}>

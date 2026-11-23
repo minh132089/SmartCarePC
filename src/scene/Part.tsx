@@ -2,8 +2,10 @@ import { animated, useSpring } from '@react-spring/three'
 import { Html } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useState, type ReactNode } from 'react'
+import { Color } from 'three'
+import { LED_OFF } from './Models'
 import { PARTS, type PartId } from '../data/parts'
-import { PartContext, usePartState } from './partContext'
+import { PartContext, useLightsOff, usePartState } from './partContext'
 import { useViewer } from '../store'
 import { isOut, type AssemblyKey } from '../data/assembly'
 
@@ -37,7 +39,8 @@ export function Part({
   children: ReactNode
 }) {
   const exploded = useViewer((s) => s.exploded)
-  const out = useViewer((s) => s.guide && s.guideKind === 'maintenance' ? s.maintenanceLift && path === 'cooler.1' : (step ? isOut(s.step, step) : s.exploded))
+  // 0..1: phần đường tháo đã đi. Bảo dưỡng chỉ nhấc khối bơm / tản (cooler.1), có bước chỉ nhấc nhẹ
+  const out = useViewer((s) => s.guide && s.guideKind === 'maintenance' ? (path === 'cooler.1' ? s.maintenanceLift : 0) : (step ? isOut(s.step, step) : s.exploded) ? 1 : 0)
   // Hướng dẫn lắp: linh kiện của bước sau chưa xuất hiện; linh kiện của bước đang xem hiện ở chỗ tháo rồi bay vào
   const hidden = useViewer((s) => (!!step && s.guide && s.guideKind === 'assembly' && !s.guideFull && isOut(s.step, step) && s.guidePart !== step)
     || (id === 'gpu' && (s.guide && s.guideKind === 'maintenance' ? !s.maintenanceHasGpu : s.advisedBuild != null && !s.advisedBuild.items.some((i) => i.category === 'gpu'))))
@@ -48,7 +51,7 @@ export function Part({
   const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const instant = useViewer((s) => s.instantMotion)
   const spring = useSpring({
-    offset: out ? explode : [0, 0, 0],
+    offset: explode.map((n) => n * out),
     delay: reduce || step ? 0 : (exploded ? order : MAX_ORDER - order) * 60,
     config: { tension: 247, friction: 31.4 },
     immediate: reduce || instant,
@@ -102,9 +105,14 @@ export function Mat({
   glow?: string
 }) {
   const { selected, hovered } = usePartState()
-  const emissive = selected ? '#0071e3' : hovered ? '#2997ff' : (glow ?? '#000000')
-  const intensity = selected ? 0.55 : hovered ? 0.25 : glow ? 2.6 : 0 // đèn RGB đủ sáng để vượt ngưỡng toả sáng
-  return <meshStandardMaterial color={color} metalness={metal} roughness={rough} emissive={emissive} emissiveIntensity={intensity} />
+  // Đang theo hướng dẫn bảo dưỡng thì máy đã tắt và rút điện: đèn RGB không sáng
+  const off = useLightsOff()
+  const lit = off ? undefined : glow
+  const emissive = selected ? '#0071e3' : hovered ? '#2997ff' : (lit ?? '#000000')
+  const intensity = selected ? 0.55 : hovered ? 0.25 : lit ? 2.6 : 0 // đèn RGB đủ sáng để vượt ngưỡng toả sáng
+  // Khối đèn (có glow) tắt thì màu cũng tối đi, không còn trông như đang sáng
+  const shown = off && glow ? `#${new Color(color).multiplyScalar(LED_OFF).getHexString()}` : color
+  return <meshStandardMaterial color={shown} metalness={metal} roughness={rough} emissive={emissive} emissiveIntensity={intensity} />
 }
 
 export function Box({

@@ -5,11 +5,14 @@ import { FAMILIES } from '../data/families'
 import { guideChatContext, guideSteps } from '../data/guide'
 import { maintenanceContext, maintenanceSteps } from '../data/maintenance'
 import { useViewer } from '../store'
-import { useAssemblyChat } from './chat/chatStore'
+import { useAssemblyChat, useStepChat } from './chat/chatStore'
 import { Bubble, Composer, IconButton, Thread } from './chat/ChatParts'
 
 const GREETING =
   "Need help while building? Describe what looks unfamiliar or difficult. I can see your current assembly step and help you continue safely."
+
+/** Bài bảo dưỡng của hội thoại trợ giúp hiện tại (giữ qua lần đóng / mở trang) */
+let lastStepRun: string | null = null
 
 /** Những chỗ người mới hay vướng khi tự lắp */
 const SUGGESTIONS = [
@@ -39,11 +42,29 @@ export function ChatPanel() {
   const step = guide ? steps[Math.min(guideIndex, steps.length - 1)] : null
   const stepText = step ? `Step ${Math.min(guideIndex, steps.length - 1) + 1}/${steps.length}: ${step.title}` : null
   const suggestions = kind === 'maintenance' ? [`What should I watch for in the step: ${step?.title ?? 'preparation'}?`, 'How can I tell whether it is safe to continue?', 'Which parts should I leave in place?'] : step ? [`What should I watch for in the step: ${step.title}?`, ...SUGGESTIONS.slice(0, 3)] : SUGGESTIONS
-  const ctx = { buildCode: familyId ?? buildId, guideStep: kind === 'maintenance' && guide ? maintenanceContext(steps, guideIndex, familyId ?? buildId, task) : guideChatContext(familyId, buildId, guide ? guideIndex : null, advised) }
+  // Ngữ cảnh bảo dưỡng (kể cả khi tạm đóng bài để xem mô hình): trợ lý trả lời theo bài bảo dưỡng, không theo hướng dẫn lắp
+  const ctx = { buildCode: familyId ?? buildId, guideStep: kind === 'maintenance' ? maintenanceContext(steps, guideIndex, familyId ?? buildId, task) : guideChatContext(familyId, buildId, guide ? guideIndex : null, advised) }
 
-  const { messages, busy, stage, error, send, retry, reset } = useAssemblyChat()
-  const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState('')
+  // Hội thoại riêng cho từng loại hướng dẫn: mở trợ giúp ở bài bảo dưỡng không còn hiện câu hỏi / lỗi của hướng dẫn lắp
+  const assemblyChat = useAssemblyChat()
+  const stepChat = useStepChat()
+  const { messages, busy, stage, error, send, retry, reset } = kind === 'maintenance' ? stepChat : assemblyChat
+  const open = useViewer((s) => s.helpOpen)
+  const setOpen = useViewer((s) => s.setHelpOpen)
+  const inspecting = useViewer((s) => s.inspecting)
+  const runId = useViewer((s) => s.maintenanceRunId)
+  const task_ = useViewer((s) => s.maintenanceTask)
+  // Bài bảo dưỡng khác (việc khác hoặc lần làm mới): bắt đầu hội thoại mới
+  useEffect(() => {
+    const key = `${runId}:${task_}`
+    if (lastStepRun !== null && lastStepRun !== key) useStepChat.getState().reset()
+    lastStepRun = key
+  }, [runId, task_])
+  // Bản nháp riêng cho từng hội thoại (hướng dẫn lắp / từng lần bảo dưỡng): đổi luồng không mang câu đang gõ sang luồng khác
+  const draftKey = kind === 'maintenance' ? `maintenance:${runId}` : 'assembly'
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const draft = drafts[draftKey] ?? ''
+  const setDraft = (value: string) => setDrafts((d) => ({ ...d, [draftKey]: value }))
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -53,7 +74,7 @@ export function ChatPanel() {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, setOpen])
 
   // Có tin mới thì cuộn xuống cuối
   useEffect(() => {
@@ -66,12 +87,14 @@ export function ChatPanel() {
     void send(text, ctx)
   }
 
+  // Đang xem cận cảnh linh kiện: nút nổi che mất chú thích của khung xem, ẩn đi
+  if (!open && inspecting) return null
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
         aria-label={kind === 'maintenance' ? 'Open step help' : 'Open assembly help'}
-        className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-on-ink shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:bottom-5 md:py-3 md:pr-5 md:pl-4"
+        className="absolute right-4 bottom-20 z-30 flex items-center gap-2 rounded-full bg-ink p-3.5 text-[15px] font-medium text-on-ink shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-transform duration-100 active:scale-[0.96] md:py-3 md:pr-5 md:pl-4"
       >
         <ChatCircleDots size={19} aria-hidden />
         <span className="hidden md:inline">{kind === 'maintenance' ? 'Step help' : 'Assembly help'}</span>

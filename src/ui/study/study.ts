@@ -66,6 +66,21 @@ interface StudyState {
   setOwnPc: (value: string) => void
 }
 
+/**
+ * Người dùng bấm "Để sau" ở form đầu: không tự mở lại khi tải lại trang trong cùng phiên trình duyệt.
+ * Khoá theo mã người tham gia và chỉ cho form đầu: người khác dùng chung tab, hay form cuối kỳ, vẫn được mời bình thường.
+ */
+const laterKey = (code: string) => `pcsc-baseline-later:${code}`
+export function postponeBaseline() {
+  const code = useStudy.getState().code
+  if (!code) return
+  try { sessionStorage.setItem(laterKey(code), '1') } catch { /* bỏ qua */ }
+}
+function postponed(code: string, form: 'baseline' | 'followup' | null) {
+  if (form !== 'baseline') return false
+  try { return sessionStorage.getItem(laterKey(code)) === '1' } catch { return false }
+}
+
 /** Form của lần đo này còn chưa trả lời: lần đầu là baseline, cuối nghiên cứu là followup */
 export function pendingForm(phase: Phase, answered: string[]): 'baseline' | 'followup' | null {
   const form = phase === 'before' ? 'baseline' : 'followup'
@@ -93,8 +108,9 @@ function initial(): Pick<StudyState, 'code' | 'phase' | 'answered' | 'ownPc' | '
     return { ...next, ownPc: ownPc ?? null, dialog: same ? pendingForm(phase, next.answered) : 'join' }
   }
   if (!saved) return { code: null, phase: 'before', answered: [], ownPc: null, dialog: null }
-  // Chưa trả lời form của lần đo này thì mở ngay khi vào app, trước mọi hướng dẫn
-  return { code: saved.code, phase: saved.phase, answered: saved.answered ?? [], ownPc: saved.ownPc ?? null, dialog: saved.code ? pendingForm(saved.phase, saved.answered ?? []) : null }
+  // Chưa trả lời form của lần đo này thì mở ngay khi vào app, trước mọi hướng dẫn (trừ khi vừa bấm "Để sau" trong phiên này)
+  const form = saved.code ? pendingForm(saved.phase, saved.answered ?? []) : null
+  return { code: saved.code, phase: saved.phase, answered: saved.answered ?? [], ownPc: saved.ownPc ?? null, dialog: form && !postponed(saved.code, form) ? form : null }
 }
 
 export const useStudy = create<StudyState>((set, get) => ({
@@ -105,6 +121,9 @@ export const useStudy = create<StudyState>((set, get) => ({
     const c = code.trim().toUpperCase()
     const answered = s.code === c && s.phase === phase ? s.answered : []
     const ownPc = s.code === c ? s.ownPc : null
+    // Người tham gia khác trên cùng trình duyệt: xoá dấu tích lắp / bảo dưỡng lưu theo máy của người trước, để người sau không
+    // thấy bài đã xong sẵn (QA review 23/11)
+    if (s.code && s.code !== c) clearGuideProgress()
     write(KEY, { code: c, phase, answered, ownPc: ownPc ?? undefined })
     // Nhập mã xong là vào thẳng form của lần đo này (lần đầu: trước khi xem gợi ý hay hướng dẫn)
     set({ code: c, phase, answered, ownPc, dialog: pendingForm(phase, answered) })
@@ -152,19 +171,41 @@ async function post(p: Payload) {
   if (!res.ok) throw new Error(String(res.status))
 }
 
-/** Gửi lại những phản hồi chưa tới được máy chủ (mất mạng, backend tắt) */
-export async function flushQueue() {
-  const queue = read<Payload[]>(QUEUE, [])
-  if (queue.length === 0) return
-  const left: Payload[] = []
-  for (const p of queue) {
-    try {
-      await post(p)
-    } catch (e) {
-      if (!(e instanceof InvalidFeedback)) left.push(p)
-    }
-  }
+const idOf = (p: Payload) => String(p.answers?.submission_id ?? '')
+const MAX_QUEUE = 200
+
+/** Bỏ đúng một bản khỏi hàng đợi, đọc lại hàng đợi ngay lúc đó (bản mới thêm trong lúc đang gửi vẫn còn nguyên) */
+function dropQueued(id: string) {
+  const left = read<Payload[]>(QUEUE, []).filter((q) => idOf(q) !== id)
   write(QUEUE, left.length ? left : null)
+}
+
+/** Phản hồi này còn nằm chờ trên máy (chưa tới máy chủ) */
+export const isQueued = (id: string) => read<Payload[]>(QUEUE, []).some((q) => idOf(q) === id)
+
+let flushing: Promise<void> | null = null
+/**
+ * Gửi lại những phản hồi chưa tới được máy chủ (mất mạng, backend tắt). Mỗi lúc chỉ một lượt gửi; gửi xong bản nào thì xoá
+ * đúng bản đó. Trước đây cả hàng đợi bị ghi đè bằng danh sách đọc từ đầu lượt, nên bản xếp hàng giữa chừng bị mất (QA review 23/11).
+ * Máy chủ vẫn lỗi thì dừng lượt này, thử lại lần sau.
+ */
+export function flushQueue(): Promise<void> {
+  if (flushing) return flushing
+  flushing = (async () => {
+    try {
+      for (const p of read<Payload[]>(QUEUE, [])) {
+        try {
+          await post(p)
+        } catch (e) {
+          if (!(e instanceof InvalidFeedback)) break
+        }
+        dropQueued(idOf(p))
+      }
+    } finally {
+      flushing = null
+    }
+  })()
+  return flushing
 }
 
 export type SendResult = 'sent' | 'queued' | 'failed'
@@ -193,13 +234,26 @@ export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phas
     return 'sent'
   } catch (e) {
     if (e instanceof InvalidFeedback) return 'failed'
-    return write(QUEUE, [...read<Payload[]>(QUEUE, []), payload].slice(-200)) ? 'queued' : 'failed'
+    // Hàng đợi đầy thì báo không gửi được (giữ form) thay vì âm thầm bỏ bản cũ nhất
+    const queue = read<Payload[]>(QUEUE, [])
+    if (queue.length >= MAX_QUEUE) return 'failed'
+    return write(QUEUE, [...queue, payload]) ? 'queued' : 'failed'
   } finally {
     useSending.setState({ sending: false })
   }
 }
 
+/** Xoá dấu tích theo máy của hướng dẫn lắp và bảo dưỡng (data/guide.ts: khoá pcsc-guide-done:*) */
+function clearGuideProgress() {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('pcsc-guide-done:')) localStorage.removeItem(k)
+  } catch { /* bỏ qua */ }
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => void flushQueue())
+  // Máy chủ có thể trở lại khi trình duyệt vẫn có mạng (không có sự kiện online): thử lại mỗi phút và khi quay lại tab
+  window.addEventListener('focus', () => void flushQueue())
+  window.setInterval(() => { if (read<Payload[]>(QUEUE, []).length) void flushQueue() }, 60_000)
   void flushQueue()
 }
