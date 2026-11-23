@@ -442,13 +442,28 @@ public class UpgradeService {
         for (var q : turn.results.values()) {
             if (q == chosen || q.title() == null) continue;
             if (!want.equals(PriceEngine.kind(PriceEngine.norm(q.title())))) continue;
-            if (!ChatService.sameSpec(category, chosen.title(), q.title())) continue;
+            if (!upgradeSameSpec(category, chosen.title(), q.title())) continue;
             if ("ram".equals(category) && ChatService.serverRam(q.title())) continue;
             Offer o = checked(q);
             if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock())) continue;
             if (best == null || o.priceVnd() < best.getValue().priceVnd()) best = Map.entry(q, o);
         }
         return best;
+    }
+
+    /**
+     * Cùng thông số để đổi món chưa xác minh giá. SSD: dung lượng lệch tối đa 10% (500 GB và 512 GB là một hạng) và cùng chuẩn
+     * cắm M.2 hay SATA (bo máy cũ có thể không có khe M.2). Loại khác theo ChatService.sameSpec.
+     */
+    static boolean upgradeSameSpec(String category, String now, String other) {
+        if (!"ssd".equals(category)) return ChatService.sameSpec(category, now, other);
+        Integer a = ChatService.amount("ssd", now), b = ChatService.amount("ssd", other);
+        if (a == null || b == null || Math.abs(a - b) > a * 0.1) return false;
+        return m2(now) == m2(other);
+    }
+
+    private static boolean m2(String title) {
+        return title.matches("(?iu).*\\b(?:m[.\\s]?2|nvme|pcie)\\b.*") && !title.matches("(?iu).*\\b2[.,]5\\s*(?:inch|in|[\"”]).*");
     }
 
     private Offer checked(ProductSearch.Product p) {

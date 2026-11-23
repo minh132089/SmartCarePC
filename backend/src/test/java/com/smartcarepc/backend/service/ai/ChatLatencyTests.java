@@ -46,6 +46,7 @@ class ChatLatencyTests {
         assertThat(ChatService.knownWorkloadTopics(List.of("PC game 31 triệu, bắt buộc đúng RTX 4060 8GB, RAM 32GB, SSD 1TB.")) & 2).isEqualTo(2);
         assertThat(ChatService.knownWorkloadTopics(List.of("Build PC chơi game Full HD 27 triệu, card nvida, RAM 16GB.")) & 2).isEqualTo(2);
         assertThat(ChatService.knownWorkloadTopics(List.of("Cần PC Mini-ITX chơi game 33 triệu, RAM 16GB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Tôi chạy CUDA, cần PC 43 triệu, GPU NVIDIA ít nhất 12GB, RAM 32GB và SSD 1TB."))).isEqualTo(3);
         // Chỉ nói "chơi game" và ngân sách: vẫn hỏi mức game
         assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game 20 triệu")) & 2).isZero();
     }
@@ -66,6 +67,14 @@ class ChatLatencyTests {
         assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí CPU Deepcool AK400")).isFalse();
         assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt nước AIO 240mm ITX")).isFalse();
         assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Xigmatek Gaming X mATX")).isFalse();
+    }
+
+    @Test
+    void ssdThayTheChoNangCapGiuDungChuanCamVaDungHangDungLuong() {
+        // Ca kiểm tra 24/11 (office-hdd): BX500 500GB chưa xác minh giá, SSD đã xác minh là bản 512GB
+        assertThat(UpgradeService.upgradeSameSpec("ssd", "Ổ cứng SSD Crucial BX500 500GB ct500bx500ssd1", "Ổ cứng SSD Biwin M100 512GB 2.5 inch SATA III")).isTrue();
+        assertThat(UpgradeService.upgradeSameSpec("ssd", "Ổ cứng SSD Crucial BX500 500GB ct500bx500ssd1", "SSD Kingston NV2 500GB M.2 NVMe")).isFalse();
+        assertThat(UpgradeService.upgradeSameSpec("ssd", "Ổ cứng SSD Crucial BX500 500GB ct500bx500ssd1", "SSD Kingston A400 1TB SATA")).isFalse();
     }
 
     @Test

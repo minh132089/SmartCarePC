@@ -65,8 +65,9 @@ public class ChatService {
             2. Thiếu ngân sách hoặc mục đích thì hỏi thông tin còn thiếu. Đã có ngân sách nhưng chỉ nói chung "thiết kế \
             đồ họa" thì hỏi ngắn: chủ yếu 2D (Photoshop/Illustrator) hay 3D/render, và phần mềm nếu biết. Chỉ nói "chơi game" \
             thì hỏi game nhẹ/esports hay game nặng/AAA, hoặc tên game hay chơi. Có cả hai nhu cầu chưa rõ thì gộp một lượt hỏi. \
-            Đã nêu cấu hình cụ thể (card hoặc hãng card, dung lượng RAM, độ phân giải) thì KHÔNG hỏi mức game nữa: giả định \
-            game phổ biến ở độ phân giải đó (mặc định Full HD), nêu giả định trong một câu và làm luôn. \
+            Đã nêu cấu hình cụ thể (card hoặc hãng card, VRAM, dung lượng RAM, độ phân giải) thì KHÔNG hỏi thêm về nhu cầu \
+            (game nào, chạy AI / CUDA để làm gì, phần mềm gì): giả định việc phổ biến hợp với cấu hình đó (game: Full HD), nêu \
+            giả định trong một câu và làm luôn. \
             Nếu đã nêu phần mềm, tên game hoặc mức nặng/nhẹ thì dùng thông tin đó, không hỏi lại điểm đã rõ. Đọc cả hội thoại: \
             câu trả lời "chỉ 2D", "3D", "nhẹ" là bổ sung cho câu hỏi trước, giữ ngân sách và ràng buộc đã có. \
             Chưa rõ workload thì chưa tìm giá hay dựng thẻ. Chỉ hỏi thêm một lượt về workload; sau khi khách trả lời thì tư vấn. \
@@ -1537,6 +1538,10 @@ public class ChatService {
         // "game nhẹ hay nặng" với "PC game 31 triệu, đúng RTX 4060, RAM 32GB", người dùng phải trả lời thêm một lượt)
         if (text.matches("(?s).*\\b(game|gaming|chơi)\\b.*") && text.matches(
                 "(?s).*(full ?hd|1080p?|1440p?|\\b2k\\b|\\b4k\\b|\\brtx\\b|\\bgtx\\b|\\brx ?\\d{4}|radeon|nvidia|nvida|geforce|card amd|\\d+ ?gb ram|ram \\d+ ?gb).*")) topics |= 2;
+        // Máy AI / CUDA / đồ họa đã nêu GPU cụ thể (hãng hoặc VRAM) thì cũng không hỏi lại việc chạy (ca kiểm tra 24/11 h11:
+        // "chạy CUDA, GPU NVIDIA ít nhất 12GB, RAM 32GB" vẫn bị hỏi "bạn chạy CUDA để làm gì")
+        if (text.matches("(?s).*(cuda|\\bai\\b|deep learning|machine learning|học máy|render|đồ họa|do hoa|dựng phim).*") && text.matches(
+                "(?s).*(nvidia|nvida|radeon|geforce|\\brtx\\b|vram|gpu[^.]{0,30}\\d+ ?gb|\\d+ ?gb[^.]{0,15}(vram|gpu)).*")) topics |= 3;
         return topics;
     }
 
