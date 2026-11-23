@@ -342,7 +342,8 @@ public class ChatService {
             tool("search_products",
                     "Find products sold by Vietnamese PC stores by reading their websites. Returns up to 8 products: "
                             + "id, title, shop, price_vnd, in_stock and warranty_months when known. Use the ID in propose_build. "
-                            + "Prefer products with in_stock = true.",
+                            + "Prefer products with in_stock = true. price_trend (when present) is the last week's price and stock "
+                            + "history: when products are otherwise equal, prefer the one that is stable and stays in stock.",
                     Map.of("type", "object",
                             "properties", Map.of("query", Map.of("type", "string",
                                     "description", "Use a SHORT query of 2–5 words for ONE category or model, without alternatives. "
@@ -5435,6 +5436,9 @@ public class ChatService {
                         m.put("verified", checked != null);
                         if (offer != null && offer.inStock() != null) m.put("in_stock", offer.inStock());
                         if (offer != null && offer.warrantyMonths() != null) m.put("warranty_months", offer.warrantyMonths());
+                        // Theo dõi giá ngầm: món hay đổi giá / hay hết hàng (chỉ trợ lý thấy, không lên giao diện)
+                        String trend = search.trend(p.url());
+                        if (trend != null) m.put("price_trend", trend);
                         rows.add(m);
                     }
                     yield rows;

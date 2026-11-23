@@ -114,7 +114,8 @@ public class UpgradeService {
 
     private static final List<Map<String, Object>> TOOLS = List.of(
             tool("search_products", "Search Vietnamese computer stores for real products. Each result has a short id, title, "
-                    + "shop, price_vnd, verified (price read on the store page) and in_stock.",
+                    + "shop, price_vnd, verified (price read on the store page) and in_stock. price_trend (when present) is the "
+                    + "last week's price and stock history: when parts are otherwise equal, prefer the stable, in-stock one.",
                     Map.of("type", "object", "properties", Map.of(
                             "query", Map.of("type", "string", "description", "Short query for one part type or one model")),
                             "required", List.of("query"))),
@@ -430,6 +431,8 @@ public class UpgradeService {
             m.put("verified", checked != null);
             var offer = search.offer(p.url());
             if (offer != null && offer.inStock() != null) m.put("in_stock", offer.inStock());
+            String trend = search.trend(p.url());
+            if (trend != null) m.put("price_trend", trend);
             rows.add(m);
         }
         return rows;
@@ -522,6 +525,7 @@ public class UpgradeService {
                     continue;
                 }
             }
+            search.track(p.url(), p.title());
             Object rawQty = item.get("buy_qty");
             if (rawQty != null && (!(rawQty instanceof Number q) || !Double.isFinite(q.doubleValue())
                     || q.doubleValue() != q.intValue() || q.intValue() < 1 || q.intValue() > 4)) {
