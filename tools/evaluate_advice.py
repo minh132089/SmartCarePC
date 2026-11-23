@@ -16,7 +16,8 @@ MAX_CAPTURE_GAP_SECONDS = 600
 
 # Mẫu câu hỏi lại trong bộ ca viết bằng tiếng Việt; app hỏi bằng tiếng Anh. Thêm từ tương đương, không nới luật
 EN_EQUIV = {"ngân sách": "budget", "bao nhiêu": "how much", "chủ yếu": "main use", "mục đích": "use", "làm gì": "use the PC for",
-            "việc gì": "what for", "chưa kiểm chứng": "not been verified", "chưa xác minh": "not verified"}
+            "việc gì": "what for", "chưa kiểm chứng": "not been verified", "chưa xác minh": "not verified",
+            "không": "not", "thiếu": "missing", "chưa": "not yet"}
 
 
 def english_pattern(pattern):

@@ -812,6 +812,28 @@ public class ChatService {
                 usage.get("completion_tokens"), reasoning, thinking, res.get("model"));
     }
 
+    /**
+     * Người dùng đòi đúng một card mà riêng card đó đã vượt ngân sách: nói rõ giá thấp nhất đã xác minh (bộ acceptance 24/11 c06:
+     * "máy game 1 triệu, phải có RTX 4090" chỉ nhận "thiếu card đồ họa bắt buộc"). null nếu không áp dụng.
+     */
+    private String requestedGpuOverBudget(Turn turn) {
+        if (turn.requestedGpu == null || turn.userAmounts.isEmpty()) return null;
+        Long budget = budgetOf(turn.userAmounts, null);
+        if (budget == null) return null;
+        Long cheapest = null;
+        for (var p : turn.results.values()) {
+            if (p.title() == null || !turn.requestedGpu.equals(gpuChip(p.title()))) continue;
+            Offer o = search.checkedOffer(p.url(), p.title());
+            Long price = o != null ? o.priceVnd() : null;
+            if (price != null && (cheapest == null || price < cheapest)) cheapest = price;
+        }
+        String name = chipQuery(turn.requestedGpu).substring(4);
+        if (cheapest != null && cheapest > budget)
+            return "The " + name + " alone costs at least " + millions(cheapest) + " at the stores I checked, more than your whole "
+                    + millions(budget) + " budget, so a PC with it is not possible within that budget.";
+        return null;
+    }
+
     /** Thứ tự hiện ba phương án trong bảng so sánh */
     private static final List<String> TIERS = List.of("cheap", "balanced", "quality");
 
@@ -940,7 +962,9 @@ public class ChatService {
         }
         else if (!unavailableNotes.isEmpty()) reply += "\n\n" + String.join("\n", unavailableNotes);
         if (turn.advice && options.isEmpty() && !turn.tiers.isEmpty()) {
+            String gpuPrice = requestedGpuOverBudget(turn);
             reply = (turn.requestedGpu == null ? "" : "You requested the exact GPU " + chipQuery(turn.requestedGpu).substring(4) + ".\n\n")
+                    + (gpuPrice != null ? gpuPrice + "\n\n" : "")
                     + "I could not finalise an eligible build recommendation.\n\n"
                     + String.join("\n", unavailableNotes);
         }
@@ -1112,8 +1136,9 @@ public class ChatService {
     }
 
     /** Thời gian tối đa cho các bước cứu của một phương án (propose_build); dựng lại phương án từ phương án bên cạnh dùng REBUILD_BUDGET */
-    // 35 → 20 giây (23/11): mỗi lần tìm chip thay thế chờ cửa hàng ~15 giây, các bước cứu có câu tốn 36 giây
-    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(20);
+    // 35 → 20 giây (23/11) để nhanh; 24/11 nâng lên 30: món hiếm (nguồn SFX) cần lâu hơn để tìm link còn hàng, 20 giây bị cắt
+    // giữa chừng (bộ acceptance m03, m05), mà trung vị câu trả lời đã còn 37 giây
+    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(30);
     static final java.time.Duration REBUILD_BUDGET = java.time.Duration.ofSeconds(15);
 
     /** Khoản vượt trần tối đa còn ép giá thêm một lượt (đổi hàng cùng thông số rẻ hơn) */
@@ -2511,7 +2536,9 @@ public class ChatService {
         var boardName = productTitles(c.picks()).get("motherboard");
         Integer slots = ProductRules.memorySlots(boardName);
         int sticks = c.request().items().stream().filter(i -> "ram".equals(categoryOf(i.code()))).mapToInt(BuildCheckRequest.Item::qty).sum();
-        if (slots != null && sticks > slots) issues.add("the board has only " + slots + " slots but the build selects " + sticks + " RAM modules");
+        // Nói rõ cách sửa: trợ lý từng gửi lại cùng bo 2 khe ba lần (bộ acceptance 24/11 e08, RAM 64GB khi không có thanh 32GB mua được)
+        if (slots != null && sticks > slots) issues.add("the board has only " + slots + " slots but the build selects " + sticks
+                + " RAM modules: use larger modules (e.g. 2 x 32GB) or choose a motherboard with 4 RAM slots");
         boolean hasGpu = c.picks().keySet().stream().anyMatch(code -> "gpu".equals(categoryOf(code)));
         for (var i : c.request().items()) {
             var d = c.details().getOrDefault(i.code(), Map.of());
