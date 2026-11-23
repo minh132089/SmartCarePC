@@ -99,8 +99,10 @@ public class ChatService {
             khác cùng loại), vì người mới dễ mua phải hàng kém.
             Món nào chưa có kết quả hợp thì được tìm lại TỐI ĐA MỘT LẦN, gộp mọi lần tìm lại vào cùng một lượt; vẫn \
             không có thì để trống product_id: app sẽ tự tìm và gắn sản phẩm thật cho món đó (xem auto_filled).
-            5. Sau lượt tìm kiếm, đưa BA PHƯƠNG ÁN để người dùng so sánh: gọi propose_build ba lần TRONG CÙNG MỘT LƯỢT \
-            (song song), mỗi lần một tier:
+            5. Sau lượt tìm kiếm, người dùng sẽ thấy BA PHƯƠNG ÁN để so sánh. Lần đề xuất đầu tiên CHỈ gọi propose_build MỘT \
+            lần cho tier "balanced": app tự dựng "cheap" và "quality" từ balanced (đổi hàng rẻ hơn / nâng từng món theo nhu cầu) \
+            để trả lời nhanh. Chỉ gọi propose_build cho "cheap" hay "quality" khi app yêu cầu, hoặc khi người dùng nhờ đổi riêng \
+            phương án đó. Mức của từng tier (để hiểu, và để dùng khi được yêu cầu):
                - tier "cheap" (Rẻ): rẻ nhất mà vẫn đáp ứng nhu cầu, phải rẻ hơn rõ rệt: tổng TỐI ĐA 90% ngân sách. Bạn \
             chỉ cần chọn thông số tối thiểu đủ dùng (vd máy học: RAM 8 GB, SSD 256 GB, nguồn 450W; máy game: RAM 16 GB, SSD \
             512 GB, card hiệu năng trên giá tốt nhất trong kết quả tìm, vd RTX 4060 thường rẻ hơn mà mạnh hơn RTX 3060 12GB) và vỏ rẻ: app tự đổi từng món \
@@ -114,7 +116,7 @@ public class ChatService {
             hết tiền chỉ để sát ngân sách: mỗi khoản thêm phải giúp đúng nhu cầu. App có thể ưu tiên bản Rẻ nếu cùng CPU, \
             GPU, dung lượng RAM và tiết kiệm rõ rệt;
                - tier "quality" (Chất lượng): linh kiện tốt và bền hơn, chỉ vượt ngân sách một chút: TỐI ĐA 3 triệu.
-            LUÔN gọi đủ ba propose_build rồi mới trả lời. Chỉ giới thiệu phương án có kết quả propose_build KHÔNG kèm not_shown \
+            Chỉ giới thiệu phương án có kết quả propose_build KHÔNG kèm not_shown \
             (not_shown: thiếu hàng có link, lắp không được hay vượt mức: app không hiển thị). Phương án vượt mức tối đa của tier sẽ KHÔNG được hiển thị: \
             báo over_budget thì hạ thông số bằng cheaper_options; báo over_budget_final thì trong câu trả lời nói rõ chưa \
             tìm được phương án đó có link mua trong mức tiền, không giới thiệu cấu hình ấy. Không được trả lời mà chưa chốt phương án. \
@@ -135,7 +137,7 @@ public class ChatService {
             6. Ngân sách quá thấp so với nhu cầu thì vẫn chọn ba phương án rẻ nhất có thể; phương án nào vẫn vượt mức thì \
             app không hiển thị, nên nói rõ thiếu khoảng bao nhiêu hoặc nên bớt món nào.
             Chỉ gửi spec khi cần phân biệt dung lượng hoặc số thanh; reason chỉ ghi cho balanced, tối đa 6 chữ. \
-            Với cheap và quality, bỏ reason; không viết đoạn giải thích trong summary. Gộp cả ba propose_build trong cùng lượt.
+            Với cheap và quality, bỏ reason; không viết đoạn giải thích trong summary.
             7. Câu trả lời cuối tối đa 50 từ: một câu tóm tắt mục đích, ngân sách và giả định; \
             sau đó 1 - 2 câu giải thích quyết định quan trọng nhất cho nhu cầu này (vd ưu tiên VRAM cho AI, card cho game, \
             CPU có đồ họa tích hợp cho văn phòng), nêu đánh đổi thật sự nếu phải hạ một yêu cầu. Chỉ thêm tối đa một lưu ý \
@@ -455,11 +457,12 @@ public class ChatService {
      */
     // 85 giây (đo 23/11) làm số câu báo lỗi tăng 9 → 11/20 vì AI hôm đó chậm (mỗi vòng 15-38 giây): giữ 110 giây, chỉ giữ các mốc
     // dưới để câu nhanh hơn khi đã có phương án
-    static final java.time.Duration ANSWER_BUDGET = java.time.Duration.ofSeconds(110);
+    static final java.time.Duration ANSWER_BUDGET = java.time.Duration.ofSeconds(150);
     static final java.time.Duration SEARCH_CUTOFF = java.time.Duration.ofSeconds(35);
     static final java.time.Duration WRAP_UP = java.time.Duration.ofSeconds(30);
     static final java.time.Duration RESPOND_RESERVE = java.time.Duration.ofSeconds(8);
-    static final java.time.Duration AI_CALL_MAX = java.time.Duration.ofSeconds(40);
+    // Không cắt riêng từng lần gọi AI nữa (người dùng 23/11: bỏ giới hạn, AI chậm thì vẫn ra kết quả); chỉ còn hạn chung
+    static final java.time.Duration AI_CALL_MAX = java.time.Duration.ofSeconds(150);
 
     /** Chờ một lần gọi AI: tối đa AI_CALL_MAX, và luôn chừa RESPOND_RESERVE trước hạn của câu trả lời */
     static java.time.Duration aiWait() {
@@ -577,12 +580,28 @@ public class ChatService {
             // quá cao so với ngân sách thì trợ lý đề xuất lại mãi). Bước dựng thẻ vẫn lọc option theo trần giá
             body.put("tools", offered);
             if (proposeRounds >= proposeLimit || whyOnly) body.put("tool_choice", "none");
+            // Tư vấn mua mới: tìm xong vòng đầu mà chưa đề xuất thì buộc gọi propose_build ngay (23/11: trợ lý hay tìm thêm
+            // 1 - 2 vòng, mỗi vòng AI 10 - 37 giây, có vòng chỉ gọi lại công cụ tìm đã đóng). Sau khi đề xuất báo lỗi thì
+            // trợ lý vẫn được tìm lại để chọn món khác
+            boolean forcePropose = turn.advice && search.enabled() && !whyOnly && searchRounds >= 1 && proposeRounds == 0
+                    && proposeRounds < proposeLimit;
+            if (forcePropose) body.put("tool_choice", Map.of("type", "function", "function", Map.of("name", "propose_build")));
 
             long t0 = System.nanoTime();
             Map<String, Object> res;
             try {
                 var wait = aiWait();
-                res = wait.isZero() ? null : Io.await(Io.async(() -> client.complete(body)), wait, null);
+                try {
+                    res = wait.isZero() ? null : Io.await(Io.async(() -> client.complete(body)), wait, null);
+                } catch (AiUnavailableException forcedRejected) {
+                    // Cổng AI không nhận tool_choice chỉ định hàm: gọi lại như thường, không để người dùng nhận lỗi
+                    if (!forcePropose) throw forcedRejected;
+                    log.warn("Chat vòng {}: cổng AI không nhận tool_choice propose_build, gọi lại không ép", round + 1);
+                    forcePropose = false;
+                    body.remove("tool_choice");
+                    var again = aiWait();
+                    res = again.isZero() ? null : Io.await(Io.async(() -> client.complete(body)), again, null);
+                }
                 if (res == null) {
                     if (!turn.tiers.isEmpty() || turn.last != null) return respond(BUILDS_READY, turn);
                     throw new AiUnavailableException(HttpStatus.GATEWAY_TIMEOUT, "The advice service is responding slowly. Please try again.");
@@ -714,6 +733,19 @@ public class ChatService {
             log.info("Chat vòng {}: AI {} ms, {} công cụ {} chạy {} ms", round + 1, aiMs, calls.size(),
                     calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList(),
                     (System.nanoTime() - t1) / 1_000_000);
+            // Trợ lý chỉ đề xuất Phù hợp (lời dặn bước 5, để vòng đề xuất ngắn): code dựng Rẻ và Chất lượng từ Phù hợp ngay,
+            // không chờ thêm lượt AI (23/11: vòng đề xuất ba phương án mất 25 - 40+ giây, có ca quá giờ và báo lỗi)
+            if (turn.advice && search.enabled() && names.contains("propose_build") && turn.tiers.containsKey("balanced")
+                    && !turn.tiers.keySet().containsAll(TIERS)) {
+                long td = System.nanoTime();
+                Io.within(REBUILD_BUDGET, () -> {
+                    if (!turn.tiers.containsKey("cheap")) cheapFromBalanced(turn);
+                    if (!turn.tiers.containsKey("quality")) qualityFromBalanced(turn);
+                    return null;
+                });
+                log.info("Chat vòng {}: dựng Rẻ / Chất lượng từ Phù hợp trong {} ms, có {}", round + 1,
+                        (System.nanoTime() - td) / 1_000_000, turn.tiers.keySet());
+            }
             // Repair from the collected products before spending another model round on prose we replace anyway.
             if (!repaired && turn.advice && search.enabled() && turn.tiers.keySet().containsAll(TIERS) && !readyToReply(turn)) {
                 repaired = true;

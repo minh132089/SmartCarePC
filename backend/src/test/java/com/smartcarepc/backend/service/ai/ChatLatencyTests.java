@@ -31,9 +31,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 class ChatLatencyTests {
     @Test
-    void moiLanGoiAiChuaLaiThoiGianDungTheVaKhongQua40Giay() {
-        // Còn nhiều thời gian: chờ tối đa 40 giây; còn 20 giây: chờ 12 giây (chừa 8 cho bước dựng thẻ); còn 5 giây: không gọi nữa
-        assertThat(Io.within(java.time.Duration.ofSeconds(85), ChatService::aiWait)).isEqualTo(java.time.Duration.ofSeconds(40));
+    void moiLanGoiAiChuaLaiThoiGianDungThe() {
+        // Chờ tới hạn chung trừ 8 giây cho bước dựng thẻ (không còn cắt 40 giây mỗi lần); còn 5 giây: không gọi nữa
+        assertThat(Io.within(java.time.Duration.ofSeconds(85), ChatService::aiWait).toSeconds()).isBetween(76L, 77L);
         assertThat(Io.within(java.time.Duration.ofSeconds(20), ChatService::aiWait).toSeconds()).isBetween(11L, 12L);
         assertThat(Io.within(java.time.Duration.ofSeconds(5), ChatService::aiWait)).isZero();
         assertThat(Io.within(java.time.Duration.ofSeconds(20), ChatService::wrapUp)).isTrue();
