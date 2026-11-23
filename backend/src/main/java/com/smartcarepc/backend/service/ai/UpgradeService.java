@@ -191,6 +191,8 @@ public class UpgradeService {
         /** Câu mới nhất xin phương án rẻ hơn: kế hoạch mới phải rẻ hơn kế hoạch trước */
         volatile boolean wantsCheaper;
         String requiredGpuVendor;
+        /** Mục đích và lời người dùng (để đọc yêu cầu như VRAM tối thiểu khi giải thích vì sao không có kế hoạch) */
+        volatile String userText = "";
         RamGoal ramGoal;
         /** Món bị bỏ ở lần đề xuất cuối vì không kiểm tra được giá / còn hàng */
         volatile List<String> dropped = List.of();
@@ -220,6 +222,8 @@ public class UpgradeService {
         if (budget != null) pc = new UpgradeInfo(pc.cpu(), pc.motherboard(), pc.ram(), pc.gpu(), pc.storage(), pc.psu(),
                 pc.caseSize(), pc.purpose(), budget);
         Turn turn = new Turn(pc);
+        turn.userText = pc.purpose() + " " + history.stream().filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content)
+                .filter(Objects::nonNull).reduce("", (a, b) -> a + " " + b);
         if (laptop(turn.pc)) {
             return new ChatResponse("This upgrade adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have "
                     + "soldered memory and a single M.2 slot, so check the manufacturer's service manual for your model or ask a repair "
@@ -435,23 +439,83 @@ public class UpgradeService {
             if (trend != null) m.put("price_trend", trend);
             rows.add(m);
         }
+        log.info("Upgrade: tìm \"{}\": {} kết quả, {} đã xác minh giá, giá {}", query, rows.size(),
+                rows.stream().filter(r -> Boolean.TRUE.equals(r.get("verified"))).count(), rows.stream().map(r -> r.get("price_vnd")).toList());
         return rows;
     }
 
     /** Giá đọc trên chính trang cửa hàng, đúng sản phẩm và còn hàng; null nếu chưa đủ chứng cứ */
-    /** Món cùng loại và cùng thông số (ChatService.sameSpec), giá đã xác minh, rẻ nhất trong các kết quả đã tìm của lượt này */
+    /**
+     * Giá đã xác minh của món: dùng bằng chứng còn hạn, chưa có thì đọc chính trang sản phẩm ngay (24/11: bên nâng cấp chỉ xem
+     * bằng chứng có sẵn, món chưa ai mở trang bị coi là "không xác minh được" dù đọc trang là xác minh được)
+     */
+    private Offer confirm(ProductSearch.Product p) {
+        Offer offer = checked(p);
+        if (offer != null || p == null || p.url() == null) return offer;
+        if (Io.remainingNanos(Long.MAX_VALUE) < Duration.ofSeconds(12).toNanos()) return null;
+        search.refreshQuote(p.url(), p.title());
+        return checked(p);
+    }
+
+    private static final java.util.regex.Pattern VRAM_MIN = java.util.regex.Pattern.compile(
+            "(?iu)(?:at least|minimum|min\\.?|≥|>=|tối thiểu|ít nhất|từ)\\s*(\\d{1,2})\\s*gb|(\\d{1,2})\\s*gb\\s*(?:vram|or more|trở lên)");
+
+    /**
+     * Không có kế hoạch vì món đáp ứng yêu cầu đều vượt ngân sách: nói rõ món rẻ nhất đã xác minh và vượt bao nhiêu, thay cho câu
+     * chung chung (ca kiểm tra 24/11 ai-vram: card NVIDIA 12 GB rẻ nhất 10,999 triệu, ngân sách 10 triệu, người dùng chỉ nhận
+     * "không khuyên mua"). Hiện chỉ cho card đồ họa có VRAM tối thiểu; null nếu không áp dụng.
+     */
+    String cheapestOverBudget(Turn turn) {
+        var m = VRAM_MIN.matcher(turn.userText == null ? "" : turn.userText);
+        if (!m.find()) return null;
+        int need = Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2));
+        ProductSearch.Product best = null;
+        Offer bestOffer = null;
+        for (var p : turn.results.values()) {
+            if (p.title() == null || !"gpu".equals(PriceEngine.kind(PriceEngine.norm(p.title())))) continue;
+            Integer vram = ChatService.vram(p.title());
+            if (vram == null || vram < need) continue;
+            if (turn.requiredGpuVendor != null && !turn.requiredGpuVendor.equals(ChatService.vendorOf(ChatService.gpuChip(p.title())))) continue;
+            Offer o = checked(p);
+            if (o == null || o.priceVnd() == null) continue;
+            if (bestOffer == null || o.priceVnd() < bestOffer.priceVnd()) { best = p; bestOffer = o; }
+        }
+        long budget = turn.pc.budgetVnd();
+        if (best == null || bestOffer.priceVnd() <= budget) return null;
+        return "No graphics card with at least " + need + " GB of VRAM fits your " + ChatService.millions(budget)
+                + " budget at today's store prices. The cheapest one I could confirm is " + best.title() + " at "
+                + ChatService.millions(bestOffer.priceVnd()) + (best.shop() == null ? "" : " (" + best.shop() + ")") + ", "
+                + ChatService.millions(bestOffer.priceVnd() - budget) + " over your budget. Keep your current card for now, raise the "
+                + "budget by about that amount, or ask again later: graphics card prices change often.";
+    }
+
+    /** Số món cùng thông số được đọc trang khi món trợ lý chọn không xác minh được */
+    static final int ALTERNATIVES_TO_READ = 3;
+
+    /**
+     * Món cùng loại và cùng thông số (upgradeSameSpec), giá đã xác minh: món đã có bằng chứng thì lấy rẻ nhất; không có thì đọc
+     * trang tối đa ALTERNATIVES_TO_READ món rẻ nhất trong các kết quả đã tìm của lượt này
+     */
     private Map.Entry<ProductSearch.Product, Offer> verifiedAlternative(String category, String want, ProductSearch.Product chosen, Turn turn) {
+        List<ProductSearch.Product> same = new ArrayList<>();
         Map.Entry<ProductSearch.Product, Offer> best = null;
         for (var q : turn.results.values()) {
-            if (q == chosen || q.title() == null) continue;
+            if (q == chosen || q.title() == null || q.url() == null || same.contains(q)) continue;
             if (!want.equals(PriceEngine.kind(PriceEngine.norm(q.title())))) continue;
             if (!upgradeSameSpec(category, chosen.title(), q.title())) continue;
             if ("ram".equals(category) && ChatService.serverRam(q.title())) continue;
+            same.add(q);
             Offer o = checked(q);
             if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock())) continue;
             if (best == null || o.priceVnd() < best.getValue().priceVnd()) best = Map.entry(q, o);
         }
-        return best;
+        if (best != null) return best;
+        same.sort(java.util.Comparator.comparing(q -> q.priceVnd() == null ? Long.MAX_VALUE : q.priceVnd()));
+        for (var q : same.subList(0, Math.min(ALTERNATIVES_TO_READ, same.size()))) {
+            Offer o = confirm(q);
+            if (o != null && o.priceVnd() != null && !Boolean.FALSE.equals(o.inStock())) return Map.entry(q, o);
+        }
+        return null;
     }
 
     /**
@@ -509,7 +573,7 @@ public class UpgradeService {
                 errors.add("ram: \"" + p.title() + "\" is server memory (ECC / registered) and does not suit a desktop PC.");
                 continue;
             }
-            Offer offer = checked(p);
+            Offer offer = confirm(p);
             if (offer == null) {
                 // Món chưa xác minh được giá: tự lấy món cùng thông số đã xác minh trong kết quả tìm (ca kiểm tra 23/11: RAM DDR5
                 // 32GB chưa xác minh, trợ lý bỏ cuộc với 0 món dù kết quả có bộ khác cùng thông số)
@@ -597,6 +661,7 @@ public class UpgradeService {
         }
         turn.plan = new Plan(text(input.get("summary")), List.copyOf(picks), warnings, unknowns);
         log.info("Upgrade: chốt {} món, tổng {}", picks.size(), total);
+        if (picks.isEmpty()) log.info("Upgrade: trợ lý chốt không mua gì, tóm tắt: {}", String.valueOf(input.get("summary")).replaceAll("\\s+", " "));
         Map<String, Object> ok = new LinkedHashMap<>();
         ok.put("ok", true);
         ok.put("total_vnd", total);
@@ -1169,6 +1234,8 @@ public class UpgradeService {
                         + "Read the label on a memory module, or find the motherboard model in Windows System Information "
                         + "(BaseBoard Product) and check its manual. Update your PC details with that information and ask again.");
             }
+            String overBudget = cheapestOverBudget(turn);
+            if (overBudget != null) return new ChatResponse(overBudget);
             return new ChatResponse("I am not recommending a purchase for this budget and request. Keep your current parts for now. "
                     + "If something still feels slow, describe that symptom and confirm your motherboard and power supply details "
                     + "so the next upgrade can target the problem.");
