@@ -817,9 +817,12 @@ public class ChatService {
      * "máy game 1 triệu, phải có RTX 4090" chỉ nhận "thiếu card đồ họa bắt buộc"). null nếu không áp dụng.
      */
     private String requestedGpuOverBudget(Turn turn) {
-        if (turn.requestedGpu == null || turn.userAmounts.isEmpty()) return null;
-        Long budget = budgetOf(turn.userAmounts, null);
-        if (budget == null) return null;
+        if (turn.requestedGpu == null) return null;
+        Long budget = turn.userAmounts.isEmpty() ? null : budgetOf(turn.userAmounts, null);
+        if (budget == null) {
+            log.info("Card yêu cầu {}: không đọc được ngân sách ({})", turn.requestedGpu, turn.userAmounts);
+            return null;
+        }
         Long cheapest = null;
         for (var p : turn.results.values()) {
             if (p.title() == null || !turn.requestedGpu.equals(gpuChip(p.title()))) continue;
@@ -828,9 +831,21 @@ public class ChatService {
             if (price != null && (cheapest == null || price < cheapest)) cheapest = price;
         }
         String name = chipQuery(turn.requestedGpu).substring(4);
+        long sameChip = turn.results.values().stream().filter(p -> p.title() != null && turn.requestedGpu.equals(gpuChip(p.title()))).count();
+        log.info("Card yêu cầu {}: ngân sách {}, {} kết quả cùng chip, giá đã xác minh thấp nhất {}", name, budget, sameChip, cheapest);
         if (cheapest != null && cheapest > budget)
             return "The " + name + " alone costs at least " + millions(cheapest) + " at the stores I checked, more than your whole "
                     + millions(budget) + " budget, so a PC with it is not possible within that budget.";
+        // Chỉ có giá niêm yết chưa xác minh trên trang (24/11 c06: một tin RTX 4090): vẫn nói, ghi rõ là giá chưa xác minh
+        Long listed = turn.results.values().stream().filter(p -> p.title() != null && turn.requestedGpu.equals(gpuChip(p.title())))
+                .map(ProductSearch.Product::priceVnd).filter(java.util.Objects::nonNull).min(Long::compare).orElse(null);
+        if (cheapest == null && listed != null && listed > budget)
+            return "The " + name + " alone is listed at about " + millions(listed) + " (store price not confirmed), more than your whole "
+                    + millions(budget) + " budget, so a PC with it is not possible within that budget.";
+        // Không cửa hàng nào còn bán card đó (vd RTX 4090 đã ngừng sản xuất, 24/11 tìm ra 0 sản phẩm)
+        if (sameChip == 0)
+            return "I could not find the " + name + " for sale at the stores I checked; it may no longer be sold. Allow a current "
+                    + "model instead, or ask a store whether they can order one.";
         return null;
     }
 
