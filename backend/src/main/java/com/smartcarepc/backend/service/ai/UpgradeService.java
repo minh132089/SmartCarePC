@@ -357,10 +357,10 @@ public class UpgradeService {
     }
 
     private static final Pattern FOLLOW_UP_BUDGET = Pattern.compile(
-            "(?iu)(?:\\b(?:total\\s+)?budget\\b|ngân sách)\\s*:?\\s*"
+            "(?iuU)(?:\\b(?:total\\s+)?budget\\b|ngân sách)\\s*:?\\s*"
                     + "(?:(?:is|now|of|to|only|just|up to|at most|maximum|là|còn|chỉ|của tôi|của mình|có|hiện tại|bây giờ|lên|xuống|tối đa)\\s+){0,6}"
                     + "((?:vnd\\s*)?\\d+(?:[.,]\\d+)*\\s*(?:million|mil|triệu|tr\\b|củ|m\\b|vnd|đồng|đ|₫)?)");
-    private static final Pattern NEGATED_BUDGET = Pattern.compile("(?iu)\\b(?:don't|do not|not|không|đừng)\\b[^.!?;\\n]*$");
+    private static final Pattern NEGATED_BUDGET = Pattern.compile("(?iuU)\\b(?:don't|do not|not|không|đừng)\\b[^.!?;\\n]*$");
     private static final Pattern COMPONENT_BUDGET = Pattern.compile("(?iu)\\b(?:gpu|card|vga|ram|memory|ssd|storage|cpu|motherboard|psu|case|cooler)\\s+$");
 
     /** Only explicit total-budget statements in follow-ups override the form, never a quoted component price. */
@@ -887,7 +887,7 @@ public class UpgradeService {
         boolean sfxPsu = psu != null && SFX.matcher(psu.product().title()).find();
         if (psu != null && newCase && !sfxPsu) {
             String c = caseNew.product().title().toLowerCase(Locale.ROOT);
-            boolean atxPsu = c.matches(".*\\batx\\s*(psu|power|nguồn)\\b.*|.*\\bps2\\b.*") && !c.matches(".*\\bsfx\\b.*\\bonly\\b.*");
+            boolean atxPsu = c.matches("(?U).*\\batx\\s*(psu|power|nguồn)\\b.*|.*\\bps2\\b.*") && !c.matches(".*\\bsfx\\b.*\\bonly\\b.*");
             boolean small = c.matches(".*\\b(itx|sff|sfx)\\b.*") || c.matches(".*\\bmini\\b(?!\\s*-?\\s*tower).*");
             if (small && !atxPsu) {
                 errors.add("psu: the new case \"" + caseNew.product().title() + "\" is a small (ITX / SFF) case that usually takes only SFX "
@@ -1172,7 +1172,7 @@ public class UpgradeService {
         if (m.find()) return Integer.parseInt(m.group(1));
         var after = KIT_COUNT_AFTER.matcher(title);
         if (after.find()) return Integer.parseInt(after.group(1));
-        return title.toLowerCase(Locale.ROOT).matches(".*\\b(kit|dual channel|bộ)\\b.*") ? null : 1;
+        return title.toLowerCase(Locale.ROOT).matches("(?U).*\\b(kit|dual channel|bộ)\\b.*") ? null : 1;
     }
 
     /** Công suất nguồn người dùng ghi, vd "550W", "Cooler Master 650 W"; null nếu không đọc được */
@@ -1288,16 +1288,16 @@ public class UpgradeService {
         return out.toString();
     }
 
-    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern MILLIONS = Pattern.compile("(?U)(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern DONG = Pattern.compile(
-            "(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
+            "(?U)(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
                     + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Số kiểu hàng nghìn ("10,000,000", "1.190.000") hoặc từ 6 chữ số (mã CPU như 12400 có 5), không kèm đơn vị đo (MHz, GB, W, mm...) */
     private static final Pattern BARE = Pattern.compile(
-            "(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
+            "(?U)(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Chữ "giá / costs / priced" đi kèm một con số ngay sau: coi là báo giá */
-    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern PRICE_WORD = Pattern.compile("(?U)\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LINK = Pattern.compile("\\[([^\\]]*)\\]\\(\\s*https?://[^)]*\\)|https?://\\S+|www\\.\\S+");
 
     /** Câu có nhắc tiền: số có đơn vị tiền, số kiểu hàng nghìn / từ 5 chữ số không đơn vị đo, hay chữ "giá / costs" kèm số */
@@ -1395,10 +1395,10 @@ public class UpgradeService {
 
     private static final Pattern PREVIOUS_PRICE = Pattern.compile("\\((\\d{4,12}) VND\\)");
     private static final Pattern CHEAPER = Pattern.compile(
-            "\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
+            "(?U)\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LAPTOP_WORDS = Pattern.compile(
-            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+            "(?U)\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern MOBILE_CPU = Pattern.compile(
             "\\bi[3579][\\s-]*\\d{4,5}(u|h|hs|hx|hk|g[1-7]|p|y)\\b|\\bryzen\\s*[3579]\\s*\\d{4}(u|h|hs|hx)\\b|\\bultra\\s*[579]\\s*\\d{3}(h|u|v)\\b",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
