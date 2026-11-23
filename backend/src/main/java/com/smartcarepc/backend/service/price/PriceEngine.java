@@ -65,7 +65,7 @@ public class PriceEngine {
             Map.entry("case", Pattern.compile("^vo\\b|\\bvo may tinh\\b|\\bvo case\\b|^case\\b")),
             Map.entry("mainboard", Pattern.compile("\\bbo mach chu\\b|\\bmainboard\\b|^main\\b")),
             Map.entry("gpu", Pattern.compile("\\b(?:card|cac) (?:man hinh|do hoa)\\b|\\bvga\\b")),
-            Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b")),
+            Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b|\\bpower supply\\b")),
             Map.entry("ssd", Pattern.compile("\\bo cung\\b|\\bssd\\b")),
             // "bộ nhớ cache / đệm" trong tên CPU không phải RAM
             Map.entry("ram", Pattern.compile("^ram\\b|\\bbo nho\\b(?! (cache|dem|l[23]))|^ram ")),
@@ -943,6 +943,8 @@ public class PriceEngine {
 
     /** Loại linh kiện khớp sớm nhất trong chuỗi đã bỏ dấu, null nếu không nhận ra */
     public static String kind(String normalized) {
+        // Tên hãng "Cooler Master" không phải loại "tản nhiệt": nguồn "Cooler Master V650 SFX" từng bị xếp vào tản (23/11)
+        normalized = normalized.replace("cooler master", "coolermaster");
         if (normalized.matches(".*\\b(de tan nhiet|tan nhiet laptop|tan nhiet notebook|cooling ?pad|notepal|notebook cooler)\\b.*")) return "accessory";
         if (normalized.matches(".*\\b(quat|fan)\\b.*")
                 && normalized.matches(".*\\b(cam tay|du lich|quat ban|quat de ban|quat sac|tich dien|jisulife)\\b.*")) return "appliance";

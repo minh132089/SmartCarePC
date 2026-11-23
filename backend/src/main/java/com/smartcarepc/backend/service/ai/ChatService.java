@@ -65,6 +65,8 @@ public class ChatService {
             2. Thiếu ngân sách hoặc mục đích thì hỏi thông tin còn thiếu. Đã có ngân sách nhưng chỉ nói chung "thiết kế \
             đồ họa" thì hỏi ngắn: chủ yếu 2D (Photoshop/Illustrator) hay 3D/render, và phần mềm nếu biết. Chỉ nói "chơi game" \
             thì hỏi game nhẹ/esports hay game nặng/AAA, hoặc tên game hay chơi. Có cả hai nhu cầu chưa rõ thì gộp một lượt hỏi. \
+            Đã nêu cấu hình cụ thể (card hoặc hãng card, dung lượng RAM, độ phân giải) thì KHÔNG hỏi mức game nữa: giả định \
+            game phổ biến ở độ phân giải đó (mặc định Full HD), nêu giả định trong một câu và làm luôn. \
             Nếu đã nêu phần mềm, tên game hoặc mức nặng/nhẹ thì dùng thông tin đó, không hỏi lại điểm đã rõ. Đọc cả hội thoại: \
             câu trả lời "chỉ 2D", "3D", "nhẹ" là bổ sung cho câu hỏi trước, giữ ngân sách và ràng buộc đã có. \
             Chưa rõ workload thì chưa tìm giá hay dựng thẻ. Chỉ hỏi thêm một lượt về workload; sau khi khách trả lời thì tư vấn. \
@@ -1531,6 +1533,10 @@ public class ChatService {
         String text = String.join(" ", userTexts).toLowerCase(java.util.Locale.ROOT);
         int topics = text.matches("(?s).*(2\\s*d\\b|3\\s*d\\b|render|photoshop|illustrator|lightroom|premiere|after effects|davinci|blender|sketchup|3ds max|cinema 4d).*") ? 1 : 0;
         if (text.matches("(?s).*(light gaming|casual gaming|demanding gaming|heavy gaming|game nhẹ|game nặng|aaa|esport|valorant|liên minh|lmht|cs2|csgo|cyberpunk|elden|wukong).*")) topics |= 2;
+        // Đã nêu cấu hình cụ thể (card, hãng card, RAM, độ phân giải) thì coi như biết mức game, không hỏi lại (23/11: GPT hỏi
+        // "game nhẹ hay nặng" với "PC game 31 triệu, đúng RTX 4060, RAM 32GB", người dùng phải trả lời thêm một lượt)
+        if (text.matches("(?s).*\\b(game|gaming|chơi)\\b.*") && text.matches(
+                "(?s).*(full ?hd|1080p?|1440p?|\\b2k\\b|\\b4k\\b|\\brtx\\b|\\bgtx\\b|\\brx ?\\d{4}|radeon|nvidia|nvida|geforce|card amd|\\d+ ?gb ram|ram \\d+ ?gb).*")) topics |= 2;
         return topics;
     }
 
@@ -4189,7 +4195,9 @@ public class ChatService {
     }
 
     private static final java.util.regex.Pattern LOW_PROFILE = java.util.regex.Pattern.compile(
-            "low[\\s-]*profile|\\bthấp\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+            // axp: dòng tản thấp Thermalright AXP90 / AXP120; tản khí ghi "cho máy ITX / HTPC" cũng là loại thấp (ca kiểm tra 23/11)
+            "low[\\s-]*profile|\\bthấp\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l|\\baxp\\s*-?\\d{2,3}|\\bhtpc\\b|\\bm?itx\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     /** Tản khí thấp (low-profile, top-flow) cho vỏ nhỏ */
     static boolean lowProfile(String title) {
@@ -4563,7 +4571,8 @@ public class ChatService {
 
     /** Dòng vỏ chỉ chứa bo Mini ITX (tên mẫu) */
     private static final java.util.regex.Pattern ITX_CASES = java.util.regex.Pattern.compile(
-            "\\b(sugo|sg1[0-9]|nr200p?|a4-h2o|q58|ghost\\s*s1|meshlicious|ncase|terra|dan\\s*a4|jonsbo\\s*(a4|n1|v8|v10|z20i)|nzxt\\s*h1|h210i?|ridge)\\b",
+            // q58\\w*: tên bán hay kèm hậu tố ("Q58X4", ca kiểm tra 23/11 bị loại vì thiếu ranh giới chữ)
+            "\\b(sugo|sg1[0-9]|nr200p?|a4-?h2o|q58\\w*|ghost\\s*s1|meshlicious|ncase|terra|dan\\s*a4|jonsbo\\s*(a4|n1|v8|v10|z20i)|nzxt\\s*h1|h210i?|ridge)\\b",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
     private static final java.util.regex.Pattern BOARD_CHIP = java.util.regex.Pattern.compile("\\b(?:a620a|[abhzx]\\d{3})-?([mie]?)\\b");

@@ -41,6 +41,34 @@ class ChatLatencyTests {
     }
 
     @Test
+    void daNeuCardRamHayDoPhanGiaiThiKhongHoiLaiMucGame() {
+        // Ca kiểm tra 23/11 (GPT-6.1-sol hỏi lại thay vì làm): người dùng đã nêu cấu hình cụ thể
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC game 31 triệu, bắt buộc đúng RTX 4060 8GB, RAM 32GB, SSD 1TB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Build PC chơi game Full HD 27 triệu, card nvida, RAM 16GB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Cần PC Mini-ITX chơi game 33 triệu, RAM 16GB.")) & 2).isEqualTo(2);
+        // Chỉ nói "chơi game" và ngân sách: vẫn hỏi mức game
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game 20 triệu")) & 2).isZero();
+    }
+
+    @Test
+    void voVaTanMiniItxCoThatKhongBiLoaiNham() {
+        // Ca kiểm tra 23/11 (h12, h13 PC Mini-ITX game): hàng thật bị loại nên không dựng được cấu hình nào
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Case LIAN-LI Q58X4 Black")).isTrue();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí CPU Thermalright AXP90 - X36 cho máy tính iTX | mITX | HTPC")).isTrue();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí Thermalright AXP120-X67")).isTrue();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Mini LIAN LI A4H2O Black Pcie 4.0 (MINI TOWER/MÀU ĐEN/PCIE 4.0)")).isTrue();
+        assertThat(ChatService.fitsCode("psu_sfx", "Cooler Master V650 SFX Gold 650W 80 PLUS Gold Modular SFX Power Supply 12V v3.42")).isTrue();
+        assertThat(com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(
+                "Cooler Master V650 SFX Gold 650W 80 PLUS Gold Modular SFX Power Supply 12V v3.42"))).isEqualTo("psu");
+        assertThat(com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(
+                "Tản nhiệt khí Cooler Master Hyper 212 Black"))).isEqualTo("cooler");
+        // Vẫn loại tản tháp và tản nước
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí CPU Deepcool AK400")).isFalse();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt nước AIO 240mm ITX")).isFalse();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Xigmatek Gaming X mATX")).isFalse();
+    }
+
+    @Test
     void nganSachVietHoaCoDauVanNhanDuoc() {
         // Ca thật 23/11: "tôi muốn build PC 20 TRIỆU" bị hỏi lại ngân sách (Ệ hoa không khớp "triệu" khi thiếu UNICODE_CASE)
         assertThat(ChatService.hasBudget("tôi muốn build PC 20 TRIỆU và chơi được game nặng AAA")).isTrue();

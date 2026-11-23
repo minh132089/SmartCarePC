@@ -436,6 +436,21 @@ public class UpgradeService {
     }
 
     /** Giá đọc trên chính trang cửa hàng, đúng sản phẩm và còn hàng; null nếu chưa đủ chứng cứ */
+    /** Món cùng loại và cùng thông số (ChatService.sameSpec), giá đã xác minh, rẻ nhất trong các kết quả đã tìm của lượt này */
+    private Map.Entry<ProductSearch.Product, Offer> verifiedAlternative(String category, String want, ProductSearch.Product chosen, Turn turn) {
+        Map.Entry<ProductSearch.Product, Offer> best = null;
+        for (var q : turn.results.values()) {
+            if (q == chosen || q.title() == null) continue;
+            if (!want.equals(PriceEngine.kind(PriceEngine.norm(q.title())))) continue;
+            if (!ChatService.sameSpec(category, chosen.title(), q.title())) continue;
+            if ("ram".equals(category) && ChatService.serverRam(q.title())) continue;
+            Offer o = checked(q);
+            if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock())) continue;
+            if (best == null || o.priceVnd() < best.getValue().priceVnd()) best = Map.entry(q, o);
+        }
+        return best;
+    }
+
     private Offer checked(ProductSearch.Product p) {
         if (p == null || p.url() == null) return null;
         Offer offer = search.offer(p.url());
@@ -460,11 +475,12 @@ public class UpgradeService {
                 errors.add("Only one " + category + " line is allowed; use buy_qty for several of the same product.");
                 continue;
             }
-            var p = turn.results.get(id);
-            if (p == null) {
+            var found = turn.results.get(id);
+            if (found == null) {
                 errors.add(category + ": product_id \"" + id + "\" is not a search result. Pick an id returned by search_products.");
                 continue;
             }
+            var p = found;
             String kind = PriceEngine.kind(PriceEngine.norm(p.title()));
             String want = "motherboard".equals(category) ? "mainboard" : category;
             if (kind != null && !kind.equals(want)) {
@@ -477,9 +493,19 @@ public class UpgradeService {
             }
             Offer offer = checked(p);
             if (offer == null) {
-                errors.add(category + ": the price or stock of \"" + p.title() + "\" could not be confirmed on the store page. "
-                        + "Choose a result with verified = true and in_stock = true.");
-                continue;
+                // Món chưa xác minh được giá: tự lấy món cùng thông số đã xác minh trong kết quả tìm (ca kiểm tra 23/11: RAM DDR5
+                // 32GB chưa xác minh, trợ lý bỏ cuộc với 0 món dù kết quả có bộ khác cùng thông số)
+                var alt = verifiedAlternative(category, want, p, turn);
+                if (alt != null) {
+                    log.info("Upgrade: {} \"{}\" chưa xác minh giá, dùng món cùng thông số \"{}\" ({})", category, p.title(),
+                            alt.getKey().title(), alt.getValue().priceVnd());
+                    p = alt.getKey();
+                    offer = alt.getValue();
+                } else {
+                    errors.add(category + ": the price or stock of \"" + p.title() + "\" could not be confirmed on the store page. "
+                            + "Choose a result with verified = true and in_stock = true.");
+                    continue;
+                }
             }
             Object rawQty = item.get("buy_qty");
             if (rawQty != null && (!(rawQty instanceof Number q) || !Double.isFinite(q.doubleValue())
