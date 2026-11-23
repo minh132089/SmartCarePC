@@ -613,6 +613,7 @@ public class ChatService {
                 return respond(BUILDS_READY, turn);
             }
             long aiMs = (System.nanoTime() - t0) / 1_000_000;
+            logUsage(round + 1, aiMs, res);
             var choices = (List<Map<String, Object>>) res.getOrDefault("choices", List.of());
             if (choices.isEmpty()) break;
             var message = (Map<String, Object>) choices.getFirst().getOrDefault("message", Map.of());
@@ -745,6 +746,8 @@ public class ChatService {
                 });
                 log.info("Chat vòng {}: dựng Rẻ / Chất lượng từ Phù hợp trong {} ms, có {}", round + 1,
                         (System.nanoTime() - td) / 1_000_000, turn.tiers.keySet());
+                // Đã thử dựng rồi: không dựng lại lần nữa lúc viết câu trả lời (23/11: lần lặp đó tốn thêm 33 giây)
+                repaired = true;
             }
             // Repair from the collected products before spending another model round on prose we replace anyway.
             if (!repaired && turn.advice && search.enabled() && turn.tiers.keySet().containsAll(TIERS) && !readyToReply(turn)) {
@@ -781,6 +784,19 @@ public class ChatService {
         // Hết số vòng: có phương án rồi thì vẫn gửi (kèm câu dẫn), chưa có gì mới bảo người dùng hỏi cụ thể hơn
         return respond(turn.tiers.isEmpty() && turn.last == null
                 ? "This request needs more detail to narrow the search. Please be more specific." : BUILDS_READY, turn);
+    }
+
+    /** Ghi số token AI viết ra (và phần suy nghĩ, nếu có) để biết vòng chậm vì viết dài hay vì cổng AI chậm */
+    @SuppressWarnings("unchecked")
+    private void logUsage(int round, long aiMs, Map<String, Object> res) {
+        if (res == null || !(res.get("usage") instanceof Map<?, ?> u)) return;
+        var usage = (Map<String, Object>) u;
+        Object reasoning = usage.get("completion_tokens_details") instanceof Map<?, ?> d ? d.get("reasoning_tokens") : null;
+        String thinking = "";
+        if (res.get("choices") instanceof List<?> c && !c.isEmpty() && c.getFirst() instanceof Map<?, ?> ch
+                && ch.get("message") instanceof Map<?, ?> m && m.get("reasoning_content") instanceof String r) thinking = ", reasoning_content " + r.length() + " ký tự";
+        log.info("Chat vòng {}: {} ms, token vào {}, ra {}, suy nghĩ {}{}, model {}", round, aiMs, usage.get("prompt_tokens"),
+                usage.get("completion_tokens"), reasoning, thinking, res.get("model"));
     }
 
     /** Thứ tự hiện ba phương án trong bảng so sánh */
@@ -1083,7 +1099,8 @@ public class ChatService {
     }
 
     /** Thời gian tối đa cho các bước cứu của một phương án (propose_build); dựng lại phương án từ phương án bên cạnh dùng REBUILD_BUDGET */
-    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(35);
+    // 35 → 20 giây (23/11): mỗi lần tìm chip thay thế chờ cửa hàng ~15 giây, các bước cứu có câu tốn 36 giây
+    static final java.time.Duration TIER_BUDGET = java.time.Duration.ofSeconds(20);
     static final java.time.Duration REBUILD_BUDGET = java.time.Duration.ofSeconds(15);
 
     /** Khoản vượt trần tối đa còn ép giá thêm một lượt (đổi hàng cùng thông số rẻ hơn) */
