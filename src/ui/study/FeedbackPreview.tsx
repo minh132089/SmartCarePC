@@ -15,7 +15,7 @@ const rows: FeedbackRow[] = Array.from({ length: 31 }, (_, i) => ({
     budget_fit: 3 + i % 3, purpose_fit: 3 + i % 3, guide: 4 + i % 2, confidence: 3 + i % 3, next_time: 3 + i % 3,
     // Nửa sau là phản hồi của bản v2 (điểm mẫu cao hơn một chút) để xem bảng so sánh phiên bản
     ...(i >= 16 ? { app_version: 'v2', guide: 5 - i % 2, confidence: 4 + i % 2,
-      used_v1: i % 3 === 0 ? 'no' : 'yes', cmp_speed: 3 + i % 3, cmp_accuracy: 3 + (i + 1) % 3, cmp_clarity: 2 + i % 4, cmp_overall: 3 + i % 3 } : {}) },
+      cmp_speed: 3 + i % 3, cmp_accuracy: 3 + (i + 1) % 3, cmp_clarity: 2 + i % 4, cmp_overall: 3 + i % 3 } : {}) },
 }))
 
 export default function FeedbackPreview() {

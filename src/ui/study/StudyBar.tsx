@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Flask, NotePencil, Star } from '@phosphor-icons/react'
 import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
-import { BASELINE, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, type Lang, type RatingKind, type StudyQuestion } from './questions'
+import { BASELINE, FEEDBACK, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, withCompare, type Lang, type RatingKind, type StudyQuestion } from './questions'
 import { QuestionList } from './QuestionList'
 import { CODE_PATTERN, PHASE_LABEL, flushQueue, isQueued, newSubmissionId, pendingForm, postponeBaseline, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, LangToggle, PrimaryButton, Question, QuietButton } from './StudyParts'
@@ -386,12 +386,11 @@ function RatingDialog() {
  * hợp nhu cầu không, rồi đánh số lại để câu đầu là 1 (số nằm sẵn trong câu chữ).
  */
 function ratingQuestions(kind: RatingKind, advised: boolean): StudyQuestion[] {
-  const all = RATING_QUESTIONS[kind]
-  if (kind !== 'build' || advised) return all
+  if (kind !== 'build' || advised) return RATING_QUESTIONS[kind]
   const renumber = (text: string, n: number) => text.replace(/^\d+\.\s*/, `${n}. `)
-  return all
+  return withCompare(FEEDBACK
     .filter((q) => q.key !== 'budget_fit' && q.key !== 'purpose_fit')
-    .map((q, i) => ({ ...q, text: renumber(q.text, i + 1), ...(q.vi ? { vi: { ...q.vi, text: renumber(q.vi.text, i + 1) } } : {}) }))
+    .map((q, i) => ({ ...q, text: renumber(q.text, i + 1), ...(q.vi ? { vi: { ...q.vi, text: renumber(q.vi.text, i + 1) } } : {}) })))
 }
 
 /**

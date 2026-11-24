@@ -13,21 +13,18 @@ const fmt = (v: number | null | undefined, digits = 2) => (v == null ? '—' : v
 const signed = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`)
 
 /**
- * Người dùng tự so với bản trước (câu COMPARE_V1, chỉ người đã dùng bản cũ trả lời): bao nhiêu người đã dùng bản cũ, điểm trung
- * bình từng câu (3 = như cũ) và tỉ lệ thấy tốt hơn / như cũ / tệ hơn
+ * Người dùng tự so với bản trước (câu COMPARE_V1, hiện ngay đầu form từ 24/11; trước đó chỉ người trả lời "đã dùng bản cũ"
+ * mới thấy): bao nhiêu phản hồi trả lời phần này, điểm trung bình từng câu (3 = như cũ) và tỉ lệ thấy tốt hơn / như cũ / tệ hơn
  */
 function SelfCompare({ feedback }: { feedback: FeedbackRow[] }) {
-  const answered = feedback.filter((r) => r.answers.used_v1 != null)
-  if (!answered.length) return null
-  const used = answered.filter((r) => r.answers.used_v1 === 'yes')
   const scales = COMPARE_V1.filter((q) => q.type === 'scale')
+  const used = feedback.filter((r) => scales.some((q) => score(r.answers[q.key]) != null))
+  if (!used.length) return null
   return (
     <div className="mt-4">
       <p className="text-[14px] font-semibold text-ink">Users' own comparison with the earlier version</p>
       <p className="mt-1 text-[13px] text-ink-2">
-        {answered.length} responses answered this part: {used.length} had used the earlier version,{' '}
-        {answered.filter((r) => r.answers.used_v1 === 'no').length} had not, {answered.filter((r) => r.answers.used_v1 === 'unsure').length} did not remember.
-        Scale: 1 much worse, 3 about the same, 5 much better.
+        {used.length} responses answered this part. Scale: 1 much worse, 3 about the same, 5 much better.
       </p>
       {used.length > 0 && (
         <div className="mt-2 overflow-x-auto">
