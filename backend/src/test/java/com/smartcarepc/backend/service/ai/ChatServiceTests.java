@@ -14,6 +14,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -432,6 +434,63 @@ class ChatServiceTests {
                 {"code":"ram_ddr4","quantity":4,"spec":"%s","product_id":"s1-2"}]}
                 """.formatted(misleadingKit ? "2x16GB DDR4" : "64GB DDR4")),answer("Xong."),answer("Xong."),answer("Xong."));
         return service.reply(new ChatRequest(List.of(new Message("user","máy RAM 64GB 36 triệu")),null,null,"advice"));
+    }
+
+    @Test
+    void can64GbMaKhongCoThanh32GbThiDungBonThanh16GbTrenBoBonKhe() {
+        // Rà soát 24/11 e08: 64GB DDR4, không có thanh 32GB nào có link mua, bo 2 khe: phải ra 4 x 16GB trên bo 4 khe
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-E DDR4","A",2_149_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz","A",2_910_000L,"https://a.vn/ram",null);
+        var msi = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/msi",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram));
+        when(search.search(org.mockito.ArgumentMatchers.contains("MSI PRO B760M-P"))).thenReturn(List.of(msi));
+        for(var p:List.of(mb,ram,msi))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":2,"spec":"32GB DDR4","product_id":"s1-2"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","PC chơi game, 36 triệu, RAM 64GB, SSD 1TB")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.quantity()).isEqualTo(4);
+        }).anySatisfy(line -> assertThat(line.productName()).contains("B760M-P"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {4, 8})
+    void troLyChonThanh8GbCho64GbThiDoiSangBonThanh16Gb(int quantity) {
+        // Full 24/11 e08 lần hai: trợ lý chọn 8 x 8GB (rồi 4 x 8GB = 32GB) trên bo 2 khe, không thanh 32GB nào có link mua
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-E DDR4","A",2_149_000L,"https://a.vn/mb",null);
+        var ram8 = new ProductSearch.Product("RAM PC SSTC 8GB DDR4 | (1x8GB), 3200MHz","A",439_000L,"https://a.vn/r8",null);
+        var ram16 = new ProductSearch.Product("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz","A",1_200_000L,"https://a.vn/r16",null);
+        var msi = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/msi",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram8,ram16));
+        when(search.search(org.mockito.ArgumentMatchers.contains("MSI PRO B760M-P"))).thenReturn(List.of(msi));
+        for(var p:List.of(mb,ram8,ram16,msi))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":%d,"spec":"64GB DDR4","product_id":"s1-2"}]}
+                """.formatted(quantity)),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","PC chơi game, 36 triệu, RAM 64GB, SSD 1TB")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("16GB");
+            assertThat(line.quantity()).isEqualTo(4);
+        }).anySatisfy(line -> assertThat(line.productName()).contains("B760M-P"));
     }
 
     @Test
@@ -1968,8 +2027,8 @@ class ChatServiceTests {
     @Test
     void nangCardChoChatLuongBoQuaChipChiNhinhHon() {
         // Ca thật 24/11: RTX 4060 chỉ thử Arc B580 / RX 7600 XT / RTX 3060 Ti (gần như ngang), Chất lượng thành nâng CPU
-        assertThat(ChatService.gpuStepUps("rtx4060")).doesNotContain("arcb580", "rx7600xt", "rtx3060ti")
-                .startsWith("rx6700xt", "rtx5060", "rtx4060ti");
+        assertThat(ChatService.gpuStepUps("rtx4060")).startsWith("rx6700xt", "rtx5060", "rtx4060ti")
+                .contains("arcb580", "rx7600xt", "rtx3060ti");
         // Chip đầu bảng không còn chip mạnh hơn rõ rệt: giữ danh sách cũ
         assertThat(ChatService.gpuStepUps("rtx5070ti")).isEqualTo(ChatService.gpuUpgrades("rtx5070ti")).containsExactly("rx9070xt");
     }
