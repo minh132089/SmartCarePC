@@ -658,8 +658,11 @@ public class ChatService {
                     nudged = true;
                     log.info("Chat vòng {}: AI hỏi lại dù đã có ngân sách, nhắc làm luôn", round + 1);
                     messages.add(Map.of("role", "assistant", "content", String.valueOf(message.getOrDefault("content", ""))));
-                    messages.add(Map.of("role", "user", "content", "I have already provided my budget and intended use. Assume common requirements for "
-                            + "any missing details, state those assumptions briefly and produce the three options now."));
+                    // Chép lại nguyên câu yêu cầu: chỉ nói "đã cho ngân sách" thì trợ lý từng đáp "không thấy ngân sách trong hội thoại"
+                    // (full 24/11 i05, "40 triệu, RAM 32GB, GPU NVIDIA 12GB" mà không ra cấu hình nào)
+                    messages.add(Map.of("role", "user", "content", "My request, with the budget and intended use, is: \""
+                            + String.join(" / ", userTexts) + "\". Assume common requirements for any missing details, state those "
+                            + "assumptions briefly, search the products and call propose_build to produce the three options now."));
                     continue;
                 }
                 // Câu hỏi tiếp (vd "đổi sang card AMD") mà trợ lý viết luôn các phương án kèm giá, không gọi propose_build
@@ -914,7 +917,7 @@ public class ChatService {
             var a = mine.getFirst();
             var b = balancedChosen.getFirst();
             long ta = total(a.request(), a.details(), a.picks()), tb = total(b.request(), b.details(), b.picks());
-            boolean same = signature(a.picks()).equals(signature(b.picks()));
+            boolean same = sameBuild(a, b);
             boolean wrong = "quality".equals(t) ? ta < tb + TIER_GAP || !qualityImproves(b, a) : ta > tb - TIER_GAP;
             if (same || wrong) {
                 log.warn("Phương án {} {} Phù hợp ({} / {}), không hiện", t, same ? "duplicates the build of" : "has an incorrect order relative to", ta, tb);
@@ -1006,7 +1009,7 @@ public class ChatService {
         java.util.Set<String> seen = new java.util.HashSet<>();
         return all.stream()
                 .filter(c -> cap == null || total(c.request(), c.details(), c.picks()) <= cap)
-                .filter(c -> seen.add(signature(c.picks())))
+                .filter(c -> seen.add(signature(c.picks()) + c.request().items()))
                 .toList();
     }
 
@@ -1931,7 +1934,7 @@ public class ChatService {
         if (b == null || b.picks().isEmpty() || !showable(b, tierCap(b.budgetVnd(), "balanced"))) return;
         long tb = total(b.request(), b.details(), b.picks());
         if (c != null && showable(c, tierCap(c.budgetVnd(), "cheap")) && total(c.request(), c.details(), c.picks()) <= tb - TIER_GAP
-                && !signature(c.picks()).equals(signature(b.picks()))) return;
+                && !sameBuild(c, b)) return;
         Long capCheap = tierCap(b.budgetVnd(), "cheap");
         long target = capCheap == null ? tb - TIER_GAP : Math.min(capCheap, tb - TIER_GAP);
         Map<String, Map<String, Object>> details = new LinkedHashMap<>();
@@ -1941,7 +1944,7 @@ public class ChatService {
         List<String> notes = new ArrayList<>();
         var cand = finalizeTier(base, "cheap", target, Map.of(), turn.needs, notes, REBUILD_BUDGET);
         long tc = total(cand.request(), cand.details(), cand.picks());
-        if (showable(cand, target) && !signature(cand.picks()).equals(signature(b.picks()))) {
+        if (showable(cand, target) && !sameBuild(cand, b)) {
             log.info("Rẻ dựng lại từ Phù hợp: {} (Phù hợp {}), {}", tc, tb, notes);
             turn.tiers.put("cheap", cand);
         } else {
@@ -2048,7 +2051,7 @@ public class ChatService {
         List<String> notes = new ArrayList<>();
         var cand = finalizeTier(base, "balanced", target, Map.of(), turn.needs, notes, REBUILD_BUDGET);
         long tc = total(cand.request(), cand.details(), cand.picks());
-        if (showable(cand, target) && !signature(cand.picks()).equals(signature(q.picks()))) {
+        if (showable(cand, target) && !sameBuild(cand, q)) {
             log.info("Phù hợp dựng lại từ Chất lượng: {} (Chất lượng {}), {}", tc, tq, notes);
             turn.tiers.put("balanced", cand);
         } else {
@@ -2068,7 +2071,7 @@ public class ChatService {
         Long capQ = tierCap(b.budgetVnd(), "quality");
         var q = turn.tiers.get("quality");
         if (q != null && showable(q, capQ) && total(q.request(), q.details(), q.picks()) >= tb + TIER_GAP
-                && !signature(q.picks()).equals(signature(b.picks())) && qualityImproves(b, q)) return;
+                && !sameBuild(q, b) && qualityImproves(b, q)) return;
         List<String> notes = new ArrayList<>();
         var cand = upgraded(b, capQ, tb + TIER_GAP, turn.needs, notes);
         if (cand != null) {
@@ -2109,7 +2112,7 @@ public class ChatService {
         }
         c = normalized(withPagePrices(c), Map.of());
         long t = total(c.request(), c.details(), c.picks());
-        boolean ok = t >= minTotal && showable(c, cap) && !signature(c.picks()).equals(signature(base.picks()));
+        boolean ok = t >= minTotal && showable(c, cap) && !sameBuild(c, base);
         if (!ok) log.info("Nâng cấp từ {}: bản nâng {} không nhận (cần >= {}, hiện được {}, trần {})",
                 total(base.request(), base.details(), base.picks()), t, minTotal, showable(c, cap), cap);
         return ok ? c : null;
@@ -2129,6 +2132,7 @@ public class ChatService {
         if (room <= 0) return null;
         ProductSearch.Product found;
         String spec, note;
+        Integer newQty = null;
         if ("gpu".equals(kind)) {
             String chip = gpuChip(now.title());
             Integer v = vram(now.title());
@@ -2155,6 +2159,15 @@ public class ChatService {
             // Giá nâng hợp lý: không quá 1,5 lần mức tăng theo dung lượng (ca thật v29: RAM 32GB 13,89 triệu thay RAM 16GB 3,39 triệu)
             long fair = Math.round(was * (target / (double) have) * 1.5);
             found = lowerTier(code, kind, now, target, c.picks(), Math.min(was + room, fair) + 1, c.siblings().getOrDefault(code, List.of()), target);
+            // Không có món đúng tổng dung lượng thì hai thanh lẻ bằng nửa (rà soát 24/11 office-control: "RAM DDR4 32GB" không món nào có
+            // link nên không dựng được Chất lượng, dù thanh 16GB còn bán). Chỉ nhận tên ghi rõ thanh lẻ ("1x16GB": tên "32GB" không ghi
+            // kit có thể là bộ 2 thanh) và thanh lớn hơn thanh đang dùng (không chồng thêm thanh cũ)
+            Integer stickNow = amount("ram", now.title()) == null ? null : amount("ram", now.title()) / Objects.requireNonNullElse(kitSticks(now.title()), 1);
+            if (found == null && "ram".equals(kind) && target % 2 == 0 && stickNow != null && target / 2 >= stickNow
+                    && d.get("user_layout") == null && boardHas(c, 2)) {
+                found = ramStick(code, now, target / 2, 2, c.picks(), Math.min(was + room, fair) + 1, c.siblings().getOrDefault(code, List.of()), true);
+                if (found != null) newQty = 2;
+            }
             if (found == null) return null;
             String ddr = "ram".equals(kind) ? ProductRules.read("ram", now.title()).ramType() : null;
             spec = "ram".equals(kind) ? target + "GB" + (ddr == null ? "" : " " + ddr) : "SSD " + label(target);
@@ -2173,7 +2186,10 @@ public class ChatService {
         nd.remove("reason");
         log.info("Upgrade {} ({}, {} VND)", note, found.title(), found.priceVnd());
         notes.add(note);
-        var out = new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
+        final int qty = newQty == null ? item.qty() : newQty;
+        var request = newQty == null ? c.request() : new BuildCheckRequest(c.request().items().stream()
+                .map(i -> i.code().equals(code) ? new BuildCheckRequest.Item(i.code(), qty) : i).toList());
+        var out = new Checked(request, c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
         return cap == null || total(out.request(), out.details(), out.picks()) <= cap ? out : null;
     }
 
@@ -2494,17 +2510,18 @@ public class ChatService {
         var q = turn.tiers.get("quality");
         if (q != null && showable(q, tierCap(q.budgetVnd(), "quality"))) {
             long tq = total(q.request(), q.details(), q.picks());
-            if (tq < tb + TIER_GAP || signature(q.picks()).equals(signature(b.picks())) || !qualityImproves(b, q)) {
+            if (tq < tb + TIER_GAP || sameBuild(q, b) || !qualityImproves(b, q)) {
                 asks.add("The Upgraded option (" + millions(tq) + ") does not improve on Best fit (" + millions(tb) + "): call propose_build again "
                         + "with tier quality and improve at least one key component over Best fit: GPU, CPU, RAM, SSD "
-                        + "or PSU. Use the remaining allowance up to " + millions(tierCap(q.budgetVnd(), "quality"))
-                        + " and include every required component.");
+                        + "or PSU." + (tierCap(q.budgetVnd(), "quality") == null ? ""
+                                : " Use the remaining allowance up to " + millions(tierCap(q.budgetVnd(), "quality")) + ".")
+                        + " Include every required component.");
             }
         }
         var c = turn.tiers.get("cheap");
         if (c != null && showable(c, tierCap(c.budgetVnd(), "cheap"))) {
             long tc = total(c.request(), c.details(), c.picks());
-            if (tc > tb - TIER_GAP || signature(c.picks()).equals(signature(b.picks()))) {
+            if (tc > tb - TIER_GAP || sameBuild(c, b)) {
                 asks.add("The Budget option (" + millions(tc) + ") is not clearly cheaper than Best fit (" + millions(tb) + "): call propose_build again "
                         + "with tier cheap, reducing a specification while still meeting the requirements and including every component.");
             }
@@ -2573,6 +2590,12 @@ public class ChatService {
         return oldRank >= 0 && newRank > oldRank;
     }
 
+    /** Bo đang chọn có ít nhất n khe RAM (không đọc được số khe thì coi là có: bo máy bàn có từ 2 khe) */
+    private boolean boardHas(Checked c, int n) {
+        Integer slots = ProductRules.memorySlots(productTitles(c.picks()).get("motherboard"));
+        return slots == null || slots >= n;
+    }
+
     /**
      * Nhiều thanh RAM hơn số khe của bo (rà soát 24/11 creator-video: trợ lý muốn "2x16GB" mà chọn thanh 8GB, code thành 4 x 8GB
      * trên bo 2 khe, ba lần propose đều hỏng, người dùng không nhận được cấu hình nào): giữ tổng dung lượng, đổi sang hai thanh
@@ -2625,9 +2648,18 @@ public class ChatService {
     /** Thanh RAM đúng perStick GB mỗi thanh (thanh lẻ, hoặc bộ kit mà số thanh chia hết sticks), cùng DDR, có link mua, rẻ nhất cả dòng */
     private ProductSearch.Product ramStick(String code, ProductSearch.Product now, int perStick, int sticks,
             Map<String, ProductSearch.Product> picks, long maxLine, List<ProductSearch.Product> siblings) {
+        return ramStick(code, now, perStick, sticks, picks, maxLine, siblings, false);
+    }
+
+    private static final java.util.regex.Pattern SINGLE_STICK = java.util.regex.Pattern.compile("(?i)\\b1\\s*x\\s*(\\d+)\\s*g");
+
+    private ProductSearch.Product ramStick(String code, ProductSearch.Product now, int perStick, int sticks,
+            Map<String, ProductSearch.Product> picks, long maxLine, List<ProductSearch.Product> siblings, boolean explicitSingle) {
         String ddr = ProductRules.read("ram", now.title()).ramType();
         String query = "RAM " + (ddr == null ? "" : ddr + " ") + perStick + "GB";
         List<ProductSearch.Product> pool = new ArrayList<>(siblings);
+        // Thêm một thanh y hệt thanh đang dùng (1 x 16GB -> 2 x 16GB) cũng là cách nâng, khi tên ghi rõ là thanh lẻ
+        if (explicitSingle) pool.add(now);
         try {
             pool.addAll(search.search(query));
             pool.addAll(search.engineSearch(query));
@@ -2642,11 +2674,15 @@ public class ChatService {
                 .filter(p -> {
                     Integer gb = amount("ram", p.title());
                     int k = Objects.requireNonNullElse(kitSticks(p.title()), 1);
+                    if (explicitSingle) {
+                        var m = SINGLE_STICK.matcher(p.title());
+                        return gb != null && gb == perStick && m.find() && Integer.parseInt(m.group(1)) == perStick;
+                    }
                     return gb != null && gb % k == 0 && gb / k == perStick && sticks % k == 0;
                 })
                 .filter(p -> !serverRam(p.title()) && !ProductRules.read("ram", p.title()).laptopRam()
                         && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType())))
-                .filter(p -> lineCost.applyAsLong(p) < maxLine && swapOk(code, p, picks))
+                .filter(p -> lineCost.applyAsLong(p) < maxLine && (p == now || swapOk(code, p, picks)))
                 .filter(distinctUrl())
                 .filter(p -> stockOrder(p) < 2)
                 .sorted(Comparator.comparingLong(lineCost))
@@ -2666,10 +2702,22 @@ public class ChatService {
         Integer slots = old == null ? null : ProductRules.memorySlots(old.title());
         if (slots == null || sticks <= slots || sticks > 4 || "mb_itx".equals(board.code())) return c;
         var spec = ProductRules.read("motherboard", old.title());
-        String model = "mb_matx".equals(board.code()) ? "Gigabyte B760M GAMING PLUS WIFI DDR4" : "Gigabyte B760 GAMING X DDR4";
-        List<ProductSearch.Product> pool;
-        try { pool = search.search("mainboard " + model); }
-        catch (RuntimeException e) { return c; }
+        // Chỉ tìm một mẫu Gigabyte thì hết hàng / không link là bỏ cuộc (full 24/11 g16, e08: RAM 64GB DDR4, không có thanh
+        // 32GB mua được, bo 2 khe, ba lần propose đều hỏng): thử các bo đã đối chiếu số khe trên trang hãng, theo socket và DDR
+        List<String> models = new ArrayList<>();
+        boolean ddr4 = "DDR4".equals(spec.ramType());
+        if ("LGA1700".equals(spec.socket()) && ddr4) {
+            if (!"mb_matx".equals(board.code())) models.add("Gigabyte B760 GAMING X DDR4");
+            models.addAll(List.of("Gigabyte B760M GAMING PLUS WIFI DDR4", "MSI PRO B760M-P DDR4", "Gigabyte B760M DS3H DDR4"));
+        } else if ("AM4".equals(spec.socket())) {
+            models.add("ASUS PRIME B550M-A");
+        }
+        if (spec.socket() != null) models.add(spec.socket() + (spec.ramType() == null ? "" : " " + spec.ramType()) + " 4 khe RAM");
+        List<ProductSearch.Product> pool = new ArrayList<>();
+        for (String model : models) {
+            try { pool.addAll(search.search("mainboard " + model)); }
+            catch (RuntimeException e) { log.debug("Tìm bo \"{}\" lỗi: {}", model, e.getMessage()); }
+        }
         var candidates = pool.stream().filter(p -> p.title() != null && p.priceVnd() != null)
                 .filter(p -> ProductRules.memorySlots(p.title()) != null && ProductRules.memorySlots(p.title()) >= sticks)
                 .filter(p -> Objects.equals(spec.socket(), ProductRules.read("motherboard", p.title()).socket())
@@ -2677,7 +2725,11 @@ public class ChatService {
                 .filter(p -> fitsCode(board.code(), p.title()) && swapOk(board.code(), p, c.picks())).filter(distinctUrl())
                 .sorted(Comparator.comparingLong(ProductSearch.Product::priceVnd)).toList();
         var found = bestLinked(candidates, null, 6);
-        if (found == null || !verified(found)) return c;
+        if (found == null || !verified(found)) {
+            log.info("Bo {} khe cho {} thanh RAM ({} {}): {} bo hợp trong {} kết quả tìm {}, không đổi được", slots, sticks,
+                    spec.socket(), spec.ramType(), candidates.size(), pool.size(), models);
+            return c;
+        }
         Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
         Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
         Map<String, Map<String, Object>> details = new LinkedHashMap<>();
@@ -2686,7 +2738,7 @@ public class ChatService {
         links.put(board.code(), CompletableFuture.completedFuture(found.url()));
         details.computeIfAbsent(board.code(), key -> new LinkedHashMap<>()).remove("reason");
         notes.add("Changed the motherboard to " + found.title() + " with " + ProductRules.memorySlots(found.title())
-                + " RAM slots to fit " + sticks + " modules; the previous board had only " + slots + " khe.");
+                + " RAM slots to fit " + sticks + " modules; the previous board had only " + slots + " slots.");
         return new Checked(c.request(), c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
     }
 
@@ -5288,6 +5340,11 @@ public class ChatService {
             picks.put(code, p);
             links.put(code, CompletableFuture.completedFuture(p.url()));
         });
+    }
+
+    /** Cùng hàng và cùng số lượng: 2 x 16GB khác 1 x 16GB dù cùng tên sản phẩm (thêm một thanh là bản nâng) */
+    private static boolean sameBuild(Checked a, Checked b) {
+        return signature(a.picks()).equals(signature(b.picks())) && a.request().equals(b.request());
     }
 
     private static String signature(Map<String, ProductSearch.Product> picks) {

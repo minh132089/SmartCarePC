@@ -466,9 +466,9 @@ public class UpgradeService {
      * "không khuyên mua"). Hiện chỉ cho card đồ họa có VRAM tối thiểu; null nếu không áp dụng.
      */
     String cheapestOverBudget(Turn turn) {
-        var m = VRAM_MIN.matcher(turn.userText == null ? "" : turn.userText);
-        if (!m.find()) return cheapestAskedOverBudget(turn);
-        int need = Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2));
+        Integer vramNeed = vramNeed(turn);
+        if (vramNeed == null) return cheapestAskedOverBudget(turn);
+        int need = vramNeed;
         ProductSearch.Product best = null;
         Offer bestOffer = null;
         for (var p : turn.results.values()) {
@@ -487,6 +487,12 @@ public class UpgradeService {
                 + ChatService.millions(bestOffer.priceVnd()) + (best.shop() == null ? "" : " (" + best.shop() + ")") + ", "
                 + ChatService.millions(bestOffer.priceVnd() - budget) + " over your budget. Keep your current card for now, raise the "
                 + "budget by about that amount, or ask again later: graphics card prices change often.";
+    }
+
+    /** VRAM tối thiểu người dùng nêu ("at least 12GB VRAM"); null nếu không nêu */
+    private static Integer vramNeed(Turn turn) {
+        var m = VRAM_MIN.matcher(turn.userText == null ? "" : turn.userText);
+        return m.find() ? Integer.valueOf(m.group(1) != null ? m.group(1) : m.group(2)) : null;
     }
 
     private static final Map<String, Pattern> ASKED = Map.of(
@@ -516,6 +522,10 @@ public class UpgradeService {
             }
             if ("gpu".equals(category) && turn.requiredGpuVendor != null
                     && !turn.requiredGpuVendor.equals(ChatService.vendorOf(ChatService.gpuChip(p.title())))) continue;
+            // Không gợi ý card dưới mức VRAM người dùng nêu (full 24/11 ai-vram: cần 12 GB, lời nhắc đưa RTX 4060 8GB, trợ lý
+            // từ chối đúng rồi người dùng nhận câu chung "không xác nhận được giá")
+            Integer vramNeed = "gpu".equals(category) ? vramNeed(turn) : null;
+            if (vramNeed != null && (ChatService.vram(p.title()) == null || ChatService.vram(p.title()) < vramNeed)) continue;
             Offer o = checked(p);
             if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock()) || !ChatService.plausible(category, o.priceVnd())) continue;
             out.add(Map.entry(p, o));
@@ -1317,6 +1327,9 @@ public class UpgradeService {
         String reply = draft == null ? null : checkedReply(draft.replaceAll("(?s)<think>.*?</think>", ""), turn);
         if (plan == null) return new ChatResponse(noPlan(turn));
         if (plan.items().isEmpty()) {
+            // Lỗi duy nhất là lời nhắc "kế hoạch rỗng" mà trợ lý vẫn chốt 0 món: báo món rẻ nhất đạt yêu cầu và số tiền thiếu nếu có
+            boolean onlyEmptyNudge = !turn.lastErrors.isEmpty() && turn.lastErrors.stream().allMatch(e -> e.contains("an empty plan does not answer"));
+            if (onlyEmptyNudge && cheapestOverBudget(turn) != null) return new ChatResponse(cheapestOverBudget(turn));
             if (!turn.lastErrors.isEmpty()) return new ChatResponse(noPlan(turn));
             if (ramType(turn.pc) == null && turn.pc.purpose().toLowerCase(Locale.ROOT).matches(".*\\b(ram|memory)\\b.*")) {
                 return new ChatResponse("Before choosing RAM, check its DDR generation and the number of free memory slots. "

@@ -424,6 +424,29 @@ class UpgradeServiceTests {
     }
 
     @Test
+    void cardDuoiMucVramKhongDuocNhacLaiVaNoiRoCardDatYeuCauVuotNganSach() {
+        // Lượt đầy đủ 24/11 ai-vram: cần 12 GB, lời nhắc đưa RTX 4060 8GB vừa ngân sách, trợ lý từ chối đúng rồi người dùng nhận
+        // câu chung "store prices and stock could not be confirmed in time"
+        var small = product("Card màn hình Colorful GeForce RTX 4060 Nb Duo 8GB V5-V", 8_290_000L);
+        var big = product("Card màn hình ASUS Dual GeForce RTX 3060 12GB", 14_440_000L);
+        for (var p : List.of(small, big)) {
+            when(search.offer(p.url())).thenReturn(new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()));
+        }
+        when(search.search(any())).thenReturn(List.of(small, big));
+        var pc = new UpgradeInfo("Intel Core i5-10400", "ASUS PRIME B460M-A", "32GB DDR4, 2 sticks", "GTX 1650 4GB", "SSD NVMe 1TB",
+                "650W", "standard", "AI machine learning CUDA PyTorch: upgrade only GPU, need at least 12GB VRAM", 10_000_000L);
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060 12GB\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
+                answer("No 12GB card fits."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user",
+                "Upgrade only the GPU for CUDA and PyTorch. I need at least 12GB VRAM, keep the other parts.")), null, null, "upgrade", pc), s -> { });
+
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("at least 12 GB of VRAM").contains("RTX 3060 12GB").contains("4.44 million")
+                .doesNotContain("could not be confirmed in time");
+    }
+
+    @Test
     void keHoachRongVanKhongDuocBiaGia() {
         reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
                 toolCall("p1", "propose_upgrade", "{\"items\":[]}"),

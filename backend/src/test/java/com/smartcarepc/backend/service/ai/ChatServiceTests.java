@@ -435,6 +435,31 @@ class ChatServiceTests {
     }
 
     @Test
+    void boGigabyteBonKheHetHangThiThuBoBonKheKhacCungSocket() {
+        // Lượt đầy đủ 24/11 g16, e08: RAM 64GB DDR4 trên bo 2 khe, không có thanh 32GB mua được, chỉ tìm một mẫu Gigabyte nên
+        // không đổi được bo, ba lần propose đều hỏng
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-E DDR4","A",2_149_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product("RAM Kingston 16GB DDR4","A",2_000_000L,"https://a.vn/ram",null);
+        var msi = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/msi",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram));
+        when(search.search(org.mockito.ArgumentMatchers.contains("MSI PRO B760M-P"))).thenReturn(List.of(msi));
+        for(var p:List.of(mb,ram,msi))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":4,"spec":"64GB DDR4","product_id":"s1-2"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","máy RAM 64GB 36 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> assertThat(line.productName()).contains("B760M-P"));
+    }
+
+    @Test
     void mayVanPhongVuotTranDoiVoMatxDeCoBanTrongNganSach() {
         when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
         for(String[] p:List.of(new String[]{"case_standard_tower","case"},new String[]{"case_compact_tower","case"},
