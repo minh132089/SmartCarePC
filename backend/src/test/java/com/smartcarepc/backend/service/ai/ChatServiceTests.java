@@ -1931,6 +1931,60 @@ class ChatServiceTests {
     }
 
     @Test
+    void quatLapThemKhongCoLinkMuaThiBoQuatKhongChanPhuongAn() {
+        // Ca thật 24/11: quạt 120mm không có link mua chặn cả phương án, trợ lý dựng lại một vòng, câu trả lời mất 108 giây
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"},new String[]{"fan120","fans"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product("RAM Kingston 8GB DDR4","A",600_000L,"https://a.vn/ram",null);
+        var fan = new ProductSearch.Product("Quạt tản nhiệt Phanteks M25 G2 120mm","A",309_000L,"https://a.vn/fan",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram,fan));
+        for(var p:List.of(mb,ram))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Văn phòng","budget_vnd":20000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":2,"spec":"16GB DDR4","product_id":"s1-2"},{"code":"fan120","product_id":"s1-3"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","máy văn phòng 20 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).noneSatisfy(line -> assertThat(line.category()).isEqualTo("fans"));
+    }
+
+    @Test
+    void cungLoaiThanhRamTenKhacVanLaCungHang() {
+        // Ca thật 24/11: Phù hợp lấy thanh SSTC 8GB 1,35 triệu, Rẻ có cùng loại 439 nghìn mà tên ghi khác
+        String a = "RAM PC SSTC 8GB DDR4 | (1x8GB), 3200MHz, Intel/AMD U3200A-C22-8GB", b = "Ram PC SSTC 8GB DDR4 (3200 Mhz)";
+        assertThat(ChatService.sameOffer(a, b)).isTrue();
+        assertThat(ChatService.sameOffer(a, "Ram PC SSTC 16GB DDR4 (3200 Mhz)")).isFalse();
+        assertThat(ChatService.sameOffer(a, "Ram PC SSTC 8GB DDR4 (2666 Mhz)")).isFalse();
+        assertThat(ChatService.sameOffer(a, "Ram PC Kingston Fury 8GB DDR4 3200MHz")).isFalse();
+        assertThat(ChatService.sameOffer(a, "RAM SSTC 16GB (2x8GB) DDR4 3200MHz")).isFalse();
+        assertThat(ChatService.sameOffer("Ram Corsair Vengeance RS RGB 1x8GB 3200", "Ram Corsair Vengeance LPX 8GB DDR4 3200MHz")).isFalse();
+    }
+
+    @Test
+    void nangCardChoChatLuongBoQuaChipChiNhinhHon() {
+        // Ca thật 24/11: RTX 4060 chỉ thử Arc B580 / RX 7600 XT / RTX 3060 Ti (gần như ngang), Chất lượng thành nâng CPU
+        assertThat(ChatService.gpuStepUps("rtx4060")).doesNotContain("arcb580", "rx7600xt", "rtx3060ti")
+                .startsWith("rx6700xt", "rtx5060", "rtx4060ti");
+        // Chip đầu bảng không còn chip mạnh hơn rõ rệt: giữ danh sách cũ
+        assertThat(ChatService.gpuStepUps("rtx5070ti")).isEqualTo(ChatService.gpuUpgrades("rtx5070ti")).containsExactly("rx9070xt");
+    }
+
+    @Test
+    void voKhongGhiCoVanDoiDuocSangVoReGhiRoCo() {
+        // Ca thật 24/11: vỏ Fractal Torrent Compact 3,9 triệu (tên không ghi ATX / mATX) trong máy game 20 triệu, code không đổi
+        // được vỏ nên hạ card RTX 4060 xuống RX 6600
+        var now = new ProductSearch.Product("CASE FRACTAL DESIGN TORRENT COMPACT RGB BLACK TG LIGHT TINT", "A", 3_900_000L, "https://a.vn/case", null);
+        var matx = new ProductSearch.Product("Vỏ máy tính EDRA ECS1105 Micro-ATX", "B", 290_000L, "https://b.vn/case", null);
+        var unknown = new ProductSearch.Product("Vỏ máy tính Xigmatek Gaming X", "B", 590_000L, "https://b.vn/x", null);
+        assertThat(ChatService.equivalents("case", now, List.of(matx, unknown), false, false, false)).containsExactly(matx);
+    }
+
+    @Test
     void cardDoiSangChipManhHonReHonKhiDuVram() {
         // v11 game: Ninja RTX 3060 12GB 9,2 triệu trong mọi lần vượt trần, RTX 4060 8GB 7,79 triệu mạnh hơn mà rẻ hơn
         var now = new ProductSearch.Product("Ninja GeForce RTX 3060 12GB GDDR6", "A", 9_200_000L, "https://a.vn/3060", null);
