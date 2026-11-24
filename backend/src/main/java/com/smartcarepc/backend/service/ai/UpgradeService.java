@@ -467,7 +467,7 @@ public class UpgradeService {
      */
     String cheapestOverBudget(Turn turn) {
         var m = VRAM_MIN.matcher(turn.userText == null ? "" : turn.userText);
-        if (!m.find()) return null;
+        if (!m.find()) return cheapestAskedOverBudget(turn);
         int need = Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2));
         ProductSearch.Product best = null;
         Offer bestOffer = null;
@@ -487,6 +487,86 @@ public class UpgradeService {
                 + ChatService.millions(bestOffer.priceVnd()) + (best.shop() == null ? "" : " (" + best.shop() + ")") + ", "
                 + ChatService.millions(bestOffer.priceVnd() - budget) + " over your budget. Keep your current card for now, raise the "
                 + "budget by about that amount, or ask again later: graphics card prices change often.";
+    }
+
+    private static final Map<String, Pattern> ASKED = Map.of(
+            "ssd", Pattern.compile("(?iu)\\b(storage|ssd|hdd|hard (?:disk|drive)|drive|ổ cứng|o cung)\\b"),
+            "ram", Pattern.compile("(?iu)\\b(ram|memory|bộ nhớ)\\b(?!\\s*slots?)"),
+            "gpu", Pattern.compile("(?iu)\\b(gpu|graphics card|video card|vga|card (?:đồ họa|màn hình)|rtx|gtx|radeon)\\b"));
+
+    /** Loại linh kiện người dùng nêu tên để nâng cấp ("Upgrade storage first", "only my RAM"); nêu nhiều loại hoặc không nêu thì null */
+    static String askedCategory(String text) {
+        if (text == null) return null;
+        List<String> hits = ASKED.entrySet().stream().filter(e -> e.getValue().matcher(text).find()).map(Map.Entry::getKey).toList();
+        return hits.size() == 1 ? hits.getFirst() : null;
+    }
+
+    /** Kết quả đã tìm của lượt này, đúng loại người dùng nêu, đã xác minh giá và còn hàng, rẻ nhất trước */
+    private List<Map.Entry<ProductSearch.Product, Offer>> checkedOfAsked(Turn turn, String category) {
+        String ddr = "ram".equals(category) ? ramType(turn.pc) : null;
+        List<Map.Entry<ProductSearch.Product, Offer>> out = new ArrayList<>();
+        for (var p : new LinkedHashSet<>(turn.results.values())) {
+            if (p.title() == null || !category.equals(PriceEngine.kind(PriceEngine.norm(p.title())))) continue;
+            if ("ram".equals(category) && (ChatService.serverRam(p.title()) || ddr != null
+                    && !ddr.equals(ProductRules.read("ram", p.title()).ramType()))) continue;
+            Integer goal = "ram".equals(category) ? ramGoalOf(turn) : null;
+            if (goal != null) {
+                Integer gb = ChatService.amount("ram", p.title());
+                if (gb == null || gb < goal) continue;
+            }
+            if ("gpu".equals(category) && turn.requiredGpuVendor != null
+                    && !turn.requiredGpuVendor.equals(ChatService.vendorOf(ChatService.gpuChip(p.title())))) continue;
+            Offer o = checked(p);
+            if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock()) || !ChatService.plausible(category, o.priceVnd())) continue;
+            out.add(Map.entry(p, o));
+        }
+        out.sort(java.util.Comparator.comparingLong(e -> e.getValue().priceVnd()));
+        return out;
+    }
+
+    /** Trợ lý chốt 0 món dù người dùng nêu loại cần nâng cấp và kết quả đã có món vừa ngân sách: nhắc lại, kèm vài món đó */
+    String emptyPlanNudge(Turn turn) {
+        String category = askedCategory(turn.userText);
+        if (category == null || "ram".equals(category) && ramType(turn.pc) == null) return null;
+        var fits = checkedOfAsked(turn, category).stream().filter(e -> e.getValue().priceVnd() <= turn.pc.budgetVnd()).limit(3).toList();
+        if (fits.isEmpty()) return null;
+        String list = fits.stream().map(e -> "\"" + e.getKey().title() + "\" (" + ChatService.millions(e.getValue().priceVnd()) + ")")
+                .collect(java.util.stream.Collectors.joining(", "));
+        return "The owner asked to upgrade the " + plainName(category) + ", so an empty plan does not answer "
+                + "the request. These search results have a verified price and stock within the budget: " + list + ". Propose one that "
+                + "fits this PC; only if none can fit, return no items and state the concrete reason.";
+    }
+
+    /** Dung lượng RAM người dùng muốn: từ mục đích, không có thì từ lời nhắn ("upgrade only my RAM to 32GB") */
+    private static Integer ramGoalOf(Turn turn) {
+        return turn.ramGoal != null ? Integer.valueOf(turn.ramGoal.gb()) : ChatService.requestedRam(List.of(turn.userText));
+    }
+
+    private static String plainName(String category) {
+        return switch (category) {
+            case "ssd" -> "SSD";
+            case "ram" -> "memory";
+            case "gpu" -> "graphics card";
+            default -> CATEGORIES.get(category).toLowerCase(Locale.ROOT);
+        };
+    }
+
+    /** Không có kế hoạch vì món rẻ nhất (đã xác minh) của loại người dùng nêu vẫn vượt ngân sách: nói rõ món, giá và số tiền thiếu */
+    String cheapestAskedOverBudget(Turn turn) {
+        String category = askedCategory(turn.userText);
+        if (category == null) return null;
+        var all = checkedOfAsked(turn, category);
+        long budget = turn.pc.budgetVnd();
+        if (all.isEmpty() || all.getFirst().getValue().priceVnd() <= budget) return null;
+        var best = all.getFirst();
+        Integer goal = ramGoalOf(turn);
+        String what = "ram".equals(category) && goal != null ? goal + " GB " + Objects.requireNonNullElse(ramType(turn.pc), "") + " memory kit"
+                : plainName(category);
+        return "No " + what.replaceAll("\\s+", " ").strip() + " fits your " + ChatService.millions(budget) + " budget at today's store prices. "
+                + "The cheapest one I could confirm is " + best.getKey().title() + " at " + ChatService.millions(best.getValue().priceVnd())
+                + (best.getKey().shop() == null ? "" : " (" + best.getKey().shop() + ")") + ", "
+                + ChatService.millions(best.getValue().priceVnd() - budget) + " over your budget. Keep your current part for now, raise the "
+                + "budget by about that amount, or ask again later: prices change often.";
     }
 
     /** Số món cùng thông số được đọc trang khi món trợ lý chọn không xác minh được */
@@ -648,6 +728,11 @@ public class UpgradeService {
             errors.add("The owner asked for a cheaper option, but this plan costs " + ChatService.millions(total) + ", not less than the "
                     + "previous plan (" + ChatService.millions(turn.previousTotal) + "). Count any extra power supply too, and choose parts that "
                     + "cost less in total.");
+        }
+        if (errors.isEmpty() && picks.isEmpty() && !lastChance) {
+            // Ca acceptance 24/11 office-hdd: tìm ra 8 SSD đã xác minh giá 1,59 - 1,95 triệu (ngân sách 3,5 triệu) mà trợ lý chốt 0 món
+            String nudge = emptyPlanNudge(turn);
+            if (nudge != null) errors.add(nudge);
         }
         if (!errors.isEmpty()) {
             turn.lastErrors = List.copyOf(errors);
@@ -1284,7 +1369,7 @@ public class UpgradeService {
         out.append(" More RAM helps when your applications run out of memory.");
         var others = picks.stream().filter(p -> !"ram".equals(p.category())).map(p -> p.product().title()).toList();
         if (!others.isEmpty()) out.append(" Also buy: ").append(String.join("; ", others)).append('.');
-        out.append(" Keep the other current parts. Check the fit and installation conditions on the card before buying.");
+        out.append(" Keep the other current parts. Before buying, check that the memory type and speed match your motherboard.");
         return out.toString();
     }
 

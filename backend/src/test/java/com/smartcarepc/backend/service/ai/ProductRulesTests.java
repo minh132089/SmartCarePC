@@ -39,6 +39,14 @@ class ProductRulesTests {
     @Test
     void soKheRamTheoDungMaBoKhongSuyTuChipset() {
         assertThat(ProductRules.memorySlots("Mainboard MSI PRO B760M-E DDR4")).isEqualTo(2);
+        // Mã bo hay gặp mà tên không ghi số khe: theo trang thông số của hãng
+        assertThat(ProductRules.memorySlots("Mainboard MSI PRO B760M-P DDR4")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("Mainboard MSI PRO A520M-S")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("Mainboard ASUS PRIME B550M-A")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("Mainboard ASUS PRIME B660M-K (LGA1700, DDR4) — không tấm chắn I/O")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("Mainboard Gigabyte B760M DS3H DDR4")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("Mainboard Gigabyte B760M D DDR4")).isEqualTo(2);
+        assertThat(ChatService.JUNK.matcher("Mainboard ASUS PRIME B660M-K (LGA1700, DDR4) — không tấm chắn I/O").find()).isTrue();
         assertThat(ProductRules.memorySlots("Mainboard MSI PRO H610M-E DDR4 | LGA 1700, mATX, 2 khe RAM")).isEqualTo(2);
         assertThat(ProductRules.memorySlots("Main GIGABYTE H610M-H V3 DDR4")).isEqualTo(2);
         assertThat(ProductRules.memorySlots("GIGABYTE B760M GAMING PLUS WIFI DDR4")).isEqualTo(4);
@@ -119,6 +127,55 @@ class ProductRulesTests {
         assertThat(err.severity()).isEqualTo(ProductRules.Severity.ERROR);
         assertThat(err.affectedParts()).containsExactly("cpu", "motherboard");
         assertThat(err.requiredAction()).contains("AM5");
+    }
+
+    @Test
+    void soKheRamGhiTrenTenSanPham() {
+        assertThat(ProductRules.memorySlots("Mainboard ASRock H610M-H2/M.2 DDR4 | LGA 1700, mATX, 2 khe RAM")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("Mainboard ASROCK B550M PRO4 (AMD B550, Socket AM4, m-ATX, 4 khe RAM DDR4)")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("Mainboard ASUS PRIME B550M-A (AMD B550, Socket AM4,m- ATX, 4 khe RAM DRR4)")).isEqualTo(4);
+        assertThat(ProductRules.memorySlots("Mainboard Gigabyte A520M K V2 (AMD A520/ Socket AM4/ M-ATX/ 2 khe ram)")).isEqualTo(2);
+        assertThat(ProductRules.memorySlots("MSI PRO B760M-P DDR4, 4 x DIMM")).isEqualTo(4);
+        // Khe M.2 / PCIe không phải khe RAM; tên không ghi thì không đoán
+        assertThat(ProductRules.memorySlots("Mainboard ASRock B760M-HDV/M.2 D4 2 khe M.2")).isNull();
+        assertThat(ProductRules.memorySlots("Mainboard ASRock H610M-H2/M.2 DDR4")).isNull();
+        assertThat(ProductRules.memorySlots("Mainboard MSI PRO B760M-E DDR4")).isEqualTo(2);
+    }
+
+    @Test
+    void tanChiCoGaIntelKhongLapDuocChoCpuAmd() {
+        // Ca thật 24/11: trang nguyenvu.store ghi "Socket hỗ trợ: Intel LGA 1851 / 1700" cho tản này
+        var alta = "Bộ Cooler cho CPU Deepcool ALTA 9 PWM 1700 (DP-ICAP-AT9-1700)";
+        assertThat(ProductRules.findings(Map.of("cpu", "CPU AMD Ryzen 5 5600 (Socket AM4)", "motherboard", "MSI B550M PRO", "cooler", alta)))
+                .anySatisfy(f -> {
+                    assertThat(f.ruleId()).isEqualTo("COOLER_SOCKET");
+                    assertThat(f.severity()).isEqualTo(ProductRules.Severity.ERROR);
+                    assertThat(f.requiredAction()).contains("AM4");
+                });
+        assertThat(ProductRules.findings(Map.of("cpu", "Intel Core i5 12400F", "cooler", alta)))
+                .noneSatisfy(f -> assertThat(f.ruleId()).isEqualTo("COOLER_SOCKET"));
+        assertThat(ProductRules.coolerVendor("Air cooler Noctua NH-L9I-17XX (Mini-ITX và HTPC)")).isEqualTo("Intel");
+        assertThat(ProductRules.coolerVendor("Noctua NH-L9a-AM5 chromax.black")).isEqualTo("AMD");
+        // Số model không phải socket, tên ghi cả hai hãng, hay không ghi gì: không kết luận
+        assertThat(ProductRules.coolerVendor("Air cooler CPU JONSBO CR-1200E RGB BLACK")).isNull();
+        assertThat(ProductRules.coolerVendor("Tản ID-Cooling SE-214-XT (LGA1700/AM4/AM5)")).isNull();
+        assertThat(ProductRules.coolerVendor("Cooler DEEPCOOL AK400 DIGITAL ARGB")).isNull();
+        assertThat(ProductRules.coolerVendor("Air cooler CPU ID-COOLING IS-40X V3 - BLACK (Low Profile / ITX mini / Cao 45mm)")).isNull();
+    }
+
+    @Test
+    void cungHangOChoBanKhacDeDungGiaReHon() {
+        // Rà soát 24/11: hai tên của cùng i3-12100 ở GEARVN (3,39 triệu) và AnDuy (2,45 triệu)
+        assertThat(ChatService.sameOffer("Processor Intel Core i3 12100 / 3.3GHz Turbo 4.3GHz / 4 Cores 8 Threads / 12MB / LGA 1700",
+                "CPU INTEL CORE I3- 12100 (3.3GHZ TURBO UP TO 4.3GHZ, 4 cores 8 threads, 12MB CACHE, 58W)- SOCKET INTEL LGA 1700)")).isTrue();
+        assertThat(ChatService.sameOffer("KM CPU Intel Core i5 12400 (Up to 4.4 GHz, 6C/12T, LGA 1700)",
+                "CPU Intel Core i5 12400 Box (Socket 1700/ Base 2.5Ghz/ Turbo 4.4GHz/ 6 Cores/ 12 Threads/ Cache 18MB)")).isTrue();
+        // Đuôi F (không có đồ họa tích hợp), bản tray, đời khác: không phải cùng hàng
+        assertThat(ChatService.sameOffer("CPU Intel Core i5 12400F", "CPU Intel Core i5 12400 Box")).isFalse();
+        assertThat(ChatService.sameOffer("CPU Intel Core i5 12400 Tray", "CPU Intel Core i5 12400 Box")).isFalse();
+        assertThat(ChatService.sameOffer("CPU Intel Core i3 12100", "CPU Intel Core i3 14100 Box")).isFalse();
+        assertThat(ChatService.sameOffer("Power supply Cooler Master MWE V2 230V 450 450W Plus Bronze",
+                "Power supply Cooler Master MWE V2 230V 550 550W Plus Bronze")).isFalse();
     }
 
     @Test

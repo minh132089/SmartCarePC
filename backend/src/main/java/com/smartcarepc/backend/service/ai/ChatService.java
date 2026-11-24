@@ -687,6 +687,7 @@ public class ChatService {
                     cheapFromBalanced(turn);
                     qualityFromBalanced(turn);
                 }
+                if (turn.advice && search.enabled()) shareCheaperOffers(turn);
                 // Code đã tự sửa thứ tự ở trên. Còn sai thì không nhắc trợ lý dựng lại nữa (một lượt đó tốn ~40 giây vì kéo
                 // theo propose_build và tìm giá lại): respond() ẩn phương án sai thứ tự và nói rõ lý do
                 String order = turn.advice && search.enabled() ? orderProblem(turn) : null;
@@ -755,6 +756,7 @@ public class ChatService {
                 Io.within(REBUILD_BUDGET, () -> {
                     if (!turn.tiers.containsKey("cheap")) cheapFromBalanced(turn);
                     if (!turn.tiers.containsKey("quality")) qualityFromBalanced(turn);
+                    shareCheaperOffers(turn);
                     return null;
                 });
                 log.info("Chat vòng {}: dựng Rẻ / Chất lượng từ Phù hợp trong {} ms, có {}", round + 1,
@@ -769,6 +771,7 @@ public class ChatService {
                     balancedFromQuality(turn);
                     cheapFromBalanced(turn);
                     qualityFromBalanced(turn);
+                    shareCheaperOffers(turn);
                     return null;
                 });
             }
@@ -1062,7 +1065,7 @@ public class ChatService {
         c = repairDdr(c, cap, notes);
         c = raiseToNeeds(c, cap, needs, notes);
         c = raiseGpuToNeeds(c, cap, needs, notes);
-        c = normalized(withPagePrices(boardForRamSlots(c, notes)), aiTitles);
+        c = normalized(withPagePrices(boardForRamSlots(ramForSlots(c, cap, notes), notes)), aiTitles);
         if (cap != null && needs != null && needs.office() && !needs.miniItx()
                 && total(c.request(), c.details(), c.picks()) > cap) {
             c = compactSwitch(c, tier, cap, needs, aiTitles, notes);
@@ -1146,7 +1149,7 @@ public class ChatService {
             c = normalized(withPagePrices(lowerCpuForNeeds(c, notes, true)), aiTitles);
             if (total(c.request(), c.details(), c.picks()) > cap) c = normalized(withPagePrices(lowerGpu(c, cap, needs, notes, true)), aiTitles);
         }
-        c = normalized(withPagePrices(boardForRamSlots(c, notes)), aiTitles);
+        c = normalized(withPagePrices(boardForRamSlots(ramForSlots(c, cap, notes), notes)), aiTitles);
         return c;
     }
 
@@ -1964,6 +1967,61 @@ public class ChatService {
     }
 
     /**
+     * Rẻ tìm ra đúng model đó ở chỗ bán rẻ hơn (rà soát 24/11: i3-12100 2,45 triệu ở Rẻ mà 3,39 triệu ở Phù hợp được khuyên
+     * dùng; i5-12400 2,99 / 5,3 triệu): Phù hợp và Chất lượng dùng chỗ bán rẻ hơn đó, từng món một, miễn tier vẫn hiện được và
+     * vẫn đắt hơn tier dưới ít nhất TIER_GAP (giữ thứ tự ba phương án). Cùng model: CPU cùng mã (không lẫn tray / box), món khác
+     * theo PriceEngine.sameModel; cùng mã linh kiện và cùng số lượng.
+     */
+    private void shareCheaperOffers(Turn turn) {
+        Checked below = turn.tiers.get("cheap");
+        if (below == null || below.picks().isEmpty()) return;
+        for (String tier : List.of("balanced", "quality")) {
+            Checked t = turn.tiers.get(tier);
+            if (t == null || t.picks().isEmpty()) continue;
+            Long cap = tierCap(t.budgetVnd(), tier);
+            if (!showable(t, cap)) {
+                below = t;
+                continue;
+            }
+            long floor = total(below.request(), below.details(), below.picks()) + TIER_GAP;
+            Checked now = t;
+            List<String> swapped = new ArrayList<>();
+            for (var e : below.picks().entrySet()) {
+                var mine = now.picks().get(e.getKey());
+                var cheaper = e.getValue();
+                if (mine == null || cheaper == null || mine.title() == null || cheaper.title() == null || mine.priceVnd() == null
+                        || cheaper.priceVnd() == null || cheaper.priceVnd() >= mine.priceVnd() * 0.97 || !sameOffer(mine.title(), cheaper.title())
+                        || qty(now.request(), e.getKey()) != qty(below.request(), e.getKey()) || !verified(cheaper)) continue;
+                var picks = new LinkedHashMap<>(now.picks());
+                var links = new LinkedHashMap<>(now.links());
+                picks.put(e.getKey(), cheaper);
+                links.put(e.getKey(), below.links().getOrDefault(e.getKey(), CompletableFuture.completedFuture(cheaper.url())));
+                var trial = new Checked(now.request(), now.result(), now.details(), now.summary(), now.budgetVnd(), picks, links, now.siblings());
+                if (total(trial.request(), trial.details(), trial.picks()) < floor || !showable(trial, cap)) continue;
+                now = trial;
+                swapped.add(cheaper.title() + " (" + cheaper.shop() + ")");
+            }
+            if (now != t) {
+                log.info("{} dùng chỗ bán rẻ hơn mà Rẻ đã tìm ra cho cùng model: {}", tier, swapped);
+                turn.tiers.put(tier, now);
+            }
+            below = turn.tiers.get(tier);
+        }
+    }
+
+    private static int qty(BuildCheckRequest request, String code) {
+        return request.items().stream().filter(i -> i.code().equals(code)).mapToInt(BuildCheckRequest.Item::qty).sum();
+    }
+
+    /** Cùng một hàng ở chỗ bán khác: CPU cùng mã và cùng kiểu đóng gói (tray / box), món khác theo PriceEngine.sameModel */
+    static boolean sameOffer(String a, String b) {
+        String x = cpuModel(a), y = cpuModel(b);
+        // Mã CPU đã gồm đuôi (12400 khác 12400f); bản tray không kèm tản và bảo hành khác bản box
+        if (x != null || y != null) return x != null && x.equals(y) && a.toLowerCase().contains("tray") == b.toLowerCase().contains("tray");
+        return com.smartcarepc.backend.service.price.PriceEngine.sameModel(a, b);
+    }
+
+    /**
      * Phù hợp không hiện được (vượt trần, thiếu link) mà Chất lượng hiện được (ca thật n8 itx 25tr: Rẻ / Phù hợp cùng bộ
      * 26,35 triệu, chỉ Chất lượng hiện): dựng Phù hợp từ bản sao Chất lượng, chốt lại với trần min(trần Phù hợp, tổng Chất
      * lượng - TIER_GAP) (finalizeTier: đổi hàng rẻ hơn, hạ card / RAM / SSD theo nhu cầu); nhận khi hiện được và khác Chất lượng.
@@ -2514,6 +2572,91 @@ public class ChatService {
         return oldRank >= 0 && newRank > oldRank;
     }
 
+    /**
+     * Nhiều thanh RAM hơn số khe của bo (rà soát 24/11 creator-video: trợ lý muốn "2x16GB" mà chọn thanh 8GB, code thành 4 x 8GB
+     * trên bo 2 khe, ba lần propose đều hỏng, người dùng không nhận được cấu hình nào): giữ tổng dung lượng, đổi sang hai thanh
+     * lớn hơn (một thanh nếu bo một khe), cùng loại DDR, có link mua, không vượt trần. Không đổi khi người dùng đã chốt số thanh.
+     */
+    private Checked ramForSlots(Checked c, Long cap, List<String> notes) {
+        var board = c.request().items().stream().filter(i -> "motherboard".equals(categoryOf(i.code()))).findFirst().orElse(null);
+        var item = c.request().items().stream().filter(i -> "ram".equals(categoryOf(i.code()))).findFirst().orElse(null);
+        if (board == null || item == null) return c;
+        var mb = c.picks().get(board.code());
+        var now = c.picks().get(item.code());
+        if (mb == null || now == null || mb.title() == null || now.title() == null) return c;
+        Integer slots = ProductRules.memorySlots(mb.title());
+        if (slots == null && "mb_itx".equals(board.code())) slots = 2;
+        // Không biết số khe mà hơn 2 thanh: thử hai thanh lớn hơn (bo máy bàn nào cũng có từ 2 khe)
+        boolean unknown = slots == null;
+        if (unknown && item.qty() > 2) slots = 2;
+        if (slots == null || item.qty() <= slots) return c;
+        if (c.details().getOrDefault(item.code(), Map.of()).get("user_layout") != null) return c;
+        Integer pack = amount("ram", now.title());
+        if (pack == null) return c;
+        int totalGb = pack * item.qty() / Objects.requireNonNullElse(kitSticks(now.title()), 1);
+        int sticks = slots >= 2 && totalGb % 2 == 0 ? 2 : 1;
+        long current = total(c.request(), c.details(), c.picks());
+        Long[] line = price(c.details().getOrDefault(item.code(), Map.of()), now, item.qty());
+        long lineNow = line[1] != null ? line[1] : now.priceVnd() * item.qty();
+        long maxLine = cap == null ? Long.MAX_VALUE / 4 : cap - (current - lineNow) + 1;
+        var found = ramStick(item.code(), now, totalGb / sticks, sticks, c.picks(), maxLine, c.siblings().getOrDefault(item.code(), List.of()));
+        if (found == null) return c;
+        Map<String, ProductSearch.Product> picks = new LinkedHashMap<>(c.picks());
+        Map<String, CompletableFuture<String>> links = new LinkedHashMap<>(c.links());
+        Map<String, Map<String, Object>> details = new LinkedHashMap<>();
+        c.details().forEach((code, d) -> details.put(code, new LinkedHashMap<>(d)));
+        picks.put(item.code(), found);
+        links.put(item.code(), CompletableFuture.completedFuture(found.url()));
+        var rd = details.computeIfAbsent(item.code(), key -> new LinkedHashMap<>());
+        String ddr = ProductRules.read("ram", found.title()).ramType();
+        rd.put("spec", totalGb + "GB" + (ddr == null ? "" : " " + ddr));
+        rd.remove("buy_qty");
+        rd.remove("reason");
+        var request = new BuildCheckRequest(c.request().items().stream()
+                .map(i -> i.code().equals(item.code()) ? new BuildCheckRequest.Item(i.code(), sticks) : i).toList());
+        log.info("RAM {} thanh trên bo {} khe: đổi sang {} x {}GB ({})", item.qty(), slots, sticks, totalGb / sticks, found.title());
+        notes.add("Changed the memory to " + sticks + " x " + totalGb / sticks + "GB" + (unknown
+                ? " because the motherboard's slot count for " + item.qty() + " modules is not confirmed"
+                : " to fit the motherboard's " + slots + " RAM slots") + ", keeping " + totalGb + "GB in total.");
+        return new Checked(request, c.result(), details, c.summary(), c.budgetVnd(), picks, links, c.siblings());
+    }
+
+    /** Thanh RAM đúng perStick GB mỗi thanh (thanh lẻ, hoặc bộ kit mà số thanh chia hết sticks), cùng DDR, có link mua, rẻ nhất cả dòng */
+    private ProductSearch.Product ramStick(String code, ProductSearch.Product now, int perStick, int sticks,
+            Map<String, ProductSearch.Product> picks, long maxLine, List<ProductSearch.Product> siblings) {
+        String ddr = ProductRules.read("ram", now.title()).ramType();
+        String query = "RAM " + (ddr == null ? "" : ddr + " ") + perStick + "GB";
+        List<ProductSearch.Product> pool = new ArrayList<>(siblings);
+        try {
+            pool.addAll(search.search(query));
+            pool.addAll(search.engineSearch(query));
+        } catch (RuntimeException e) {
+            log.debug("Tìm \"{}\" lỗi: {}", query, e.getMessage());
+        }
+        java.util.function.ToLongFunction<ProductSearch.Product> lineCost =
+                p -> p.priceVnd() * (sticks / Objects.requireNonNullElse(kitSticks(p.title()), 1));
+        var list = pool.stream()
+                .filter(p -> p.title() != null && p.priceVnd() != null && !JUNK.matcher(p.title()).find())
+                .filter(p -> ofKind("ram", p.title()) && plausible("ram", p.priceVnd()) && !recentlyNoLink(p))
+                .filter(p -> {
+                    Integer gb = amount("ram", p.title());
+                    int k = Objects.requireNonNullElse(kitSticks(p.title()), 1);
+                    return gb != null && gb % k == 0 && gb / k == perStick && sticks % k == 0;
+                })
+                .filter(p -> !serverRam(p.title()) && !ProductRules.read("ram", p.title()).laptopRam()
+                        && (ddr == null || ddr.equals(ProductRules.read("ram", p.title()).ramType())))
+                .filter(p -> lineCost.applyAsLong(p) < maxLine && swapOk(code, p, picks))
+                .filter(distinctUrl())
+                .filter(p -> stockOrder(p) < 2)
+                .sorted(Comparator.comparingLong(lineCost))
+                .toList();
+        var found = bestLinked(list, null, 8);
+        if (found != null && rank(found.url()) < 3) found = null;
+        if (found == null) log.info("RAM {} x {}GB: {} món trong {} kết quả tìm \"{}\", không món nào có link mua", sticks, perStick,
+                list.size(), pool.size(), query);
+        return found;
+    }
+
     private Checked boardForRamSlots(Checked c, List<String> notes) {
         var board = c.request().items().stream().filter(i -> "motherboard".equals(categoryOf(i.code()))).findFirst().orElse(null);
         int sticks = c.request().items().stream().filter(i -> "ram".equals(categoryOf(i.code()))).mapToInt(BuildCheckRequest.Item::qty).sum();
@@ -2668,7 +2811,7 @@ public class ChatService {
 
     /** Hàng không nên đưa người mới tham khảo */
     static final java.util.regex.Pattern JUNK =
-            java.util.regex.Pattern.compile("like ?new|cũ|đã qua sử dụng|2nd|trưng bày|thanh lý|tray|bóc máy", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS);
+            java.util.regex.Pattern.compile("like ?new|cũ|đã qua sử dụng|2nd|trưng bày|thanh lý|tray|bóc máy|không (?:có )?tấm chắn|no i/?o shield", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS);
     /** "2x8GB", "2 x 16GB", "kit": bộ nhiều thanh */
     private static final java.util.regex.Pattern KIT =
             java.util.regex.Pattern.compile("\\d\\s*x\\s*\\d+\\s*gb|\\bkit\\b", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS);
@@ -3123,7 +3266,7 @@ public class ChatService {
                         log.debug("Tìm thêm \"{}\" lỗi: {}", q, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c) && glassOk(details, code, c), vramMin);
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c) && glassOk(details, code, c) && slotsOk(req, code, c), vramMin);
             }));
         }
         for (var f : found.entrySet()) {
@@ -3141,6 +3284,18 @@ public class ChatService {
         }
         if (!swaps.isEmpty()) log.info("Phương án Rẻ: code đổi {} món sang hàng rẻ hơn cùng thông số: {}", swaps.size(), swaps);
         return swaps;
+    }
+
+    /**
+     * Bo thay vào phải đủ khe cho số thanh RAM đang chọn (rà soát 24/11 e08: lượt hạ giá đổi MSI B760M-P 4 khe sang ASRock
+     * H610M-H2 "2 khe RAM" khi máy có 4 thanh, phương án thành không hiện được). Không đọc được số khe thì không chặn.
+     */
+    private boolean slotsOk(BuildCheckRequest req, String code, ProductSearch.Product board) {
+        if (!"motherboard".equals(categoryOf(code)) || board == null) return true;
+        int sticks = req.items().stream().filter(i -> "ram".equals(categoryOf(i.code()))).mapToInt(BuildCheckRequest.Item::qty).sum();
+        Integer slots = ProductRules.memorySlots(board.title());
+        // Hơn 2 thanh: bo thay vào phải biết chắc đủ khe (bo giá rẻ thường chỉ 2 khe mà tên không ghi, vd Gigabyte B760M D DDR4)
+        return sticks <= 2 ? slots == null || sticks <= slots : slots != null && sticks <= slots;
     }
 
     /** Loại món được đổi sang hãng / model khác nếu thông số (dung lượng, công suất, loại DDR) không thấp hơn */
@@ -3910,7 +4065,7 @@ public class ChatService {
                         log.debug("Tìm thêm \"{}\" lỗi: {}", q, e.getMessage());
                     }
                 }
-                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c) && glassOk(details, code, c), vramMin);
+                return cheaperLinked(category, now, group, isKit, true, noGpu, c -> swapOk(code, c, picks) && cudaOk(details, code, c) && glassOk(details, code, c) && slotsOk(req, code, c), vramMin);
             }));
         });
         while (total(req, details, picks) > cap) {
@@ -5417,6 +5572,12 @@ public class ChatService {
                                     + "and RAM type) unless the user asked for a full ATX build");
                         if (!result.compatible() || !productErrors.isEmpty()) why.add("the components are not compatible");
                         why.addAll(requirementIssues(checked));
+                        // Đổi nhu cầu giữa chừng (văn phòng không card -> thiết kế đồ họa): trợ lý cứ theo lời "không cần card" cũ, hai lần
+                        // propose đều thiếu card (rà soát 24/11 creator-followup). Nói rõ cách sửa
+                        if (requirementIssues(checked).stream().anyMatch(x -> x.contains("required dedicated GPU is missing")))
+                            why.add("the user's latest request needs a dedicated graphics card: add a GPU line from the catalogue"
+                                    + (turn.needs != null && turn.needs.vramMin() != null ? " with at least " + turn.needs.vramMin() + "GB VRAM" : "")
+                                    + "; an earlier 'no dedicated GPU' request from before the use changed no longer applies");
                         saved.put("not_shown", why);
                         saved.put("note", "Option \"" + tier + "\" cannot currently be shown to the user; see not_shown. If calls remain, "
                                 + "resubmit propose_build for the same tier with different product IDs, or omit IDs for automatic lookup, for "

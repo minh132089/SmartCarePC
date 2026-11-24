@@ -341,6 +341,34 @@ class ChatServiceTests {
     }
 
     @Test
+    void bonThanhTrenBoHaiKheThiDoiSangHaiThanhLonHonGiuTongDungLuong() {
+        // Rà soát 24/11 creator-video: trợ lý muốn "2x16GB" mà chọn thanh 8GB, code thành 4 x 8GB trên bo "2 khe RAM", không có cấu hình nào
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard ASRock H610M-H2/M.2 DDR4 | LGA 1700, mATX, 2 khe RAM","A",1_490_000L,"https://a.vn/mb",null);
+        var eight = new ProductSearch.Product("RAM PC SSTC 8GB DDR4 | (1x8GB), 3200MHz","A",1_350_000L,"https://a.vn/r8",null);
+        var sixteen = new ProductSearch.Product("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz","A",2_910_000L,"https://a.vn/r16",null);
+        var products = List.of(mb,eight,sixteen);
+        when(search.search(any())).thenReturn(products);
+        for(var p:products)when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":4,"spec":"32GB DDR4","product_id":"s1-2"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","máy dựng video RAM 32GB 36 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("16GB");
+            assertThat(line.quantity()).isEqualTo(2);
+        });
+    }
+
+    @Test
     void khongTimDuocBoBonKheThiKhongHienBonThanhTrenHaiKhe() {
         assertThat(ramSlotsResponse(false).build()).isNull();
     }

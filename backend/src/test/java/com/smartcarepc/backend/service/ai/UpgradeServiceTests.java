@@ -387,6 +387,43 @@ class UpgradeServiceTests {
     }
 
     @Test
+    void nguoiDungNeuOCungMaTroLyChot0MonThiNhacLaiKemMonVuaNganSach() {
+        // Ca acceptance 24/11 office-hdd: 8 SSD đã xác minh giá 1,59 - 1,95 triệu, ngân sách 3,5 triệu, trợ lý vẫn chốt 0 món
+        var sata = product("Ổ Cứng SSD SSTC Sata III M100 512GB", 1_590_000L);
+        when(search.offer(sata.url())).thenReturn(new Offer(sata.title(), sata.shop(), sata.priceVnd(), null, sata.url(), null, true, 36, Instant.now()));
+        when(search.search(any())).thenReturn(List.of(sata));
+        var office = new UpgradeInfo("Intel Core i5-6500", "ASUS H110M-K", "8GB DDR4, 1 stick", "none", "HDD 1TB", "300W", "standard",
+                "Office work: Word Excel and web; Windows takes two minutes to start", 3_500_000L);
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD SATA 2.5 500GB\"}"),
+                toolCall("p1", "propose_upgrade", "{\"summary\":\"Faster startup\",\"items\":[]}"),
+                toolCall("p2", "propose_upgrade", "{\"summary\":\"Faster startup\",\"items\":[{\"category\":\"ssd\",\"product_id\":\"s1-1\"}]}"),
+                answer("Add the SSTC 512GB SATA SSD and install Windows on it."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "I want a faster Windows startup. Upgrade storage first, keep CPU and motherboard.")),
+                null, null, "upgrade", office), s -> { });
+
+        assertThat(toolResult(2)).contains("asked to upgrade the SSD").contains("SSTC Sata III M100 512GB").contains("1.59 million");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.category()).isEqualTo("ssd"));
+    }
+
+    @Test
+    void ramReNhatVanVuotNganSachThiNoiRoMonVaSoTienThieu() {
+        var kit = product("Ram desktop Kingston Fury Beast Black EXPO 32GB (2x16GB) DDR5 6000Mhz (KF560C36BBE2K2-32)", 14_599_000L);
+        when(search.offer(kit.url())).thenReturn(new Offer(kit.title(), kit.shop(), kit.priceVnd(), null, kit.url(), null, true, 36, Instant.now()));
+        when(search.search(any())).thenReturn(List.of(kit));
+        var itx = new UpgradeInfo("AMD Ryzen 5 7600", "ASUS ROG STRIX B650E-I GAMING WIFI", "16GB DDR5, 2 sticks", "RTX 4060 8GB", "NVMe SSD 1TB",
+                "SFX 650W", "mini", "Programming Android Studio Docker; memory is full, need 32GB", 12_000_000L);
+        reply(toolCall("s", "search_products", "{\"query\":\"DDR5 32GB 2x16\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
+                answer("Nothing fits."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "Please upgrade only my RAM to 32GB. I have two memory slots, both occupied.")),
+                null, null, "upgrade", itx), s -> { });
+
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("No 32 GB DDR5 memory kit fits your 12 million VND budget").contains("14.599 million")
+                .contains("2.599 million").doesNotContain("not recommending a purchase");
+    }
+
+    @Test
     void keHoachRongVanKhongDuocBiaGia() {
         reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
                 toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
