@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { participantAnswers } from './participant'
 import type { RatingKind } from './questions'
+import { APP_VERSION } from '../../appVersion'
 
 /**
  * Chế độ thử nghiệm 4 tuần của nhóm nghiên cứu. Người tham gia mở link có ?thunghiem=P07 hoặc tự nhập mã,
@@ -227,7 +228,8 @@ export async function sendFeedback(data: Omit<Payload, 'participantCode' | 'phas
   if (useSending.getState().sending) return 'failed'
   useSending.setState({ sending: true })
   const { code, phase } = useStudy.getState()
-  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data, answers: { ...participantAnswers(), ...data.answers, submission_id: id } }
+  const payload: Payload = { participantCode: code, phase: code ? phase : null, ...data,
+    answers: { ...participantAnswers(), ...data.answers, submission_id: id, app_version: APP_VERSION } }
   try {
     await post(payload)
     void flushQueue()

@@ -8,7 +8,7 @@ import './feedback.css'
 
 const COLORS = ['#2997ff', '#65b5ff', '#4074bf', '#8a9dbb', '#b4c5dc', '#607085']
 // Câu lắp máy luôn hiện; câu bảo dưỡng / nâng cấp chỉ hiện khi đã có người trả lời (thẻ không dài ra vô ích)
-const SCALES = [
+export const SCALES = [
   ...FEEDBACK.filter((q) => q.type === 'scale').map((q) => ({ q, prefix: '', always: true })),
   ...MAINTENANCE_FEEDBACK.filter((q) => q.type === 'scale').map((q) => ({ q, prefix: 'Maintenance: ', always: false })),
   ...UPGRADE_FEEDBACK.filter((q) => q.type === 'scale').map((q) => ({ q, prefix: 'Upgrade: ', always: false })),

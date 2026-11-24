@@ -2,6 +2,7 @@ import { useState } from 'react'
 import LatticeLoader from '../../components/LatticeLoader'
 import { FeedbackOverview } from './FeedbackOverview'
 import type { FeedbackRow } from './feedbackStats'
+import { VersionCompare } from './VersionCompare'
 
 // Chỉ hiển thị khi build VITE_UI_PREVIEW=true; không đọc hay ghi database.
 const occupations = ["University student", "School student", "Office worker", "Design / creative work", "Information technology", "Business / self-employed"]
@@ -11,7 +12,9 @@ const rows: FeedbackRow[] = Array.from({ length: 31 }, (_, i) => ({
   participantCode: null, phase: null, machine: 'gaming',
   answers: { participant_name: `Participant ${i + 1}`, participant_age: 16 + i % 30,
     participant_occupation: occupations[i % occupations.length], stars: i % 5 + 1,
-    budget_fit: 3 + i % 3, purpose_fit: 3 + i % 3, guide: 4 + i % 2, confidence: 3 + i % 3, next_time: 3 + i % 3 },
+    budget_fit: 3 + i % 3, purpose_fit: 3 + i % 3, guide: 4 + i % 2, confidence: 3 + i % 3, next_time: 3 + i % 3,
+    // Nửa sau là phản hồi của bản v2 (điểm mẫu cao hơn một chút) để xem bảng so sánh phiên bản
+    ...(i >= 16 ? { app_version: 'v2', guide: 5 - i % 2, confidence: 4 + i % 2 } : {}) },
 }))
 
 export default function FeedbackPreview() {
@@ -23,6 +26,7 @@ export default function FeedbackPreview() {
     <p className="mt-3 max-w-[600px] text-[14px] text-ink-2">These figures are generated to preview the charts and layout. This preview does not connect to the backend or save feedback.</p>
     <button className="mt-5 rounded-full bg-fill px-4 py-2 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" onClick={() => setLoading((s) => !s)}>{loading ? "Stop loader preview" : "Preview AI loader"}</button>
     {loading && <div className="mt-4 text-ink-2"><LatticeLoader label="Finding components · sample status" pattern="dots" fontSize={13} /></div>}
+    <VersionCompare feedback={rows} events={[]} />
     <FeedbackOverview rows={rows} />
   </main></div>
 }

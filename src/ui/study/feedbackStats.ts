@@ -7,6 +7,22 @@ export type FeedbackRow = {
   answers: Record<string, unknown>
 }
 
+/**
+ * Bản v2 (nhánh release-v2) lên web lúc ~18:25 ngày 23/11/2026, trước khi phản hồi có nhãn phiên bản. createdAt là giờ máy chủ
+ * dạng "yyyy-MM-dd HH:mm:ss", so chuỗi được.
+ */
+export const V2_SINCE = '2026-11-23 18:30:00'
+
+/**
+ * Phiên bản app của phản hồi: answers.app_version nếu có (từ feedback-v2); chưa có nhãn thì theo giờ gửi: trước V2_SINCE là v1,
+ * sau đó là v2 (web đã chạy bản v2 nhưng chưa gắn nhãn)
+ */
+export function versionOf(row: FeedbackRow): string {
+  const v = row.answers.app_version
+  if (typeof v === 'string' && v.trim()) return v.trim()
+  return row.createdAt && row.createdAt >= V2_SINCE ? 'v2' : 'v1'
+}
+
 export function score(v: unknown) {
   const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
   return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null
