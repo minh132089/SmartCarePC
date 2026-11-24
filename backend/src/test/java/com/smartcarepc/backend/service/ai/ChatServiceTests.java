@@ -2025,6 +2025,38 @@ class ChatServiceTests {
     }
 
     @Test
+    void thuTuNangTheoMucDich() {
+        // Rà soát 24/11: Chất lượng của đồ họa 2D nâng card, dựng video nâng card +4,7 triệu, lập trình nâng SSD, văn phòng nâng CPU
+        java.util.function.Function<String, String> purpose = t -> ChatService.purposeOf(List.of(t), ChatService.needs(List.of(t)));
+        assertThat(purpose.apply("Máy làm đồ họa 2D, chủ yếu Photoshop và Illustrator, ngân sách 25 triệu.")).isEqualTo("2d");
+        assertThat(purpose.apply("Máy dựng 3D bằng Blender, render Cycles, ngân sách 35 triệu.")).isEqualTo("3d");
+        assertThat(purpose.apply("Máy dựng video 4K bằng Premiere và DaVinci Resolve, ngân sách 30 triệu.")).isEqualTo("video");
+        assertThat(purpose.apply("Máy chạy AI, train model nhỏ bằng PyTorch CUDA, ngân sách 40 triệu.")).isEqualTo("ai");
+        assertThat(purpose.apply("Máy học online, Word, Excel, Zoom, ngân sách 10 triệu.")).isEqualTo("office");
+        assertThat(purpose.apply("Máy lập trình, chạy Docker và Android Studio, ngân sách 20 triệu.")).isEqualTo("dev");
+        assertThat(purpose.apply("tôi có 20 triệu và muốn chơi game nặng AAA hãy giúp tôi build PC với")).isEqualTo("game");
+        assertThat(ChatService.upgradeOrder("2d", null)).startsWith("ram", "cpu");
+        assertThat(ChatService.upgradeOrder("office", null)).containsExactly("ram", "ssd", "cpu");
+        assertThat(ChatService.upgradeOrder("game", null)).startsWith("gpu");
+        assertThat(ChatService.ramCeiling("office")).isEqualTo(16);
+    }
+
+    @Test
+    void ramLaKhongDungKhiNang() {
+        assertThat(ChatService.oddRam("RAM PC Samsung/Micron/Hynix 64GB DDR4 | (1x64GB), 2400MHz, Intel/AMD")).isTrue();
+        assertThat(ChatService.oddRam("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz")).isFalse();
+        assertThat(ChatService.oddRam("Ram PC SSTC 8GB DDR4 (3200 Mhz)")).isFalse();
+    }
+
+    @Test
+    void mayAiChiNangLenChipDuVram() {
+        // Máy AI 40 triệu 24/11: RTX 4060 Ti 16GB, mọi chip trong 15 hạng đều ít VRAM hơn, Phù hợp thừa 9,4 triệu
+        assertThat(ChatService.vramUpgrades("rtx4060ti", 16).stream().filter(c -> c.startsWith("rtx")).toList())
+                .startsWith("rtx5060ti", "rtx3090", "rtx4070tisuper", "rtx5070ti").doesNotContain("rtx4070", "rtx5070", "rtx3070");
+        assertThat(ChatService.gpuChip("Card MSI GeForce RTX 4070 Ti SUPER 16G VENTUS 3X")).isEqualTo("rtx4070tisuper");
+    }
+
+    @Test
     void nangCardChoChatLuongBoQuaChipChiNhinhHon() {
         // Ca thật 24/11: RTX 4060 chỉ thử Arc B580 / RX 7600 XT / RTX 3060 Ti (gần như ngang), Chất lượng thành nâng CPU
         assertThat(ChatService.gpuStepUps("rtx4060")).startsWith("rx6700xt", "rtx5060", "rtx4060ti")

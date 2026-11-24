@@ -28,6 +28,19 @@ public final class ProductRules {
     }
 
     /** Số khe theo đúng SKU, nguồn hãng ghi tại docs/ai-advice-standard.md; không suy từ chipset. */
+    /**
+     * Tản đã đối chiếu socket trên trang hãng (24/11/2026): thermalright.com Assassin X 120 Refined SE "Intel:115x/1200/1700/1851
+     * AMD:AM4/AM5"; jonsbo.com CR-1200 "Intel LGA115X/1200/1700/1851, AMD AM4/AM5". Tản này khỏi cảnh báo "chưa xác minh gá"
+     * (cảnh báo lặp ở mọi cấu hình làm người mới lo không cần thiết)
+     */
+    static boolean coolerVerified(String title, String socket) {
+        if (title == null || socket == null) return false;
+        String t = title.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
+        boolean known = t.contains("thermalright") && t.contains("assassin x 120 refined se")
+                || t.contains("jonsbo") && t.matches(".*\\bcr 1200\\b.*") && !t.contains("evo");
+        return known && java.util.Set.of("LGA1151", "LGA1200", "LGA1700", "LGA1851", "AM4", "AM5").contains(socket);
+    }
+
     public static Integer memorySlots(String title) {
         if (title == null) return null;
         String t = title.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
@@ -262,7 +275,7 @@ public final class ProductRules {
                     "The cooler \"" + titles.get("cooler") + "\" only has " + coolerOnly + " mounting hardware, but the CPU uses socket "
                             + cpu.socket() + ": it cannot be mounted.",
                     "Choose a cooler that lists socket " + cpu.socket() + "."));
-        } else if (cpu.socket() != null && titles.get("cooler") != null) {
+        } else if (cpu.socket() != null && titles.get("cooler") != null && !coolerVerified(titles.get("cooler"), cpu.socket())) {
             out.add(new Finding("COOLER_MOUNT", Severity.UNKNOWN, List.of("cooler", "cpu"),
                     "The cooler mounting kit has not been verified for socket " + cpu.socket() + "; Intel and AMD mounting hardware differs.",
                     "Check the cooler specification page for support for " + cpu.socket() + "."));

@@ -203,4 +203,12 @@ class ProductRulesTests {
         assertThat(ProductRules.hasIgpu("AMD Ryzen 5 7500F")).isFalse();
         assertThat(ProductRules.hasIgpu("CPU")).isNull();
     }
+
+    @org.junit.jupiter.api.Test
+    void tanDaDoiChieuTrangHangKhoiCanhBaoGa() {
+        org.assertj.core.api.Assertions.assertThat(ProductRules.coolerVerified("Tản nhiệt CPU Thermalright Assassin X 120 Refined SE (AX120R SE)", "AM4")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(ProductRules.coolerVerified("Tản nhiệt khí Jonsbo CR-1200 | RGB, Đen", "LGA1700")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(ProductRules.coolerVerified("Tản nhiệt khí Jonsbo CR-1200 EVO", "LGA1700")).isFalse();
+        org.assertj.core.api.Assertions.assertThat(ProductRules.coolerVerified("Tản Deepcool AG400", "AM4")).isFalse();
+    }
 }
