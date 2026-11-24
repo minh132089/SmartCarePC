@@ -184,7 +184,42 @@ export const UPGRADE_FEEDBACK: StudyQuestion[] = [
   },
 ]
 
-export const RATING_QUESTIONS: Record<RatingKind, StudyQuestion[]> = { build: FEEDBACK, maintenance: MAINTENANCE_FEEDBACK, upgrade: UPGRADE_FEEDBACK }
+/**
+ * So với bản trước (v1, trước 23/11/2026): người dùng tự so, chỉ hỏi người đã dùng bản cũ (feedback-v2). Thêm vào cuối mọi form
+ * chấm sao / góp ý, không đổi câu cũ để điểm v1 và v2 vẫn so được với nhau. Thang 1 - 5, 3 = như cũ.
+ */
+const COMPARE = { type: 'scale', low: "Much worse", high: "Much better", showIf: 'used_v1=yes' } as const
+const COMPARE_VI = { low: 'Tệ hơn nhiều', high: 'Tốt hơn nhiều' }
+export const COMPARE_V1: StudyQuestion[] = [
+  {
+    key: 'used_v1',
+    text: "Have you used an earlier version of PC SmartCare (before 23 November 2026)?",
+    type: 'single',
+    options: [
+      { value: 'yes', label: "Yes", vi: 'Có' },
+      { value: 'no', label: "No", vi: 'Chưa' },
+      { value: 'unsure', label: "I don't remember", vi: 'Không nhớ' },
+    ],
+    section: "Compared with the earlier version",
+    vi: { text: 'Bạn đã từng dùng bản PC SmartCare trước ngày 23/11/2026 chưa?', section: 'So với bản trước' },
+  },
+  { key: 'cmp_speed', text: "Compared with before, how fast does the adviser reply now?", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'So với trước, trợ lý trả lời nhanh hơn hay chậm hơn?', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_accuracy', text: "Compared with before, how well do the suggested parts match what you asked for?", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'So với trước, linh kiện gợi ý đúng với yêu cầu của bạn hơn hay kém hơn?', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_clarity', text: "Compared with before, how easy is it to know what to do next (buy, install, maintain)?", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'So với trước, bạn dễ biết việc cần làm tiếp (mua, lắp, bảo dưỡng) hơn hay khó hơn?', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_overall', text: "Overall, compared with the earlier version, the app is…", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'Nhìn chung, so với bản trước, app…', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_notes', text: "What is better or worse than before?", type: 'text', showIf: 'used_v1=yes',
+    vi: { text: 'Điều gì tốt hơn hoặc tệ hơn so với trước?' } },
+]
+
+export const RATING_QUESTIONS: Record<RatingKind, StudyQuestion[]> = {
+  build: [...FEEDBACK, ...COMPARE_V1],
+  maintenance: [...MAINTENANCE_FEEDBACK, ...COMPARE_V1],
+  upgrade: [...UPGRADE_FEEDBACK, ...COMPARE_V1],
+}
 
 /** Giá trị "form" gửi lên máy chủ cho từng hộp chấm sao (post_build giữ nguyên như dữ liệu cũ) */
 export const RATING_FORM: Record<RatingKind, string> = { build: 'post_build', maintenance: 'post_maintenance', upgrade: 'post_upgrade' }
@@ -195,7 +230,9 @@ export const RATING_FORM: Record<RatingKind, string> = { build: 'post_build', ma
  */
 export function questionsOf(answers: Record<string, unknown>): StudyQuestion[] {
   const kind = answers.form === 'post_maintenance' ? 'maintenance' : answers.form === 'post_upgrade' ? 'upgrade' : answers.form === 'general' ? answers.feature : 'build'
-  return kind === 'maintenance' ? MAINTENANCE_FEEDBACK : kind === 'upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
+  const base = kind === 'maintenance' ? MAINTENANCE_FEEDBACK : kind === 'upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
+  // Phản hồi có trả lời phần "so với bản trước" (feedback-v2): hiện cả các câu đó trên trang /feedback
+  return answers.used_v1 != null ? [...base, ...COMPARE_V1] : base
 }
 
 /* ---------- Ba nhóm câu lõi: hỏi y nguyên ở lần đầu và cuối nghiên cứu ---------- */

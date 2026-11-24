@@ -2,6 +2,7 @@ import type { FeedbackRow } from './feedbackStats'
 import { V2_SINCE, average, score, versionOf } from './feedbackStats'
 import { SCALES } from './FeedbackOverview'
 import { MEASURES, gap, people, type UsageRow } from './gapStats'
+import { COMPARE_V1 } from './questions'
 
 /**
  * So chất lượng giữa các phiên bản app (v1 / v2, xem appVersion.ts): số phản hồi, điểm sao, điểm từng câu hỏi và gap effect
@@ -10,6 +11,57 @@ import { MEASURES, gap, people, type UsageRow } from './gapStats'
  */
 const fmt = (v: number | null | undefined, digits = 2) => (v == null ? '—' : v.toFixed(digits))
 const signed = (v: number | null) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`)
+
+/**
+ * Người dùng tự so với bản trước (câu COMPARE_V1, chỉ người đã dùng bản cũ trả lời): bao nhiêu người đã dùng bản cũ, điểm trung
+ * bình từng câu (3 = như cũ) và tỉ lệ thấy tốt hơn / như cũ / tệ hơn
+ */
+function SelfCompare({ feedback }: { feedback: FeedbackRow[] }) {
+  const answered = feedback.filter((r) => r.answers.used_v1 != null)
+  if (!answered.length) return null
+  const used = answered.filter((r) => r.answers.used_v1 === 'yes')
+  const scales = COMPARE_V1.filter((q) => q.type === 'scale')
+  return (
+    <div className="mt-4">
+      <p className="text-[14px] font-semibold text-ink">Users' own comparison with the earlier version</p>
+      <p className="mt-1 text-[13px] text-ink-2">
+        {answered.length} responses answered this part: {used.length} had used the earlier version,{' '}
+        {answered.filter((r) => r.answers.used_v1 === 'no').length} had not, {answered.filter((r) => r.answers.used_v1 === 'unsure').length} did not remember.
+        Scale: 1 much worse, 3 about the same, 5 much better.
+      </p>
+      {used.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[520px] text-[13px]">
+            <thead>
+              <tr className="text-left text-ink-3">
+                <th className="py-1.5 pr-3 font-medium">Compared with before</th>
+                <th className="py-1.5 pr-3 font-medium">Average</th>
+                <th className="py-1.5 pr-3 font-medium">Better (4–5)</th>
+                <th className="py-1.5 pr-3 font-medium">Same (3)</th>
+                <th className="py-1.5 font-medium">Worse (1–2)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {scales.map((q) => {
+                const xs = used.map((r) => score(r.answers[q.key])).filter((v): v is number => v != null)
+                const a = average(xs)
+                return (
+                  <tr key={q.key}>
+                    <td className="py-1.5 pr-3">{q.text.replace(/^Compared with before, /, '').replace(/^Overall, compared with the earlier version, the app is…$/, 'Overall')}</td>
+                    <td className="py-1.5 pr-3 tabular-nums">{a ? `${fmt(a.mean)} (${a.n})` : '—'}</td>
+                    <td className="py-1.5 pr-3 tabular-nums">{xs.filter((v) => v >= 4).length}</td>
+                    <td className="py-1.5 pr-3 tabular-nums">{xs.filter((v) => v === 3).length}</td>
+                    <td className="py-1.5 tabular-nums">{xs.filter((v) => v <= 2).length}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function VersionCompare({ feedback, events }: { feedback: FeedbackRow[]; events: UsageRow[] }) {
   const versions = [...new Set(feedback.map(versionOf))].sort()
@@ -21,6 +73,7 @@ export function VersionCompare({ feedback, events }: { feedback: FeedbackRow[]; 
           All {feedback.length} responses so far are from {versions[0] ?? 'one version'}. The comparison appears once responses from another
           version arrive. New responses are tagged with the app version.
         </p>
+        <SelfCompare feedback={feedback} />
       </section>
     )
   }
@@ -82,6 +135,7 @@ export function VersionCompare({ feedback, events }: { feedback: FeedbackRow[]; 
         </table>
       </div>
       <p className="mt-2 text-[12px] text-ink-3">Brackets: number of answers (or paired participants for gap effect). Small groups move a lot: read differences with the counts.</p>
+      <SelfCompare feedback={feedback} />
     </section>
   )
 }
