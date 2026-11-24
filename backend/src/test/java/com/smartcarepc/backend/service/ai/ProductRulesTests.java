@@ -179,6 +179,19 @@ class ProductRulesTests {
     }
 
     @Test
+    void nguonChoMayCoCardPhaiCoChungNhanHoacHangCoTen() {
+        // Rà soát 24/11 a06: nguồn hãng ít tên tuổi, không chứng nhận, đi với card RX 9060 XT
+        assertThat(ChatService.psuTrusted("Infinity ECO 750W – DC to DC – Hiệu suất 85% – Active PFC – Single Rail")).isFalse();
+        assertThat(ChatService.psuTrusted("Power supply Jetek MaxWatt 550 V2 (550W)")).isFalse();
+        assertThat(ChatService.psuTrusted("Power supply AIGO VK450 - 450W (Black)")).isFalse();
+        assertThat(ChatService.psuTrusted("Power supply Aigo GB550 - 550W (80 Plus Bronze)")).isTrue();
+        assertThat(ChatService.psuTrusted("Power supply VSP VGP650BRU PRO (650W / 80 Plus Bronze)")).isTrue();
+        assertThat(ChatService.psuTrusted("Power supply Corsair RM750e White ATX 3.1 750W Cybenetics Gold (CP-9020")).isTrue();
+        assertThat(ChatService.psuTrusted("Power supply MSI MAG A650BN 650W Official giá rẻ")).isTrue();
+        assertThat(ChatService.psuTrusted("DeepCool PF450D - 450W 80 Plus Power Supply")).isTrue();
+    }
+
+    @Test
     void doHoaTichHopTheoMaSanPham() {
         assertThat(ProductRules.hasIgpu("Bộ vi xử lý Intel Core i3-12100")).isTrue();
         assertThat(ProductRules.hasIgpu("Bộ vi xử lý Intel Core i3 14100F")).isFalse();

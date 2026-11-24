@@ -1945,7 +1945,8 @@ public class ChatService {
             log.info("Rẻ dựng lại từ Phù hợp: {} (Phù hợp {}), {}", tc, tb, notes);
             turn.tiers.put("cheap", cand);
         } else {
-            log.info("Rẻ dựng lại từ Phù hợp không đạt: {} / mức {} (Phù hợp {})", tc, target, tb);
+            log.info("Rẻ dựng lại từ Phù hợp không đạt: {} / mức {} (Phù hợp {}); lắp chung {}, lỗi sản phẩm {}, thiếu yêu cầu {}, chưa mua được {}",
+                    tc, target, tb, cand.result().compatible(), productIssues(cand.picks()), requirementIssues(cand), missingBuy(cand));
             // Phù hợp đã ở mức sàn mà còn dư ngân sách (ca thật v20: Phù hợp 10,25 / ngân sách 12 triệu, không hạ thêm được):
             // dùng chính Phù hợp làm Rẻ nếu vừa trần Rẻ, dựng Phù hợp mới bằng nâng cấp trong ngân sách. Chỉ nhận khi cả hai
             // hiện được và cách nhau ít nhất TIER_GAP; Chất lượng dựng lại sau đó nếu cần (qualityFromBalanced)
@@ -2706,6 +2707,10 @@ public class ChatService {
             if (p == null || p.title() == null) continue;
             String kind = categoryOf(i.code());
             if (Boolean.TRUE.equals(d.get("performance_cpu")) && entryCpu(p.title())) issues.add("the entry-level CPU is below the requirement for the selected gaming workload or GPU");
+            if ("psu".equals(kind) && hasGpu && !psuTrusted(p.title())) {
+                issues.add("the power supply for this graphics card has no 80 Plus / Cybenetics rating and is not from an established "
+                        + "power supply brand: choose a certified unit");
+            }
             if ("gpu".equals(kind)) {
                 if (!cudaOk(c.details(), i.code(), p)) issues.add("the GPU does not match the requested vendor or model");
                 if (d.get("vram_min") instanceof Number min && (vram(p.title()) == null || vram(p.title()) < min.intValue())) {
@@ -4415,6 +4420,19 @@ public class ChatService {
         return t.matches(".*80\\s*\\+?\\s*plus.*") ? 0 : null;
     }
 
+    private static final java.util.regex.Pattern PSU_BRANDS = java.util.regex.Pattern.compile(
+            "\\b(msi|corsair|cooler ?master|coolermaster|seasonic|deepcool|fsp|asus|rog|gigabyte|aorus|thermaltake|antec|be ?quiet|super ?flower"
+                    + "|nzxt|lian ?li|silverstone|xigmatek|montech|evga|enermax|chieftec|phanteks|fractal)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Nguồn đáng tin cho máy có card rời: tên ghi chứng nhận hiệu suất (80 Plus / Cybenetics) hoặc là hãng nguồn có tên tuổi.
+     * Rà soát 24/11 a06: phương án Rẻ dùng "Infinity ECO 750W – DC to DC – Hiệu suất 85%" (hãng ít tên tuổi, không chứng nhận)
+     * cho máy RX 9060 XT. Máy không card rời tải nhẹ, không chặn.
+     */
+    static boolean psuTrusted(String title) {
+        return title != null && (psuRating(title) != null || title.toLowerCase().contains("cybenetics") || PSU_BRANDS.matcher(title).find());
+    }
+
     private static final java.util.regex.Pattern LOW_PROFILE = java.util.regex.Pattern.compile(
             // axp: dòng tản thấp Thermalright AXP90 / AXP120; tản khí ghi "cho máy ITX / HTPC" cũng là loại thấp (ca kiểm tra 23/11)
             "low[\\s-]*profile|\\bthấp\\b|top[\\s-]*flow|\\bis-\\d|\\bl9|\\bl12|\\bnh-l|\\baxp\\s*-?\\d{2,3}|\\bhtpc\\b|\\bm?itx\\b",
@@ -4928,6 +4946,7 @@ public class ChatService {
         if (search.enabled() && p.url() != null && search.pageChecked(p.url()) && !verified(p)) return false;
         String category = categoryOf(code);
         if (!fitsCode(code, p.title()) || wrongKind(code, p) || category != null && !plausible(category, p.priceVnd())) return false;
+        if ("psu".equals(category) && !psuTrusted(p.title()) && picks.keySet().stream().anyMatch(k -> "gpu".equals(categoryOf(k)))) return false;
         var trial = new LinkedHashMap<>(picks);
         trial.put(code, p);
         // Không chỉ đếm số lỗi: món thay không được đổi một lỗi lấy lỗi khác (vd hết lỗi socket nhưng thành lỗi DDR)

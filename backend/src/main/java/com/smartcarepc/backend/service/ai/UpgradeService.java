@@ -967,6 +967,10 @@ public class UpgradeService {
         if (fresh != null && fresh < need) {
             errors.add("psu: \"" + psu.product().title() + "\" (" + fresh + "W) is below the " + need + "W this PC's graphics card needs.");
         }
+        if (psu != null && (gpu != null || oldGpu) && !ChatService.psuTrusted(psu.product().title())) {
+            errors.add("psu: \"" + psu.product().title() + "\" has no 80 Plus / Cybenetics rating and is not from an established power "
+                    + "supply brand. Choose a certified unit for a PC with a graphics card.");
+        }
         Pick caseNew = by.get("case");
         boolean newCase = caseNew != null;
         boolean sfxPsu = psu != null && SFX.matcher(psu.product().title()).find();
