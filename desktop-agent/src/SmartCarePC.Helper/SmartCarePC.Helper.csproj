@@ -16,7 +16,14 @@
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Icon tự vẽ (tools/HelperUi assets). Điều kiện Exists để lần đầu dựng lại icon từ đầu vẫn build được. -->
+    <ApplicationIcon Condition="Exists('Assets\app.ico')">Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Icon cửa sổ và logo thông báo đi kèm trong exe: không tải gì từ mạng -->
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="SmartCarePC.Helper.app.ico" Condition="Exists('Assets\app.ico')" />
+    <EmbeddedResource Include="Assets\toast-logo.png" LogicalName="SmartCarePC.Helper.toast-logo.png" Condition="Exists('Assets\toast-logo.png')" />
+  </ItemGroup>
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>

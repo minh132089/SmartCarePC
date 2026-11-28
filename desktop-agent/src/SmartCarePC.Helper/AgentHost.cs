@@ -1,28 +1,11 @@
 using System.Collections.Concurrent;
 using System.Net.NetworkInformation;
 using SmartCarePC.Helper.Core;
+using SmartCarePC.Helper.Core.Display;
 using SmartCarePC.Helper.Core.Health;
 using SmartCarePC.Helper.Sensors;
 
 namespace SmartCarePC.Helper;
-
-/// <summary>Ảnh chụp trạng thái cho cửa sổ Status</summary>
-public sealed record StatusSnapshot(
-    HealthSample? Last,
-    OverallStatus Overall,
-    IReadOnlyDictionary<string, RuleResult> Rules,
-    IReadOnlyList<string>? Disks,
-    (long? Free, long? Total) Drive,
-    int? ShutdownsThisWeek,
-    int? BlueScreensThisWeek,
-    int? DiskErrorsThisWeek,
-    int? HardwareErrorsThisWeek,
-    DateTimeOffset? LastBoot,
-    MaintenancePlan? Plan,
-    DateTimeOffset? PausedUntil,
-    AgentSettings Settings,
-    string? BaselineSentence,
-    int PendingEvents);
 
 /// <summary>
 /// Vòng chạy nền, tất cả trên một luồng: đo, ghi lịch sử, quyết định thông báo, gửi sự kiện nghiên cứu.

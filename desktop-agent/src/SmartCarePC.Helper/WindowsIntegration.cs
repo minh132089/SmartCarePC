@@ -44,12 +44,14 @@ public static class WindowsIntegration
         cmd.SetValue("", $"\"{ExePath}\" \"%1\"");
     }
 
-    /// <summary>Gỡ sạch những gì app tự ghi: khoá URL scheme, mục khởi động, đăng ký thông báo.</summary>
+    /// <summary>Gỡ sạch những gì app tự ghi: khoá URL scheme, mục khởi động, đăng ký thông báo, logo thông báo.</summary>
     public static void Uninstall()
     {
         try { Registry.CurrentUser.DeleteSubKeyTree(ProtocolKey, throwOnMissingSubKey: false); } catch { }
         try { StartsWithWindows = false; } catch { }
         try { Microsoft.Toolkit.Uwp.Notifications.ToastNotificationManagerCompat.Uninstall(); } catch { }
+        try { File.Delete(Ui.AppAssets.ToastLogoPath); } catch { }
+        try { File.Delete(Ui.AppAssets.ToastLogoPath + ".tmp"); } catch { }
     }
 
     /// <summary>

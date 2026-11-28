@@ -1,6 +1,7 @@
 using Microsoft.Toolkit.Uwp.Notifications;
 using SmartCarePC.Helper.Core;
 using SmartCarePC.Helper.Core.Health;
+using SmartCarePC.Helper.Ui;
 
 namespace SmartCarePC.Helper;
 
@@ -25,6 +26,12 @@ public static class Toasts
         if (r.Rule is not null) b.AddArgument("rule", r.Rule);
         if (r.OpenUrl is not null) b.AddArgument("url", r.OpenUrl);
         if (r.Urgency == Urgency.Urgent) b.SetToastScenario(ToastScenario.Reminder); // ở lại trên màn hình tới khi người dùng bấm
+        Brand(b, r.Source switch
+        {
+            ToastSource.Health => "PC health check",
+            ToastSource.Schedule => "Cleaning reminder",
+            _ => null,
+        });
 
         var main = r.Source switch
         {
@@ -55,17 +62,25 @@ public static class Toasts
 
     static string Tag(string key) => key.Length <= 64 ? key : key[..64];
 
+    /// <summary>Logo tròn của app (đi kèm trong exe, chép ra ổ đĩa vì Windows chỉ đọc file) và một dòng nhỏ cho biết thông báo từ đâu</summary>
+    static void Brand(ToastContentBuilder b, string? attribution)
+    {
+        if (AppAssets.ToastLogo() is { } logo) b.AddAppLogoOverride(logo, ToastGenericAppLogoCrop.Circle);
+        if (attribution is not null) b.AddAttributionText(attribution);
+    }
+
     /// <summary>Thông báo xác nhận ngay sau khi nhận lịch từ web (người dùng vừa bấm, nên không tính vào giới hạn mỗi ngày)</summary>
     public static void ShowLinked(MaintenancePlan plan)
     {
         var next = plan.Dates.OrderBy(kv => kv.Value, StringComparer.Ordinal).First();
         var when = LocalDay.Parse(next.Value).ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
         var what = next.Key switch { MaintenanceTask.Dust => "clean your PC", MaintenanceTask.Paste => "replace the thermal paste", _ => "do a quick PC check" };
-        new ToastContentBuilder()
+        var b = new ToastContentBuilder()
             .AddArgument("action", "none")
             .AddText("Your reminders are on")
-            .AddText($"We will remind you to {what} on {when}. You can close the website now.")
-            .Show(t => { t.Tag = "linked"; t.Group = "smartcarepc"; });
+            .AddText($"We will remind you to {what} on {when}. You can close the website now.");
+        Brand(b, "Cleaning reminder");
+        b.Show(t => { t.Tag = "linked"; t.Group = "smartcarepc"; });
     }
 
     /// <summary>Đọc lại tham số khi bấm. Tham số do app khác giả thì bị bỏ (khoá lạ, url ngoài danh sách).</summary>

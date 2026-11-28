@@ -30,30 +30,31 @@ public sealed record OverallStatus(OverallLevel Level, IReadOnlyList<string> Pro
         }
     }
 
+    /// <summary>Câu mở đầu dưới tiêu đề khi chưa thấy vấn đề. null khi đang có vấn đề: khi đó Problems nói thay.</summary>
+    public string? Summary => Level switch
+    {
+        OverallLevel.Checking => NotChecked.Count == 0
+            ? "The first checks are still running. This takes a minute or two."
+            : "None of the checks could run on this PC yet.",
+        OverallLevel.RunningWell => "No problems found in the checks this app could run.",
+        _ => null,
+    };
+
+    /// <summary>Một câu chung cho mọi luật không đọc được. null khi luật nào cũng chạy được.</summary>
+    public string? NotCheckedNote => NotChecked.Count == 0 ? null
+        : $"Not checked on this PC: {string.Join(", ", NotChecked.Select(Rules.DisplayName))}. "
+            + "This app cannot read these here, so they are not counted as OK.";
+
     /// <summary>Các dòng giải thích dưới tiêu đề trong cửa sổ Status</summary>
     public IReadOnlyList<string> Lines
     {
         get
         {
             var lines = new List<string>();
-            switch (Level)
-            {
-                case OverallLevel.Checking:
-                    lines.Add(NotChecked.Count == 0
-                        ? "The first checks are still running. This takes a minute or two."
-                        : "None of the checks could run on this PC yet.");
-                    break;
-                case OverallLevel.RunningWell:
-                    lines.Add("No problems found in the checks this app could run.");
-                    break;
-                default:
-                    lines.AddRange(Problems.Select(p => "• " + p));
-                    break;
-            }
+            if (Summary is { } summary) lines.Add(summary);
+            else lines.AddRange(Problems.Select(p => "• " + p));
             lines.AddRange(Tips.Select(t => "Tip: " + t));
-            if (NotChecked.Count > 0)
-                lines.Add($"Not checked on this PC: {string.Join(", ", NotChecked.Select(Rules.DisplayName))}. "
-                    + "This app cannot read these here, so they are not counted as OK.");
+            if (NotCheckedNote is { } note) lines.Add(note);
             return lines;
         }
     }

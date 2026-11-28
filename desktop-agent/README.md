@@ -15,10 +15,13 @@ Bấm vào thông báo thì app mở web vào thẳng bài 3D, ví dụ `https:/
 |---|---|
 | `src/SmartCarePC.Helper.Core/` | Lõi `net8.0`, không phụ thuộc Windows: đọc link, lịch, luật sức khoẻ, quyết định thông báo, hàng đợi sự kiện. Chạy test được trên Mac. |
 | `src/SmartCarePC.Helper/` | App WinForms `net8.0-windows`: icon khay, toast, đọc cảm biến, Registry, nhận link `smartcarepc://` |
-| `tests/SmartCarePC.Helper.Tests/` | xUnit, 125 test cho lõi. `fixtures/web-dates.json` là kết quả chạy thật hàm ngày tháng của web. |
-| `installer/SmartCarePCHelper.iss` | Bộ cài Inno Setup, cài cho từng người dùng, không cần admin |
+| `src/SmartCarePC.Helper/Ui/` | Giao diện: bảng màu sáng / tối, icon vẽ bằng code, thẻ của cửa sổ Status, menu khay |
+| `src/SmartCarePC.Helper/Assets/` | `app.ico` (16–256 px) và `toast-logo.png`, đi kèm trong exe. Sinh bằng `tools/HelperUi`, không sửa tay |
+| `tests/SmartCarePC.Helper.Tests/` | xUnit, 142 test cho lõi. `fixtures/web-dates.json` là kết quả chạy thật hàm ngày tháng của web. |
+| `installer/SmartCarePCHelper.iss` | Bộ cài Inno Setup, cài cho từng người dùng, không cần admin. Ảnh bộ cài ở `installer/images/` |
 | `tools/export-web-dates.mjs` | Chạy `addDays` / `addMonths` của `src/data/maintenanceSchedule.ts` để tạo lại fixture |
 | `tools/send-test-plan.ps1` | Gửi lịch thử sang app trên Windows (web đã bỏ nút gửi lịch, chỉ dùng để thử phần nhắc theo lịch) |
+| `tools/HelperUi/` | Chỉ chạy trên Windows, không đi kèm app: vẽ lại icon, chụp ảnh giao diện. Không nằm trong `.sln` |
 
 | Việc | File |
 |---|---|
@@ -32,7 +35,11 @@ Bấm vào thông báo thì app mở web vào thẳng bài 3D, ví dụ `https:/
 | Đọc cảm biến (LibreHardwareMonitorLib, GetSystemTimes, GlobalMemoryStatusEx, GetLastInputInfo) | `Helper/Sensors/SensorReader.cs` |
 | Ổ cứng (MSFT_PhysicalDisk), ổ đầy, Event Log, lần khởi động (Win32_OperatingSystem), toàn màn hình | `Helper/Sensors/SystemChecks.cs` |
 | Vòng chạy nền | `Helper/AgentHost.cs` |
-| Menu khay, icon theo kết luận tổng, cửa sổ Status | `Helper/TrayApp.cs`, `Helper/StatusForm.cs` |
+| Nội dung cửa sổ Status (chữ, thứ tự, dấu gạch cho số không đọc được), test được trên Mac | `Core/Display/StatusPage.cs` |
+| Icon khay theo kết luận tổng, cửa sổ Status | `Helper/TrayApp.cs`, `Helper/StatusForm.cs` |
+| Menu khay, cách vẽ menu | `Helper/Ui/TrayMenu.cs`, `Helper/Ui/MenuRenderer.cs` |
+| Màu, font, chế độ sáng / tối, thanh tiêu đề tối | `Helper/Ui/Palette.cs`, `Helper/Ui/Theme.cs`, `Helper/Ui/WindowChrome.cs` |
+| Icon khay, icon app, ảnh bộ cài (vẽ bằng code) | `Helper/Ui/IconArt.cs` |
 
 ## Build và test
 
@@ -41,6 +48,8 @@ Cần .NET 8 SDK. Trên Mac của Minh SDK đã cài ở `~/.dotnet` (cài bằn
 ```bash
 export PATH="$HOME/.dotnet:$PATH"
 ```
+
+Trên Windows cài cho riêng người dùng, không cần admin, bằng script chính thức `dotnet-install.ps1` (`-Channel 8.0`), rồi thêm thư mục cài vào `PATH`. Nếu máy có sẵn `dotnet` bản x86 trong `C:\Program Files (x86)\dotnet` mà báo lỗi `hostpolicy.dll` thì đó là bản 32 bit hỏng, dùng bản vừa cài.
 
 ```bash
 cd desktop-agent && dotnet test
@@ -74,6 +83,27 @@ Bộ cài:
 
 Thử nhanh mà không cài: chạy `SmartCarePCHelper.exe --register` một lần để đăng ký `smartcarepc://`, rồi chạy `SmartCarePCHelper.exe`.
 
+### Icon và ảnh chụp giao diện (trên Windows)
+
+Icon app, logo thông báo và ảnh bộ cài đều vẽ bằng code trong `Ui/IconArt.cs`, không tải gì từ mạng, không có logo hãng nào. Sửa hình thì sửa code rồi vẽ lại:
+
+```powershell
+cd desktop-agent
+dotnet run --project tools/HelperUi -- assets
+```
+
+Lệnh ghi đè `src/SmartCarePC.Helper/Assets/app.ico`, `toast-logo.png` và `installer/images/*.bmp`. Commit cả các file này.
+
+Chụp ảnh giao diện để so trước / sau:
+
+```powershell
+dotnet run --project tools/HelperUi -- shots
+```
+
+Ra thư mục `artifacts/ui-shots/` (không commit): cửa sổ Status ở 4 mức (đang kiểm tra, ổn, cần chú ý, cần xử lý ngay) với dữ liệu giả, cả sáng lẫn tối (thêm một ảnh màu hệ thống), mỗi mức một ảnh đầu trang, một ảnh cuối trang, một ảnh cả trang; menu khay; bảng icon khay ở 16 / 20 / 24 / 32 px trên taskbar sáng và tối; icon app. Thêm `--live` để chụp thêm cửa sổ với số đo thật của máy, `--toast` để hiện một thông báo mẫu (chỉ chụp được khi Windows hiện banner thông báo, tức là không bật Do not disturb).
+
+Ép chế độ màu khi thử app: đặt biến môi trường `SMARTCAREPC_THEME=dark`, `light` hoặc `contrast` (màu hệ thống, gần giống tương phản cao) trước khi chạy. Không đặt thì app theo Windows (Settings → Personalization → Colors).
+
 ## Nối với web: định dạng link
 
 Web mở `smartcarepc://plan?d=<base64url của JSON>`. JSON:
@@ -106,16 +136,18 @@ Không có lịch là bình thường. Lần chạy đầu app hiện một toas
 
 ### Kết luận tổng
 
-Đầu cửa sổ Status có một dòng chữ to, icon khay và chữ khi rê chuột cũng đổi theo:
+Đầu cửa sổ Status có một thẻ kết luận (icon lớn giống icon khay, chữ to, các dòng giải thích), icon khay và chữ khi rê chuột cũng đổi theo. Mỗi mức một hình riêng, không chỉ khác màu:
 
 | Mức | Khi nào | Icon khay |
 |---|---|---|
-| **Running well** | Không luật nào đang báo. Gợi ý nhẹ (ổ đầy, RAM, CPU bận khi rảnh, lâu không khởi động lại) chỉ hiện thành dòng "Tip:", không đổi mức | xanh dương, dấu tích |
-| **Needs attention** | Có luật bảo dưỡng hoặc Event Log đang báo: `cpu_hot`, `gpu_hot`, `unexpected_shutdown`, `blue_screen`, `disk_errors`, `hardware_errors` | cam, dấu chấm than |
-| **Needs help now** | Có luật khẩn: `disk_failing`, `fan_stopped` | đỏ, dấu chấm than |
+| **Running well** | Không luật nào đang báo. Gợi ý nhẹ (ổ đầy, RAM, CPU bận khi rảnh, lâu không khởi động lại) chỉ hiện thành dòng "Tip:", không đổi mức | tròn xanh dương, dấu tích |
+| **Needs attention** | Có luật bảo dưỡng hoặc Event Log đang báo: `cpu_hot`, `gpu_hot`, `unexpected_shutdown`, `blue_screen`, `disk_errors`, `hardware_errors` | tam giác cam, chấm than đen |
+| **Needs help now** | Có luật khẩn: `disk_failing`, `fan_stopped` | bát giác đỏ, chấm than trắng |
 
-- Luật không đọc được (ví dụ nhiệt CPU, quạt khi không có quyền admin) **không tính là ổn**. Status ghi "Not checked on this PC: Processor heat, Processor fan. This app cannot read these here, so they are not counted as OK." Tooltip ghi kiểu "SmartCarePC Helper: Running well, 2 not checked".
-- Chưa luật nào chạy xong (vừa mở app): "Checking your PC", icon xám.
+- Luật không đọc được (ví dụ nhiệt CPU, quạt khi không có quyền admin) **không tính là ổn**. Thẻ kết luận ghi "Not checked on this PC: Processor heat, Processor fan. This app cannot read these here, so they are not counted as OK." Tooltip ghi kiểu "SmartCarePC Helper: Running well, 2 not checked".
+- Chưa luật nào chạy xong (vừa mở app): "Checking your PC", icon tròn xám có ba chấm.
+- Dưới thẻ kết luận là các thẻ Checks (mỗi luật một nhãn có hình và chữ: OK, Tip, Needs attention, Needs help now, Not checked; mục cần để ý xếp lên đầu), Latest readings (số nào không đọc được thì hiện dấu gạch xám, giải thích một lần ở cuối thẻ), Reminders (có ô giờ yên lặng), Privacy. Cửa sổ cuộn được, theo chế độ sáng / tối và tương phản cao của Windows, Esc để đóng.
+- Icon khay vẽ đúng cỡ theo DPI của taskbar (16 px ở 100%, 24 px ở 150%...), không để Windows co ảnh 32 px nên không mờ.
 - Luật Event Log đã báo rồi vẫn giữ mức Needs attention trên Status suốt 7 ngày, chỉ không hiện thông báo lại. Quạt đứng giữ Needs help now thêm 1 giờ sau lần báo.
 
 ### Luật sức khoẻ
@@ -176,7 +208,7 @@ Nếu máy đã có PawnIO (ví dụ cài cùng một app quạt khác) và ngư
 
 ## Quyền riêng tư
 
-- Số đo, lịch, hàng đợi sự kiện, nhật ký chỉ nằm ở `%LOCALAPPDATA%\SmartCarePC\` (`state.json`, `events.json`, `log.txt`).
+- Số đo, lịch, hàng đợi sự kiện, nhật ký chỉ nằm ở `%LOCALAPPDATA%\SmartCarePC\` (`state.json`, `events.json`, `log.txt`). Cùng thư mục có `toast-logo.png`: logo cho thông báo, chép ra từ exe vì Windows chỉ đọc logo từ file. `--uninstall` xoá file này.
 - Không có tên máy, tên người dùng Windows, số serial, địa chỉ IP trong dữ liệu nào.
 - Không ở chế độ thử nghiệm thì app **không tạo HttpClient**, chỉ mở trình duyệt khi người dùng bấm.
 - Ở chế độ thử nghiệm: gửi `POST <origin>/api/maintenance/events`, User-Agent `SmartCarePCHelper/1.0`, xếp hàng trên đĩa, gửi lại giữ nguyên `eventId`. Máy chủ trả 4xx thì chuyển sự kiện sang danh sách `rejected` để không chặn cả hàng.
@@ -184,23 +216,24 @@ Nếu máy đã có PawnIO (ví dụ cài cùng một app quạt khác) và ngư
 
 ## Việc Minh cần tự thử trên Windows 10/11 x64 thật
 
-Chưa thử được gì trên Windows. Trên Mac chỉ chạy được test của lõi (`dotnet test`) và build app Windows. Phần đọc Event Log, `GetLastInputInfo`, `LastBootUpTime`, icon khay đổi màu và cửa sổ Status chưa chạy lần nào. Danh sách thử:
+Ngày 28/11/2026, trên một máy Windows 11 (màn hình 100%, tài khoản thường) đã chạy: build, test, cửa sổ Status với số đo thật của máy (nhiệt CPU và quạt không đọc được, nhiệt GPU đọc được, Event Log và Last restart đọc được), cửa sổ Status và menu khay ở cả sáng lẫn tối. Chưa thử: icon trong khay thật, màn hình 150%, banner thông báo, bộ cài. Danh sách thử:
 
 1. **Cài**: chạy bộ cài bằng tài khoản thường. Không có hộp hỏi admin (UAC). SmartScreen hiện cảnh báo: More info → Run anyway, chụp ảnh lại cho hướng dẫn.
 2. **Khay**: icon hiện ở khay. Chuột phải có đủ menu. Bật / tắt Start with Windows, khởi động lại máy xem app có tự chạy không.
-3. **Chưa có lịch**: lần chạy đầu hiện một toast "SmartCarePC Helper is checking your PC", không có nút. Thoát app, chạy lại, đổi ngày máy +3 ngày: không hiện lại. Status ghi dòng "This app only checks your PC's health..." ở mục REMINDERS.
+3. **Chưa có lịch**: lần chạy đầu hiện một toast "SmartCarePC Helper is checking your PC", không có nút. Thoát app, chạy lại, đổi ngày máy +3 ngày: không hiện lại. Status ghi dòng "This app only checks your PC's health..." ở thẻ Reminders.
 4. **Nhận lịch**: `powershell -ExecutionPolicy Bypass -File tools\send-test-plan.ps1`. Trình duyệt / Windows hỏi mở app thì đồng ý. Hiện "Your reminders are on". Status thấy đúng ngày.
 5. **Link hỏng**: chạy với `-Bad`. App không crash, `log.txt` có dòng `ignored link`.
 6. **Toast theo lịch**: gửi lịch dust hôm nay (ngoài giờ yên lặng). Trong 1 phút hiện "Time to clean your PC". Bấm Start guide mở đúng bài 3D. Đổi ngày máy để thử ngày khác.
 7. **Hoãn**: bấm Remind me in 1 week. Đổi ngày máy +6 ngày: chưa báo. +7 ngày: báo lại.
 8. **Giờ yên lặng / toàn màn hình**: đặt giờ yên lặng bao giờ hiện tại, hoặc mở game toàn màn hình: không có toast bảo dưỡng.
-9. **Cảm biến**: mở Status, ghi lại số nào đọc được, số nào "not available on this PC". Chạy nặng CPU vài phút (ví dụ Cinebench), xem tải CPU và nhiệt có ghi được không. Thử thêm một lần chạy app bằng quyền admin trên máy đã có PawnIO để so.
+9. **Cảm biến**: mở Status, ghi lại số nào đọc được, số nào hiện dấu gạch (không đọc được). Chạy nặng CPU vài phút (ví dụ Cinebench), xem tải CPU và nhiệt có ghi được không. Thử thêm một lần chạy app bằng quyền admin trên máy đã có PawnIO để so.
 10. **GPU**: chơi game hoặc chạy benchmark GPU, xem nhiệt GPU trong Status.
-11. **Ổ đĩa, Event Log**: Status có Drive health, số lần tắt máy đột ngột, Blue error screens, Drive read and write errors, Hardware errors và Last restart (không phải "not available"). So số đếm với Event Viewer (Windows Logs → System, lọc theo nguồn BugCheck / disk / WHEA-Logger). Nếu máy từng bị màn hình xanh mà số đếm là 0, ghi lại tên nguồn hiện trong Event Viewer: bộ lọc đang dùng tên `Microsoft-Windows-WER-SystemErrorReporting` hoặc `BugCheck`.
+11. **Ổ đĩa, Event Log**: Status có Drive health, số lần tắt máy đột ngột, Blue error screens, Drive read and write errors, Hardware errors và Last restart (không phải dấu gạch). So số đếm với Event Viewer (Windows Logs → System, lọc theo nguồn BugCheck / disk / WHEA-Logger). Nếu máy từng bị màn hình xanh mà số đếm là 0, ghi lại tên nguồn hiện trong Event Viewer: bộ lọc đang dùng tên `Microsoft-Windows-WER-SystemErrorReporting` hoặc `BugCheck`.
 12. **Hiệu năng**: Task Manager, để app chạy ít nhất 30 phút. Mục tiêu dưới 1% CPU và dưới 80 MB RAM. Ghi số vào báo cáo.
 13. **Mạng**: không ở chế độ thử nghiệm, mở Resource Monitor (tab Network) hoặc Fiddler: `SmartCarePCHelper.exe` không có kết nối nào.
 14. **Thử nghiệm**: gửi lịch với `-Study P07` và `-Origin http://localhost:5173` khi chạy web và backend local. Sự kiện vào bảng `maintenance_event`. **Cần sửa backend trước**: regex `eventType` chưa có 5 loại mới, máy chủ sẽ trả 400 và app chuyển sự kiện sang `rejected`.
 15. **Gỡ**: gỡ trong Apps & features. Kiểm tra không còn `HKCU\Software\Classes\smartcarepc`, không còn mục Run, thư mục dữ liệu xoá hay giữ theo câu trả lời.
-16. **Kết luận tổng**: mở Status, dòng đầu phải là Running well / Needs attention / Needs help now, có dòng "Not checked on this PC" liệt kê nhiệt CPU, quạt nếu không đọc được. Rê chuột lên icon khay xem chữ. Chụp ảnh icon ở từng màu cho báo cáo. Màu cam và đỏ khó tạo bằng tay, nên chụp khi có máy thật đang bị lỗi (ví dụ máy từng màn hình xanh trong tuần).
+16. **Kết luận tổng**: mở Status, dòng đầu phải là Running well / Needs attention / Needs help now, có dòng "Not checked on this PC" liệt kê nhiệt CPU, quạt nếu không đọc được. Rê chuột lên icon khay xem chữ. Ảnh cả 4 mức (kể cả cam và đỏ, khó tạo bằng tay) có sẵn bằng `tools/HelperUi shots`; trên máy thật chỉ cần xem mức đang có.
 17. **CPU bận khi rảnh**: để máy chạy việc nặng (ví dụ nén file lớn, Cinebench vòng lặp) và không chạm chuột / phím 35 phút, làm 2 ngày khác nhau. Ngày thứ hai có gợi ý "Your PC stays busy when you are away" (ngoài giờ yên lặng). Kiểm tra màn hình khoá hoặc tắt màn hình có làm `GetLastInputInfo` sai không.
 18. **Lâu không khởi động lại**: Status ghi Last restart. Bấm Shut down rồi bật lại: Last restart không đổi (fast startup). Bấm Restart: thành "today". Muốn thấy gợi ý thì cần máy đã chạy 14 ngày.
+19. **Giao diện**: đổi Settings → Personalization → Colors sang Dark rồi Light khi cửa sổ Status đang mở: cửa sổ và menu khay đổi theo, thanh tiêu đề cũng tối. Đổi Display → Scale sang 150%: chữ và icon khay vẫn nét. Bật tương phản cao (Left Alt + Left Shift + Print Screen): cửa sổ dùng màu hệ thống. Bấm Tab: viền focus hiện ở thẻ kết luận, ô chọn giờ, nút Save. Page Up / Page Down cuộn trang.

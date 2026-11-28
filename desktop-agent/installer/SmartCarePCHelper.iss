@@ -32,6 +32,10 @@ OutputBaseFilename=SmartCarePCHelper-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+; Icon và ảnh tự vẽ bằng tools/HelperUi (lệnh assets). Ảnh 100% và 200%, Inno chọn ảnh hợp DPI nhất.
+SetupIconFile=..\src\SmartCarePC.Helper\Assets\app.ico
+WizardImageFile=images\wizard-164.bmp,images\wizard-328.bmp
+WizardSmallImageFile=images\wizard-small-55.bmp,images\wizard-small-110.bmp
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

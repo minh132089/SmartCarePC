@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Công cụ cho người làm giao diện, chỉ chạy trên Windows, không đi kèm app và không nằm trong SmartCarePC.Helper.sln.
+    Lệnh "assets" vẽ lại icon app, logo thông báo, ảnh bộ cài. Lệnh "shots" chụp cửa sổ Status, menu khay, icon ở chế độ sáng và tối.
+    Cách chạy: xem README mục "Icon và ảnh chụp giao diện".
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/SmartCarePC.Helper/SmartCarePC.Helper.csproj" />
+  </ItemGroup>
+</Project>
