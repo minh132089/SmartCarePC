@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Phần lõi không phụ thuộc Windows: lịch, luật sức khoẻ, đọc link, hàng đợi sự kiện. Chạy test được trên mọi máy. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SmartCarePC.Helper.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SmartCarePC.Helper.Tests" />
+  </ItemGroup>
+</Project>
