@@ -1,0 +1,7 @@
+bin/
+obj/
+publish/
+installer/Output/
+# ảnh chụp giao diện do tools/HelperUi (lệnh shots) sinh ra, chụp lại được bất cứ lúc nào
+artifacts/
+*.user
