@@ -41,6 +41,10 @@ public class MaintenanceEventService {
         if (r.eventType().equals("step_done") && (!(d.get("alone") instanceof Boolean) || !(d.get("stepId") instanceof String id) || !id.matches("[a-z-]{1,40}"))) throw bad("A step needs its id and whether it was completed alone");
         if (r.eventType().equals("maintenance_completed") && (!(d.get("who") instanceof String who) || !Set.of("me-alone", "with-help", "someone-else").contains(who))) throw bad("Who completed the work is required");
         if (r.eventType().equals("reminder_set") && (!(d.get("never_serviced") instanceof Boolean) || !(d.get("answers") instanceof Map))) throw bad("Reminder baseline answers are required");
+        // Sự kiện của app khay Windows (SmartCarePC Helper): biết lời nhắc đến từ lịch hay từ triệu chứng của máy
+        if (r.eventType().equals("health_alert_shown") && (!(d.get("rule") instanceof String rule) || !rule.matches("[a-z_]{1,40}"))) throw bad("A health alert needs its rule");
+        if (Set.of("agent_notification_clicked", "agent_snoozed").contains(r.eventType())
+                && (!(d.get("source") instanceof String src) || !Set.of("schedule", "health").contains(src))) throw bad("A desktop notification needs its source");
         if (Set.of("maintenance_started", "step_done", "maintenance_completed", "maintenance_abandoned").contains(r.eventType())
                 && (!(d.get("runId") instanceof String id) || !id.matches("[A-Za-z0-9-]{8,64}"))) throw bad("A maintenance run id is required");
     }

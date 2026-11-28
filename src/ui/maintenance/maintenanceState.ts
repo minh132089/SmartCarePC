@@ -1,14 +1,16 @@
 import { create } from 'zustand'
 import { FAMILY_IDS, type FamilyId } from '../../data/families'
 import { machineOf, loadDone, saveDone } from '../../data/guide'
-import { addDays, addMonths, day, EMPTY_ANSWERS, maintenancePlan, maintenanceSteps, TASKS, type Cooler, type MaintenanceAnswers, type MaintenanceTask } from '../../data/maintenance'
+import { addDays, addMonths, day, EMPTY_ANSWERS, maintenancePlan, maintenanceSteps, TASKS, type Cooler, type LastClean, type MaintenanceAnswers, type MaintenanceTask } from '../../data/maintenance'
 import { useViewer } from '../../store'
 import { newSubmissionId, useStudy, type Phase } from '../study/study'
 
 const KEY = 'pcsc-maintenance-v1'
 const QUEUE = 'pcsc-maintenance-queue-v1'
 export interface MaintenancePC { machine: FamilyId | 'gaming'; cooler: Cooler; hasGpu: boolean }
-export type EventType = 'reminder_set' | 'calendar_added' | 'reminder_shown' | 'reminder_snoozed' | 'opened_from_calendar' | 'maintenance_started' | 'step_done' | 'maintenance_completed' | 'maintenance_abandoned' | UsageType
+export type EventType = 'reminder_set' | 'calendar_added' | 'reminder_shown' | 'reminder_snoozed' | 'opened_from_calendar' | 'opened_from_email' | 'maintenance_started' | 'step_done' | 'maintenance_completed' | 'maintenance_abandoned' | UsageType | AgentType
+/** Sự kiện do app khay Windows (SmartCarePC Helper) gửi, web không tự ghi. Xem docs/maintenance-agent-spec.md mục 7 */
+export type AgentType = 'agent_linked' | 'agent_reminder_shown' | 'health_alert_shown' | 'agent_notification_clicked' | 'agent_snoozed'
 /** Ghi việc dùng các phần khác của app (task = 'none'), để biết người có điểm tăng đã thực sự dùng hướng dẫn hay chưa */
 export type UsageType = 'advice_asked' | 'upgrade_asked' | 'build_guide_opened' | 'build_step_done' | 'build_guide_completed'
 export interface MaintenanceEvent { eventId: string; eventType: EventType; task: MaintenanceTask | 'none'; participantCode: string; phase: Phase; machine: string; occurredAt: string; data: Record<string, unknown> }
@@ -34,7 +36,11 @@ const initial = (): Saved => {
   return { ...fallback, ...saved }
 }
 interface MaintenanceState extends Saved {
-  dialog: 'choose' | 'reminders' | null
+  /** health: hộp giới thiệu kiểm tra nhanh + link tải app khay, mở khi bấm Quick health check trong hộp chọn bài */
+  dialog: 'choose' | 'reminders' | 'health' | null
+  /** Câu trả lời "lần cuối vệ sinh" ở hộp chọn máy, dùng điền sẵn hộp đặt lịch. Chỉ giữ trong lần mở hộp này, không lưu */
+  lastClean: LastClean | null
+  setLastClean: (lc: LastClean | null) => void
   pending: MaintenanceTask
   source: 'calendar' | 'guide'
   storageWarning: boolean
@@ -49,9 +55,10 @@ interface MaintenanceState extends Saved {
   finish: (task: MaintenanceTask, who: string, stillHot: boolean, symptoms?: string[]) => void
 }
 export const useMaintenance = create<MaintenanceState>((set, get) => ({
-  ...initial(), dialog: null, pending: 'dust', source: 'guide', queueProblem: false, storageWarning: false,
-  open: (pending = 'dust', source = 'guide') => set({ dialog: 'choose', pending, source }),
-  close: () => set({ dialog: null }),
+  ...initial(), dialog: null, lastClean: null, pending: 'dust', source: 'guide', queueProblem: false, storageWarning: false,
+  open: (pending = 'dust', source = 'guide') => set({ dialog: 'choose', pending, source, lastClean: null }),
+  close: () => set({ dialog: null, lastClean: null }),
+  setLastClean: (lastClean) => set({ lastClean }),
   rememberPC: (pc) => { set({ pc }); persist() },
   schedule: (answers, dates) => {
     const s = get(), plan = maintenancePlan(answers)

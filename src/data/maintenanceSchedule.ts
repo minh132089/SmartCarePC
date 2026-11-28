@@ -50,3 +50,26 @@ export function maintenancePlan(a: MaintenanceAnswers, today = day()): Record<Ma
   }
 }
 
+
+/**
+ * Câu "When did you last clean your PC?" khi vào Maintain my PC: muốn vệ sinh ngay, khoảng N tháng trước, hoặc chưa từng /
+ * không nhớ. N tháng được đổi ra ngày (hôm nay trừ N tháng) để tính lần vệ sinh tiếp theo.
+ */
+export type LastClean = { kind: 'now' } | { kind: 'months'; months: number } | { kind: 'never' }
+export const MAX_MONTHS_AGO = 240
+/** Đổi câu trả lời sang dạng MaintenanceAnswers. 'now' không cho biết lần trước nên trả null (để người dùng tự trả lời) */
+export function lastCleanAnswers(lc: LastClean | null, today = day()): Pick<MaintenanceAnswers, 'lastCleaned' | 'lastCleanedDate'> | null {
+  if (!lc || lc.kind === 'now') return null
+  if (lc.kind === 'never') return { lastCleaned: 'unknown', lastCleanedDate: undefined }
+  const n = lc.months
+  return { lastCleaned: n < 6 ? 'recent' : n <= 12 ? 'six-twelve' : 'over-year', lastCleanedDate: addMonths(today, -n) }
+}
+/** Ngược lại: câu trả lời đã lưu thành LastClean để hiện lại (không có ngày thì lấy đầu xa của khoảng, như maintenancePlan) */
+export function lastCleanFrom(a: Pick<MaintenanceAnswers, 'lastCleaned' | 'lastCleanedDate'>, today = day()): LastClean {
+  if (a.lastCleaned === 'never' || a.lastCleaned === 'unknown') return { kind: 'never' }
+  if (a.lastCleanedDate) {
+    const [y, m, d] = a.lastCleanedDate.split('-').map(Number), [ty, tm, td] = today.split('-').map(Number)
+    return { kind: 'months', months: Math.max(0, (ty - y) * 12 + (tm - m) - (td < d ? 1 : 0)) }
+  }
+  return { kind: 'months', months: a.lastCleaned === 'recent' ? 6 : a.lastCleaned === 'six-twelve' ? 12 : 18 }
+}

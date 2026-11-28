@@ -35,6 +35,23 @@ Events are queued before sending, retry on start/focus/online, and keep their UU
 
 Read/export use the existing feedback key solely in `X-Export-Key`; query keys are not accepted. `/feedback` has a maintenance summary, event list and separate CSV download. Counts include non-completers and group by phase and baseline. Technical background joins by participant code + phase using the future `technical_background` feedback answer. Calendar export/click counts are labelled accordingly.
 
+## Last-cleaned question (2026-11-28)
+
+Maintain my PC asks "When did you last clean your PC?" with three options: I want to clean it now (selects the dust task), About N months ago (number input, 0–240) and Never, or I don't remember. `lastCleanAnswers` in `maintenanceSchedule.ts` turns N months into `lastCleanedDate` = today − N months and the matching range; never / don't remember maps to `unknown`, so `never_serviced` stays true for the study baseline. The reminder dialog reuses the control (without the clean-now option), is prefilled from the choice and recalculates the plan instead of keeping previously saved dates.
+
+## Email reminders (2026-11-28)
+
+Replaces the desktop app as the default way to be reminded when the browser is closed. Only signed-in users see the option, and only when the server has mail configured (`GET /api/reminders/email/available`).
+
+- Turning on: `POST /api/reminders/email` with the account email, dates, per-task interval and origin. Google sign-in returns a signed `emailProof` (HMAC-SHA256, 30 days, `EMAIL_PROOF_SECRET`); a matching proof activates immediately. Otherwise the server emails a confirmation link (`?nhacemail=`) and sends nothing until the owner presses the button on that page, because the server has no login session. Three sign-ups per address per day.
+- The browser keeps a manage token (`pcsc-email-reminder-v1`) and sends new dates with `PUT` whenever the plan changes (finish, snooze, new answers). `?huyemail=` and `DELETE` turn reminders off and delete the address. Link pages act only on a button press, so mailbox link scanners cannot confirm or cancel.
+- Scheduling: hourly 08:00–20:00 Asia/Ho_Chi_Minh. The current occurrence is the planned date plus whole intervals (dust 6 or 3 months, paste 30, check 1), so reminders continue every cycle without a return visit. Each occurrence gets at most two emails: on the due date and seven days later. Long outages send only the latest occurrence.
+- Content: dust and paste emails list the tools to prepare and link back to the guide (`?baotri=<task>&nguon=email`). The monthly health-check email also offers SmartCarePC Helper via `https://smartcarepc.pages.dev/download/helper`, which `public/_redirects` forwards to the GitHub Releases asset `SmartCarePCHelper-Setup.exe` (the installer exceeds the 25 MB Pages file limit).
+- Research data: the server never stores a participant code next to an email address, so sends are not logged. The web records `opened_from_email`, and `/feedback` shows opens and completions of the same task within seven days.
+- Configuration in `backend/.env`: `MAIL_USERNAME`, `MAIL_PASSWORD` (Gmail App Password), `EMAIL_PROOF_SECRET`, optional `HELPER_DOWNLOAD_URL`. Allowed link origins: `app.reminders.origins` and `EMAIL_ORIGINS` in `emailReminderStore.ts`.
+
+Choosing Quick health check in Care for your PC opens a short dialog with the four check steps, Start quick check, Back, and an optional "Download from GitHub" link to the SmartCarePC Releases page for SmartCarePC Helper. Apart from this dialog and the monthly health-check email, the desktop app (`feature/maintenance-agent`) is not linked from the web. The backend still accepts `agent_linked`, `agent_reminder_shown`, `health_alert_shown`, `agent_notification_clicked` and `agent_snoozed`, and `/feedback` still compares schedule and symptom notifications.
+
 ## Follow-up for form v2
 
 As specified, this implementation does not add the four-week question to form v2. Its author still needs to add:
@@ -50,6 +67,8 @@ Form v2 also needs to supply technical background for Q4 grouping. Until then th
 - `npx tsc -b`, `npx oxlint src`, `npm run build`.
 - `cd backend && sh mvnw test`: original backend suite plus maintenance validation, header authorization, deduplication and a transactional MySQL integration check. Integration fixtures roll back.
 - `npm run check:paths -- --maintenance`: CPU cooler movement with all other parts installed. Reuses the existing ray-based collision checker; a bounding-box broad phase excludes physically unreachable blockers before raycasting.
+
+- Email reminders: `EmailReminderServiceTests`, `EmailProofsTests`, `ReminderMailerTests`, `EmailReminderControllerTests` (recurrence, second reminder, month-end dates, proof forgery and expiry, rate limit, per-task content). On 2026-11-28 the whole flow was also run locally against an in-memory H2 backend and a local fake SMTP server; no real Gmail message has been sent yet.
 
 Browser interaction checks cover case/cooler selection, deep links, dust and paste references, quick-check completion, work outcome, reminder setup, due cards and snooze. Native calendar imports and actual notification delivery require the user's calendar app and notification settings; exporting a file alone does not verify delivery.
 

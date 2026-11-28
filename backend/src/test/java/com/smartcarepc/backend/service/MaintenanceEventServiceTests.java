@@ -53,4 +53,21 @@ class MaintenanceEventServiceTests {
         assertThat(service.exportCsv("valid")).contains("never_serviced", "true", "lastCleaned", "P01");
         verify(feedback).authorizeExport("valid");
     }
+    @Test void nhanSuKienCuaAppKhay() {
+        when(repo.findFirstByEventId(anyString())).thenReturn(Optional.empty());
+        when(repo.save(any())).thenAnswer(i -> { MaintenanceEvent e = i.getArgument(0); e.setId(1L); return e; });
+        service.save(request("agent_linked", Map.of("version", "1.0.0")));
+        service.save(request("agent_reminder_shown", Map.of("overdueDays", 2)));
+        service.save(request("health_alert_shown", Map.of("rule", "cpu_hot", "cpuC", 92)));
+        service.save(request("agent_notification_clicked", Map.of("source", "health", "rule", "cpu_hot")));
+        service.save(request("agent_snoozed", Map.of("source", "schedule")));
+        verify(repo, times(5)).save(any());
+    }
+    @Test void suKienAppKhayThieuNguonThiTuChoi() {
+        when(repo.findFirstByEventId(anyString())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.save(request("health_alert_shown", Map.of()))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.save(request("agent_notification_clicked", Map.of("source", "email")))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.save(request("agent_snoozed", Map.of()))).isInstanceOf(ResponseStatusException.class);
+        verify(repo, never()).save(any());
+    }
 }
