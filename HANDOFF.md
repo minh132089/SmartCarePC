@@ -145,6 +145,71 @@ nhưng chỉ ra 1 phương án vì card NVIDIA 8GB rẻ nhất còn hàng lúc �
 chưa quyết: cho phép card 6GB khi đã chốt NVIDIA và ngân sách chật (sửa trong `needs` / `lowerGpu`), hay giữ chuẩn 8GB và
 báo cần ~21-22tr. Test liên quan: `hangCardNguoiDungDoi` trong `ChatServiceTests.java`.
 
+## Nhắc bảo dưỡng qua email và app khay Windows, tình trạng 2026-11-28
+
+Tài liệu kỹ thuật: `docs/maintenance-implementation.md` (mục Email reminders). Spec app khay: `docs/maintenance-agent-spec.md` ở worktree
+`~/Documents/PCsmartcare-maintenance-agent` (nhánh `feature/maintenance-agent`, commit `7ac5a54`, thư mục `desktop-agent/`).
+
+**Đã xong (trong cây làm việc của nhánh `claude/lucid-kapitsa-536e80`, chưa commit):**
+- Vào Maintain my PC hỏi "When did you last clean your PC?": vệ sinh ngay (mở bài bụi), khoảng N tháng trước (nhập số, tự tính
+  lần sau), hoặc chưa từng / không nhớ (giữ cho chỉ số `never_serviced` của nghiên cứu). Hộp đặt lịch dùng cùng câu hỏi.
+- Email nhắc cho người đã đăng nhập, gửi bằng Gmail SMTP của nhóm. Người đăng nhập Google bật là có hiệu lực ngay nhờ bằng chứng
+  ký HMAC (`EmailProofs`). Tài khoản email / mật khẩu phải bấm link xác nhận trong thư vì server không kiểm tra đăng nhập.
+- Server tự lặp theo chu kỳ từng việc (bụi 6 tháng, 3 tháng nếu có thú nuôi / thảm / khói / bụi, keo 30 tháng, kiểm tra 1 tháng)
+  kể cả khi người dùng không quay lại web. Mỗi lần tới hạn tối đa 2 thư (đúng hạn và 7 ngày sau). Làm xong trên web thì web gửi
+  ngày mới.
+- Email bụi và keo có danh sách dụng cụ cần chuẩn bị và link mở lại bài hướng dẫn. Email kiểm tra sức khoẻ có thêm link tải app
+  khay `https://smartcarepc.pages.dev/download/helper`, `public/_redirects` chuyển sang GitHub Releases.
+- Bấm "Quick health check" trong hộp Care for your PC thì mở hộp giới thiệu: 4 bước kiểm tra, nút Start quick check, và bên dưới
+  là nút "Download from GitHub" tới trang Releases (`HELPER_RELEASES_URL` trong `MaintenanceHub.tsx`).
+- Đã gỡ trang `/helper` và nút gửi lịch sang app khỏi web. Backend vẫn nhận 5 loại sự kiện của app và `/feedback` vẫn đếm.
+- Dữ liệu nghiên cứu vẫn ẩn danh: server không lưu mã người tham gia cạnh email. `/feedback` đếm `opened_from_email`.
+
+**App khay, luật sức khoẻ (nhánh `claude/sharp-dhawan-68ab27`, worktree `.claude/worktrees/sharp-dhawan-68ab27`, cắt từ `7ac5a54`, chưa commit):**
+- Kết luận tổng 3 mức ở đầu Status và trên icon khay: Running well / Needs attention / Needs help now (`Core/Health/Overall.cs`).
+  Luật không đọc được (nhiệt CPU, quạt khi không có quyền admin) ghi "Not checked", không tính là ổn.
+- 5 luật mới, chỉ dùng nguồn đọc được bằng tài khoản thường: `blue_screen`, `disk_errors`, `hardware_errors`, `cpu_busy_idle`,
+  `no_restart`. Tổng cộng 12 luật. Các ngưỡng chưa chắc ghi CHƯA CHỐT trong `Thresholds.cs`.
+- App không còn nhắc tới nút gửi lịch đã gỡ. Không có lịch thì app chỉ kiểm tra sức khoẻ, nhắc theo lịch do email lo.
+- `dotnet test` 125/125 trên Mac. Chưa chạy trên Windows thật: README có 18 bước Minh cần thử.
+
+**Minh cần làm:**
+- `backend/.env`: `MAIL_USERNAME`, `MAIL_PASSWORD` (App Password của Gmail, cần bật xác minh 2 bước), `EMAIL_PROOF_SECRET`
+  (chuỗi ngẫu nhiên ≥ 16 ký tự). Thiếu Gmail thì web ẩn lựa chọn email.
+- Build bộ cài app trên Windows, đổi tên thành `SmartCarePCHelper-Setup.exe` rồi tải lên GitHub Releases. Repo phải public.
+- Thử app trên Windows thật theo 18 bước trong `desktop-agent/README.md` (bản ở nhánh `claude/sharp-dhawan-68ab27`).
+- Commit rồi deploy. Link `/download/helper` chỉ chạy trên Cloudflare Pages, không chạy ở localhost.
+
+**Việc còn dở / cần quyết:**
+- Nếu người tham gia dùng `ai.smartcarepc.pages.dev` thì phải thêm địa chỉ này vào `EMAIL_ORIGINS` (web) và `app.reminders.origins`
+  (backend), không thì lựa chọn email không hiện.
+- `release-v2` (local, chưa push) đang có commit `8cc54e0` (nút gửi lịch sang app, trang `/helper`). Cây làm việc hiện đã gỡ phần đó,
+  commit tiếp theo sẽ thay thế.
+- Mở bài từ thông báo của app khay vẫn bị đếm là `opened_from_calendar`. Muốn tách thì app phải thêm tham số riêng vào link.
+
+## Nhật ký làm việc
+
+### 2026-11-28 (phiên `e6721166`, worktree `lucid-kapitsa-536e80`)
+
+1. Nối web với app khay theo spec mục 4, 7, 8: nút "Send my plan to the desktop app" tạo `smartcarepc://plan?d=...`, trang `/helper`,
+   5 loại sự kiện `agent_*` / `health_alert_shown` ở backend kèm test, bảng đếm trên `/feedback`. Commit `8cc54e0`, tạo nhánh
+   `tracking-status` và fast-forward `release-v2` (local).
+2. Minh đổi hướng: bỏ tải app trên web, nhắc qua email. Gỡ `/helper` và nút gửi lịch. Thêm `EmailReminder` (bảng `email_reminder`),
+   `EmailReminderService`, `ReminderMailer`, `EmailReminderController` (`/api/reminders/email`), lịch chạy mỗi giờ 8:00–20:00 giờ
+   Việt Nam. Web: mục "Email reminders" trong hộp đặt lịch, hộp xác nhận / huỷ mở từ link trong thư (`?nhacemail=`, `?huyemail=`).
+3. Bỏ thư xác nhận cho người đăng nhập Google: `/api/auth/google` trả thêm `emailProof` (HMAC, hạn 30 ngày).
+4. Server tự lặp email theo chu kỳ từng việc, không cần người dùng quay lại web.
+5. Câu hỏi "lần cuối vệ sinh" theo số tháng khi vào Maintain my PC. Sửa lỗi kế hoạch giữ ngày cũ sau khi trả lời.
+6. Tách nội dung email: bụi / keo kèm dụng cụ, kiểm tra sức khoẻ kèm link tải app. Thêm link `/download/helper`.
+7. Hộp "Quick health check" mở khi bấm việc kiểm tra nhanh: cách kiểm tra và link GitHub Releases để tải app.
+8. Phiên phụ "Thêm luật đánh giá sức khoẻ máy vào app khay" thêm kết luận tổng 3 mức và 5 luật mới cho app (nhánh
+   `claude/sharp-dhawan-68ab27`). Đã chạy lại `dotnet test` ở phiên chính: 125/125 qua.
+
+Kiểm tra cuối: `npx tsc -b`, `npx oxlint src` (không thêm cảnh báo), `npm run build` qua. `cd backend && sh mvnw test` 444 test, chỉ
+2 test cần MySQL fail trên Mac như trước. Đã chạy thử trọn luồng email trên máy với backend H2 trong bộ nhớ và máy chủ SMTP giả:
+bật, xác nhận, nhận thư nhắc, mở link vào đúng bài, web gửi ngày mới, huỷ, người dùng Google bật ngay. Chưa gửi thư Gmail thật.
+
 ## Lịch sử chat
 
 Đoạn chat phần 3D nằm ở `~/.claude/projects/-Users-yuuki2-Documents/6a5bee9f-71d6-4801-b4d8-68c4e12bf8f0.jsonl`; phần trợ lý AI ở `~/.claude/projects/-Users-yuuki2-Documents/b0c77e04-cb7b-4db0-be75-7089e0f84228.jsonl` (định dạng JSONL, rất dài). Nếu cần chi tiết quyết định cũ, dùng `grep` trong file này thay vì đọc hết. File này đã tóm đủ phần cần để làm tiếp.
+Phần nhắc bảo dưỡng qua email (2026-11-28): `~/.claude/projects/-Users-yuuki2-Documents-PCsmartcare--claude-worktrees-lucid-kapitsa-536e80/e6721166-e45c-4714-bf88-a7a5e51caaef.jsonl`.

@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { FAMILIES, FAMILY_IDS } from '../../data/families'
 import { machineOf } from '../../data/guide'
-import { addDays, day, EMPTY_ANSWERS, maintenancePlan, TASKS, type Cooler, type MaintenanceAnswers, type MaintenanceTask } from '../../data/maintenance'
+import { addDays, addMonths, day, EMPTY_ANSWERS, lastCleanAnswers, lastCleanFrom, maintenancePlan, maintenanceSteps, MAX_MONTHS_AGO, TASKS, type Cooler, type LastClean, type MaintenanceAnswers, type MaintenanceTask } from '../../data/maintenance'
 import { googleCalendarUrl, reminderIcs } from '../../data/maintenanceCalendar'
 import { useViewer } from '../../store'
-import { Choices, Dialog, PrimaryButton, Question, QuietButton, focus, press } from '../study/StudyParts'
+import { Choices, Dialog, PrimaryButton, Question, QuietButton, focus } from '../study/StudyParts'
 import { newSubmissionId, useStudy } from '../study/study'
-import { calendarLink, currentPC, flushMaintenanceQueue, LOAD_ID, recordEvent, startMaintenance, useMaintenance, usePlanLink, type MaintenancePC } from './maintenanceState'
+import { EmailLinkDialog, EmailReminderSection } from './EmailReminders'
+import { calendarLink, currentPC, flushMaintenanceQueue, LOAD_ID, recordEvent, startMaintenance, useMaintenance, type MaintenancePC } from './maintenanceState'
 
 const TASK_IDS = Object.keys(TASKS) as MaintenanceTask[]
 const THUMB = { standard_tower: '01', compact_tower: '02', showcase_dual_chamber: '03', mini_sff: '04', full_tower: '06', gaming: '07' }
@@ -32,6 +33,11 @@ export function MaintenanceHub() {
   const advised = useViewer(s => s.advisedBuild)
   const [today, setToday] = useState(day)
   const opened = useRef(false)
+  // Link trong email: nhacemail = bật nhắc, huyemail = tắt nhắc. Hiện hộp hỏi, bấm nút mới gọi máy chủ
+  const [emailLink, setEmailLink] = useState<{ kind: 'confirm' | 'stop'; token: string } | null>(() => {
+    const q = new URLSearchParams(location.search), confirm = q.get('nhacemail'), stop = q.get('huyemail')
+    return confirm ? { kind: 'confirm', token: confirm } : stop ? { kind: 'stop', token: stop } : null
+  })
   useEffect(() => {
     void flushMaintenanceQueue()
     const onFocus = () => { setToday(day()); void flushMaintenanceQueue() }
@@ -40,10 +46,16 @@ export function MaintenanceHub() {
     if (!opened.current) {
       opened.current = true
       const q = new URLSearchParams(location.search), task = q.get('baotri')
+      // Token của link email đã đọc vào emailLink: xoá khỏi địa chỉ để không lộ khi chia sẻ link
+      if (q.has('nhacemail') || q.has('huyemail')) {
+        q.delete('nhacemail'); q.delete('huyemail'); history.replaceState(null, '', location.pathname + (q.size ? '?' + q : '') + location.hash)
+      }
       if (TASK_IDS.includes(task as MaintenanceTask)) {
-        q.delete('baotri'); history.replaceState(null, '', location.pathname + (q.size ? '?' + q : '') + location.hash)
+        // nguon=email: mở từ email nhắc, còn lại là từ sự kiện lịch (Google Calendar / .ics)
+        const fromEmail = q.get('nguon') === 'email'
+        q.delete('baotri'); q.delete('nguon'); history.replaceState(null, '', location.pathname + (q.size ? '?' + q : '') + location.hash)
         const t = task as MaintenanceTask
-        recordEvent('opened_from_calendar', t)
+        recordEvent(fromEmail ? 'opened_from_email' : 'opened_from_calendar', t)
         useViewer.getState().setPage('build')
         if (useMaintenance.getState().pc) startMaintenance(useMaintenance.getState().pc!, t)
         else open(t, 'calendar')
@@ -74,9 +86,34 @@ export function MaintenanceHub() {
           <p className="mt-1 text-[12px] text-ink-3">Calendar events must be rescheduled in your calendar.</p></>}
       <div className="mt-3 flex flex-wrap gap-2"><PrimaryButton onClick={() => pc ? startMaintenance(pc, due) : open(due)}>Start guide</PrimaryButton><QuietButton onClick={() => simDue ? snoozeSimulated() : snooze(due)}>{simDue ? 'Remind me next time' : 'Remind me in 1 week'}</QuietButton></div>
     </div>}
+    {emailLink && !studyDialog && <EmailLinkDialog kind={emailLink.kind} token={emailLink.token} onClose={() => setEmailLink(null)} />}
     {dialog === 'choose' && !studyDialog && <ChoosePC key={pending} initial={advised ? currentPC() : pc} task={pending} fromCalendar={source === 'calendar'} advised={!!advised} onClose={close} />}
     {dialog === 'reminders' && !studyDialog && pc && <ReminderSetup pc={pc} onClose={close} />}
+    {dialog === 'health' && !studyDialog && <HealthCheckInfo pc={pc} onClose={close} />}
   </>
+}
+/**
+ * Trang phát hành trên GitHub có bộ cài app khay Windows SmartCarePC Helper. Mở trang Releases (không phải link tải thẳng)
+ * để vẫn đúng khi tên file có số phiên bản. Minh tự tải bộ cài lên, repo phải public thì người dùng mới xem được.
+ */
+const HELPER_RELEASES_URL = 'https://github.com/minh132089/SmartCarePC/releases/latest'
+/** Hộp mở khi bấm Quick health check: kiểm tra những gì (đúng các bước của bài), rồi link tải app để máy tự kiểm tra */
+function HealthCheckInfo({ pc, onClose }: { pc: MaintenancePC | null; onClose: () => void }) {
+  const steps = maintenanceSteps('check', null, 'gaming')
+  return <Dialog title="Quick health check" onClose={onClose} footer={<><QuietButton onClick={() => useMaintenance.setState({ dialog: 'choose' })}>Back</QuietButton><PrimaryButton disabled={!pc} onClick={() => pc && startMaintenance(pc, 'check')}>Start quick check</PrimaryButton></>}>
+    <p className="text-[14px] text-ink-2">About 5 minutes, with the case closed. No tools needed. Do it once a month to notice problems early.</p>
+    <ol className="mt-4 space-y-2">{steps.map((s, i) => <li key={s.id} className="flex gap-3 rounded-xl bg-surface p-3 ring-1 ring-line">
+      <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-fill text-[12px] text-ink-2">{i + 1}</span>
+      <span><strong className="block text-[14px]">{s.title}</strong><span className="text-[13px] text-ink-2">{s.why}</span></span>
+    </li>)}</ol>
+    {!pc && <p className="mt-3 text-[13px] text-info">Go back and choose the PC that looks most like yours to start the check.</p>}
+    <section className="mt-5 rounded-xl bg-info-bg p-4">
+      <h3 className="text-[15px] font-semibold text-ink">Want your PC to check itself? <span className="font-normal text-ink-3">(Windows, optional)</span></h3>
+      <p className="mt-1 text-[13px] text-ink-2">SmartCarePC Helper is a small free app. It watches temperatures, disk health and unexpected shutdowns, and tells you which guide to follow. It sends nothing unless you take part in the SmartCarePC study.</p>
+      <a href={HELPER_RELEASES_URL} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-block rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${focus}`}>Download from GitHub ↗</a>
+      <p className="mt-2 text-[12px] text-ink-3">On the GitHub page, download SmartCarePCHelper-Setup.exe. If Windows says “Windows protected your PC”, click More info, then Run anyway. You can remove it any time from Settings → Apps.</p>
+    </section>
+  </Dialog>
 }
 /** Ảnh minh hoạ chung (tạo bằng AI, không có hãng thật) để người không rành so với tản trong máy mình */
 const COOLER_PHOTO: Partial<Record<Cooler, string>> = { air: '/coolers/tower_air.jpg', lowprofile: '/coolers/lowprofile.jpg', aio: '/coolers/aio.jpg' }
@@ -92,7 +129,14 @@ function ChoosePC({ initial, task: firstTask, advised, fromCalendar, onClose }: 
   const [selected, setSelected] = useState(!!initial)
   const [laptop, setLaptop] = useState(false)
   const [task, setTask] = useState(firstTask)
+  const lastClean = useMaintenance(s => s.lastClean)
+  const setLastClean = useMaintenance(s => s.setLastClean)
   const remember = useMaintenance(s => s.rememberPC)
+  // Bấm Quick health check: mở hộp giới thiệu (cách kiểm tra + link tải app). Giữ máy đã chọn để quay lại hay bắt đầu luôn
+  const openHealth = () => {
+    if (selected && !laptop) remember(pc)
+    useMaintenance.setState({ dialog: 'health', pending: 'check' })
+  }
   const modelCooler = machineOf(pc.machine === 'gaming' ? null : pc.machine, 'gaming').cooler
   return <Dialog title="Care for your PC" onClose={onClose} footer={<><QuietButton onClick={onClose}>Cancel</QuietButton><PrimaryButton disabled={laptop || !selected} onClick={() => { remember(pc); useMaintenance.setState({ dialog: 'reminders' }) }}>Set reminders</PrimaryButton><PrimaryButton disabled={laptop || !selected} onClick={() => startMaintenance(pc, task)}>Start guide</PrimaryButton></>}>
     <p className="text-[14px] text-ink-2">Short, practical desktop PC guides. Your progress stays in this browser.</p>
@@ -113,35 +157,37 @@ function ChoosePC({ initial, task: firstTask, advised, fromCalendar, onClose }: 
         <label className="mt-3 flex items-center gap-2 text-[14px]"><input type="checkbox" checked={pc.hasGpu} onChange={e => setPC({ ...pc, hasGpu: e.target.checked })} /> My PC has a separate graphics card</label>
       </Question>}
     </>}
-    {!laptop && <Question label={fromCalendar ? 'Your calendar opened this guide' : 'What would you like to do?'}><div className="space-y-2">{TASK_IDS.map(id => <label key={id} className="flex cursor-pointer gap-3 rounded-xl bg-surface p-3 ring-1 ring-line"><input type="radio" name="maintenance-task" checked={task === id} onChange={() => setTask(id)} /><span><strong className="block text-[14px]">{TASKS[id].title}</strong><span className="text-[12px] text-ink-2">{TASKS[id].hint}</span></span></label>)}</div></Question>}
+    {!laptop && !fromCalendar && <Question label="When did you last clean your PC?" hint="This sets the date of your next cleaning reminder.">
+      <LastCleaned value={lastClean} allowNow onChange={lc => { setLastClean(lc); if (lc?.kind === 'now') setTask('dust') }} />
+    </Question>}
+    {!laptop && <Question label={fromCalendar ? 'Your calendar opened this guide' : 'What would you like to do?'}><div className="space-y-2">{TASK_IDS.map(id => <label key={id} className="flex cursor-pointer gap-3 rounded-xl bg-surface p-3 ring-1 ring-line"><input type="radio" name="maintenance-task" checked={task === id} onChange={() => setTask(id)} onClick={() => { if (id === 'check' && !fromCalendar) openHealth() }} /><span><strong className="block text-[14px]">{TASKS[id].title}</strong><span className="text-[12px] text-ink-2">{TASKS[id].hint}</span></span></label>)}</div></Question>}
   </Dialog>
 }
-const linkButton = `inline-block rounded-full px-4 py-2 text-[14px] font-medium ${press} ${focus}`
 /**
- * Nút gửi lịch sang app khay Windows: là thẻ <a> trỏ thẳng tới smartcarepc://plan?d=..., trình duyệt hỏi
- * "Open SmartCarePC Helper?" rồi chuyển link cho app. Máy chưa cài app thì bấm không có gì xảy ra, nên luôn có dòng giải thích.
+ * "When did you last clean your PC?": vệ sinh ngay (chỉ ở hộp chọn máy), khoảng N tháng trước (nhập số), hoặc chưa từng /
+ * không nhớ. Gõ số tháng thì tự chọn lựa chọn đó và hiện ngày vệ sinh tiếp theo (6 tháng sau lần trước).
  */
-export function SendPlanButton({ primary = false }: { primary?: boolean }) {
-  const link = usePlanLink()
-  if (!link) return null
-  return <a href={link} data-plan-link className={`${linkButton} ${primary ? 'bg-accent text-white hover:bg-accent-hover' : 'bg-fill text-ink hover:bg-fill-hover'}`}>Send my plan to the desktop app</a>
-}
-/** Mở trang /helper ngay trong app (đóng hộp Reminders, lịch đã lưu). Ctrl / Cmd + bấm thì để trình duyệt mở tab mới */
-function openHelper(e: MouseEvent) {
-  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
-  e.preventDefault()
-  useMaintenance.getState().close()
-  useViewer.getState().setPage('helper')
-}
-/** Phần nhắc trên máy tính (Windows) trong hộp Reminders: tải app ở /helper, hoặc gửi lịch nếu đã cài */
-function DesktopReminders() {
-  const hasLink = !!usePlanLink()
-  return <section className="mt-4 rounded-xl bg-surface p-3 ring-1 ring-line">
-    <h3 className="font-semibold">Reminders on your Windows PC <span className="font-normal text-ink-3">(optional)</span></h3>
-    <p className="mt-1 text-[13px] text-ink-2">A small helper app shows these reminders even when the browser is closed, and warns you if your PC runs hot. Installing it is optional.</p>
-    <div className="mt-3 flex flex-wrap gap-2"><a href="/helper" onClick={openHelper} className={`${linkButton} bg-fill text-link hover:bg-fill-hover`}>Get desktop reminders (Windows)</a><SendPlanButton /></div>
-    {hasLink && <p className="mt-2 text-[12px] text-ink-3">Already installed? Press “Send my plan”, then allow your browser to open SmartCarePC Helper. If nothing happens, the app is not installed yet.</p>}
-  </section>
+function LastCleaned({ value, onChange, allowNow = false }: { value: LastClean | null; onChange: (lc: LastClean | null) => void; allowNow?: boolean }) {
+  const [draft, setDraft] = useState(value?.kind === 'months' ? String(value.months) : '')
+  const today = day()
+  const months = (text: string) => {
+    setDraft(text)
+    const n = Number(text)
+    onChange(text.trim() !== '' && Number.isInteger(n) && n >= 0 && n <= MAX_MONTHS_AGO ? { kind: 'months', months: n } : null)
+  }
+  const option = (checked: boolean, children: ReactNode, select: () => void) => <label className={`flex cursor-pointer items-center gap-3 rounded-xl bg-surface p-3 text-[14px] ring-1 ${checked ? 'ring-2 ring-accent' : 'ring-line'}`}>
+    <input type="radio" name="last-cleaned" checked={checked} onChange={select} />{children}
+  </label>
+  const next = value?.kind === 'months' ? addMonths(addMonths(today, -value.months), 6) : null
+  return <div className="space-y-2">
+    {allowNow && option(value?.kind === 'now', <span><strong className="block">I want to clean it now</strong><span className="text-[12px] text-ink-2">Opens the dust cleaning guide.</span></span>, () => onChange({ kind: 'now' }))}
+    {option(value?.kind === 'months', <span className="flex flex-wrap items-center gap-2">About
+      <input type="number" inputMode="numeric" min={0} max={MAX_MONTHS_AGO} aria-label="Months since your last cleaning" value={draft} placeholder="3" onFocus={() => draft && months(draft)} onChange={e => months(e.target.value)} className={`w-20 rounded-lg bg-panel px-2 py-1 text-[14px] text-ink ring-1 ring-line-strong ${focus}`} />
+      months ago</span>, () => months(draft || '3'))}
+    {option(value?.kind === 'never', <span>Never, or I don’t remember</span>, () => onChange({ kind: 'never' }))}
+    {/* Hộp đặt lịch đã có ngày cụ thể bên dưới (tính cả môi trường), chỉ hộp chọn máy cần câu này */}
+    {allowNow && next && <p className="text-[13px] text-ink-2">{next <= today ? 'It has been 6 months or more: your PC is due for cleaning now.' : `Dust cleaning is suggested every 6 months, so your next cleaning is around ${next}.`}</p>}
+  </div>
 }
 /** unanswered: chưa chọn gì thì để trống hẳn (kể cả "None"), để người dùng biết đây là câu phải trả lời */
 export function Symptoms({ value, onChange, unanswered = false }: { value: string[]; onChange: (s: string[]) => void; unanswered?: boolean }) {
@@ -149,11 +195,14 @@ export function Symptoms({ value, onChange, unanswered = false }: { value: strin
 }
 function ReminderSetup({ pc, onClose }: { pc: MaintenancePC; onClose: () => void }) {
   const saved = useMaintenance(s => s.answers), schedule = useMaintenance(s => s.schedule), dates = useMaintenance(s => s.dates)
-  const [a, setA] = useState<MaintenanceAnswers>(saved ?? EMPTY_ANSWERS)
-  const [picks, setPicks] = useState<Partial<Record<MaintenanceTask, string>>>(() => ({ ...dates }))
+  // Câu "lần cuối vệ sinh" vừa trả lời ở hộp chọn máy thì điền sẵn, mới hơn câu trả lời đã lưu
+  const picked = useMaintenance.getState().lastClean
+  const [a, setA] = useState<MaintenanceAnswers>(() => ({ ...(saved ?? EMPTY_ANSWERS), ...(lastCleanAnswers(picked) ?? {}) }))
+  // Vừa trả lời câu lần cuối vệ sinh: bỏ ngày đã lưu để kế hoạch tính lại theo câu trả lời mới
+  const [picks, setPicks] = useState<Partial<Record<MaintenanceTask, string>>>(() => lastCleanAnswers(picked) ? {} : { ...dates })
   const storageWarning = useMaintenance(s => s.storageWarning)
   const [savedNow, setSavedNow] = useState(false)
-  const [answered, setAnswered] = useState(() => new Set(saved ? ['lastCleaned', 'age', 'paste', 'symptoms'] : []))
+  const [answered, setAnswered] = useState(() => new Set([...(saved ? ['lastCleaned', 'age', 'paste', 'symptoms'] : []), ...(lastCleanAnswers(picked) ? ['lastCleaned'] : [])]))
   const today = day(), plan = maintenancePlan(a, today)
   const chosen = Object.fromEntries(TASK_IDS.map(t => [t, picks[t] || plan[t].date])) as Record<MaintenanceTask, string>
   const valid = ['lastCleaned', 'age', 'paste', 'symptoms'].every(k => answered.has(k)) && TASK_IDS.every(t => /^\d{4}-\d{2}-\d{2}$/.test(chosen[t]) && (!plan[t].due || chosen[t] >= addDays(today, 1) && chosen[t] <= addDays(today, 14)))
@@ -171,13 +220,12 @@ function ReminderSetup({ pc, onClose }: { pc: MaintenancePC; onClose: () => void
     {savedNow ? <>
       <p className="rounded-xl bg-ok-bg p-3 text-[14px] text-ok">{storageWarning ? 'Saved for this tab only: browser storage is unavailable.' : 'Reminders saved in this browser.'} Add them to your calendar to be reminded when the app is closed.</p>
       <p className="mt-3 text-[13px] text-ink-2">Google opens a draft: save it and check its notification settings. Calendar files include a reminder 1 day before; your calendar must allow notifications.</p>
+      <EmailReminderSection />
       {TASK_IDS.map(t => <section key={t} className="mt-4 rounded-xl bg-surface p-3 ring-1 ring-line"><h3 className="font-semibold">{TASKS[t].title}</h3><p className="mt-1 text-[13px] text-ink-2">{dates[t]} · repeats {plan[t].months === 1 ? 'every month' : `every ${plan[t].months} months`}</p><div className="mt-3 flex flex-wrap gap-2"><QuietButton onClick={() => exportCalendar(t, 'google')}>Add to Google Calendar ↗</QuietButton><QuietButton onClick={() => exportCalendar(t, 'ics')}>Download .ics</QuietButton></div></section>)}
-      <DesktopReminders />
     </> : <>
       <p className="text-[13px] text-ink-2">No email or phone number needed. Dates are suggestions; stop and seek help if you are unsure about a physical task.</p>
-      <Question label="When was your PC last cleaned?">
-        <Choices name="last-clean" value={answered.has('lastCleaned') ? [a.lastCleaned] : []} options={[{ value: 'never', label: 'Never' }, { value: 'unknown', label: 'I don’t remember' }, { value: 'recent', label: 'Less than 6 months ago' }, { value: 'six-twelve', label: '6–12 months ago' }, { value: 'over-year', label: 'Over a year ago' }]} onChange={v => update({ lastCleaned: v[0], lastCleanedDate: undefined })} />
-        {!['never', 'unknown'].includes(a.lastCleaned) && <label className="mt-3 block text-[13px] text-ink-2">Exact date, if known<input type="date" max={today} value={a.lastCleanedDate ?? ''} onChange={e => update({ lastCleanedDate: e.target.value || undefined })} className={`${input} mt-1`} /><span className="mt-1 block text-[12px]">Otherwise, we use the oldest end of the selected range.</span></label>}
+      <Question label="When did you last clean your PC?">
+        <LastCleaned value={answered.has('lastCleaned') ? lastCleanFrom(a, today) : null} onChange={lc => { const v = lastCleanAnswers(lc, today); if (v) update(v) }} />
       </Question>
       <Question label="How old is your PC?"><Choices name="pc-age" value={answered.has('age') ? [a.age] : []} options={[{ value: 'under-one', label: 'Under 1 year' }, { value: 'one-two', label: '1–2 years' }, { value: 'two-three', label: 'Over 2–3 years' }, { value: 'over-three', label: 'Over 3 years' }]} onChange={v => update({ age: v[0] })} /></Question>
       <Question label="What is its environment like?" hint="Select all that apply; leave empty if none apply."><Choices name="environment" multi value={a.environment} options={[{ value: 'pet', label: 'Pets' }, { value: 'carpet', label: 'Carpet' }, { value: 'smoke', label: 'Smoke' }, { value: 'dust', label: 'Dusty / near a road' }, { value: 'all-day', label: 'Runs all day' }]} onChange={v => update({ environment: v })} /></Question>

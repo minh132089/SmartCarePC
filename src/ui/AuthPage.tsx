@@ -25,7 +25,8 @@ const SLIDE_MS = 5000
 /** Nền ASCII chạy phần mở màn (2,4 giây trong GradientASCII) được một lúc thì thẻ form mới hiện ra */
 const CARD_DELAY = 1.8
 
-export type Session = { email: string; name: string }
+/** emailProof: chỉ có khi đăng nhập Google, để bật email nhắc bảo dưỡng không cần thư xác nhận */
+export type Session = { email: string; name: string; emailProof?: string }
 
 export function loadSession(): Session | null {
   try {

@@ -51,6 +51,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- Gửi email nhắc bảo dưỡng (Gmail SMTP, xem app.reminders trong application.properties) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
 
 		<!-- Đọc HTML trang cửa hàng cho engine so giá (service/price) -->
 		<dependency>

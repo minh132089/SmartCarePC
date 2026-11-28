@@ -23,12 +23,12 @@ export function maintenanceGroups(all: MaintenanceRow[], feedback: FeedbackRow[]
     const p = people.get(key) ?? { phase: e.phase, baseline: baseline.get(e.participantCode) ?? 'Baseline unknown', background: background(e.participantCode), events: [] }
     p.events.push(e); people.set(key, p)
   }
-  const groups = new Map<string, { label: string; participants: number; set: number; calendar: number; opened: number; started: number; completed: number; abandoned: number; alone: number; steps: number }>()
+  const groups = new Map<string, { label: string; participants: number; set: number; calendar: number; opened: number; email: number; started: number; completed: number; abandoned: number; alone: number; steps: number }>()
   for (const p of people.values()) {
     const label = `${PHASE_LABEL[p.phase as Phase] ?? p.phase} · ${p.baseline} · Technical background: ${p.background}`
-    const g = groups.get(label) ?? { label, participants: 0, set: 0, calendar: 0, opened: 0, started: 0, completed: 0, abandoned: 0, alone: 0, steps: 0 }
+    const g = groups.get(label) ?? { label, participants: 0, set: 0, calendar: 0, opened: 0, email: 0, started: 0, completed: 0, abandoned: 0, alone: 0, steps: 0 }
     const has = (type: string) => p.events.some(e => e.eventType === type)
-    g.participants++; g.set += +has('reminder_set'); g.calendar += +has('calendar_added'); g.opened += +has('opened_from_calendar'); g.started += +has('maintenance_started'); g.completed += +has('maintenance_completed'); g.abandoned += +has('maintenance_abandoned')
+    g.participants++; g.set += +has('reminder_set'); g.calendar += +has('calendar_added'); g.opened += +has('opened_from_calendar'); g.email += +has('opened_from_email'); g.started += +has('maintenance_started'); g.completed += +has('maintenance_completed'); g.abandoned += +has('maintenance_abandoned')
     const steps = new Map<string, MaintenanceRow>()
     for (const e of p.events) if (e.eventType === 'step_done') steps.set(`${e.data.runId}:${e.data.stepId}`, e)
     g.steps += steps.size; g.alone += [...steps.values()].filter(e => e.data.alone === true).length
@@ -79,4 +79,23 @@ export function agentStats(all: MaintenanceRow[]) {
     sources: (['schedule', 'health'] as const).map(s => ({ source: s, ...by[s] })),
     rules: [...rules.entries()].sort((a, b) => b[1] - a[1]),
   }
+}
+
+/**
+ * Email nhắc: máy chủ không ghi lần gửi thư vào dữ liệu nghiên cứu (không để email cạnh mã người tham gia), nên chỉ đếm
+ * lần mở bài từ link trong thư (opened_from_email) và bao nhiêu lần dẫn tới làm xong cùng việc trong 7 ngày.
+ */
+export function emailStats(all: MaintenanceRow[]) {
+  const rows = [...all].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id - b.id)
+  const opens: { e: MaintenanceRow; used: boolean }[] = []
+  let completed = 0
+  for (const e of rows) {
+    if (e.eventType === 'opened_from_email') opens.push({ e, used: false })
+    else if (e.eventType === 'maintenance_completed') {
+      const at = Date.parse(e.occurredAt)
+      const open = opens.filter(o => !o.used && o.e.participantCode === e.participantCode && o.e.phase === e.phase && o.e.task === e.task && Date.parse(o.e.occurredAt) <= at && at - Date.parse(o.e.occurredAt) <= AGENT_COMPLETION_DAYS * 86_400_000).at(-1)
+      if (open) { open.used = true; completed++ }
+    }
+  }
+  return { people: new Set(opens.map(o => o.e.participantCode)).size, opened: opens.length, completed }
 }

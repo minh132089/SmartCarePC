@@ -1,0 +1,3 @@
+# Cloudflare Pages: link tải app khay Windows SmartCarePC Helper. File cài (~74 MB) vượt giới hạn 25 MB mỗi file của Pages,
+# nên để trên GitHub Releases và chuyển tiếp từ link của web. Tên file trên Releases phải cố định: SmartCarePCHelper-Setup.exe
+/download/helper  https://github.com/minh132089/SmartCarePC/releases/latest/download/SmartCarePCHelper-Setup.exe  302

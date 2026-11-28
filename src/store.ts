@@ -7,8 +7,7 @@ import type { Cooler, MaintenanceTask } from './data/maintenance'
 import type { BuildCard } from './ui/chat/chatStore'
 import { detectQuality, LOWER, loadPref, savePref, type QualityLevel, type QualityPref } from './perf/quality'
 
-/** helper: trang giới thiệu app khay Windows (/helper) */
-export type Page = 'home' | 'advice' | 'build' | 'upgrade' | 'helper'
+export type Page = 'home' | 'advice' | 'build' | 'upgrade'
 
 interface ViewerState {
   /**
