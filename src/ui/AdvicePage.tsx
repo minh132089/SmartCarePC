@@ -16,7 +16,7 @@ import { ProposalView } from './chat/Proposal'
 import { playRandom, useSound } from './sound/sfx'
 import { useStudy } from './study/study'
 import { MaintenanceEntry } from './maintenance/MaintenanceHub'
-import { useMaintenance } from './maintenance/maintenanceState'
+import { resumeRun, useMaintenance } from './maintenance/maintenanceState'
 import { StudyBar } from './study/StudyBar'
 import { AccountSlot } from './Account'
 import { BackHome } from './BackHome'
@@ -60,7 +60,6 @@ const BUSY_HINTS = [
  */
 export function AdvicePage() {
   const { messages, busy, stage, error, send, retry, reset } = useAdviceChat()
-  const setPage = useViewer((s) => s.setPage)
   const open = useOpenMachine()
   const dark = useDark()
   const { muted, toggle: toggleSound } = useSound()
@@ -152,7 +151,7 @@ export function AdvicePage() {
           <MaintenanceEntry className="hidden sm:block" />
           {soundButton}
           <IconButton label="New conversation" onClick={reset} icon={<ArrowCounterClockwise size={16} aria-hidden />} />
-          <button onClick={() => setPage('build')} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
+          <button onClick={() => useViewer.getState().openAssembly()} className={`hidden text-[14px] font-medium text-link hover:underline sm:block ${focus}`}>
             Skip to the 3D viewer ›
           </button>
           <FeedbackButton />
@@ -188,6 +187,15 @@ export function AdvicePage() {
               ) : null
             }
           />
+          {/* Mất kết nối tới máy chủ tư vấn: câu hỏi vẫn giữ, cho người dùng một việc làm được ngay thay vì chỉ có nút thử lại */}
+          {error && !busy && (
+            <div className="rounded-2xl bg-surface p-4 text-[14px] leading-[1.5] text-ink-2 ring-1 ring-line">
+              Your question is kept. While the adviser is unavailable, you can still learn how a PC goes together.
+              <button onClick={() => useViewer.getState().openAssembly()} className={`mt-2 block font-medium text-link hover:underline ${focus}`}>
+                Open the 3D assembly guide ›
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div className="shrink-0 border-t border-line bg-canvas px-5 pt-3 pb-3">
@@ -349,7 +357,8 @@ function Intro({
     const example = EXAMPLES.find((ex) => ex.label === link.label)
     if (example) fill(example.text)
     else if (link.label === "Maintenance guide") useMaintenance.getState().open()
-    else if (link.label === "Open 3D viewer") setPage('build')
+    // Luôn là mô hình lắp ráp, kể cả khi đang có bài bảo dưỡng làm dở (bài đó mở lại từ Maintain)
+    else if (link.label === "Open 3D viewer") useViewer.getState().openAssembly()
     else if (link.label === "Assembly guide") {
       setGuide(true)
       setPage('build')
@@ -383,13 +392,18 @@ function Intro({
 
       <div className="relative flex h-full flex-col overflow-y-auto">
         <div className="relative z-20 shrink-0 px-4 pt-4">
+          {/* Hàng Back / Feedback nằm trên thanh menu: menu mở xuống không còn che hai nút này */}
+          <div className="mx-auto mb-3 flex max-w-[820px] items-center justify-between gap-2">
+            <BackHome />
+            <FeedbackButton />
+          </div>
           <CardNav
             logo={
               <button onClick={() => setPage('home')} title="Home" className={`rounded-md text-[15px] font-semibold tracking-[-0.01em] ${focus}`}>
-                SmartCare PC
+                PC SmartCare
               </button>
             }
-            logoAlt="SmartCare PC"
+            logoAlt="PC SmartCare"
             items={NAV_ITEMS}
             theme={dark ? 'dark' : 'light'}
             surface="glass"
@@ -400,15 +414,11 @@ function Intro({
             onLinkClick={onLink}
             ariaLabel="Navigation"
           />
-          <div className="mx-auto mt-3 flex max-w-[820px] items-center justify-between gap-2">
-            <BackHome />
-            <FeedbackButton />
-          </div>
         </div>
         <div className="absolute top-5 right-5 z-30 hidden xl:block">{soundButton}</div>
 
         <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col justify-center px-5 pt-6 pb-10 md:px-10">
-          <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">SmartCare PC · Your PC building assistant</p>
+          <p className="text-center font-mono text-[12px] tracking-[0.18em] text-ink-2 uppercase">PC SmartCare · Your PC building assistant</p>
           <h1 className="mt-2 text-ink">
             <span className="sr-only">Create your own PC</span>
             <div ref={titleRef} aria-hidden className="relative h-[clamp(84px,13vw,150px)] w-full">
@@ -480,10 +490,17 @@ function useOpenMachine() {
 /** Thanh hai bước ở đầu trang: 1 Tư vấn, 2 Lắp máy. Dùng chung cho cả hai trang. */
 export function FlowSteps({ current, maintenance = false, compact = false }: { current: 1 | 2; maintenance?: boolean; compact?: boolean }) {
   const setPage = useViewer((s) => s.setPage)
-  const items = [
-    { n: 1, label: "Choose your PC", short: "Advice", page: 'advice' as const },
-    { n: 2, label: maintenance ? "Maintenance guide" : "Assembly guide", short: maintenance ? "Maintain" : "Assemble", page: 'build' as const },
-  ]
+  // Luồng bảo dưỡng: bước 1 là chọn máy và việc cần làm (hộp thoại bảo dưỡng), không phải trang tư vấn mua máy mới.
+  // Luồng lắp máy: "Assemble" luôn mở mô hình lắp ráp, kể cả khi còn một bài bảo dưỡng làm dở (tiến độ hai việc tách riêng)
+  const items = maintenance
+    ? [
+        { n: 1, label: "Your PC and task", short: "Your PC", go: () => useMaintenance.getState().open(useViewer.getState().maintenanceTask) },
+        { n: 2, label: "Maintenance guide", short: "Maintain", go: () => { if (!useViewer.getState().guide) resumeRun() } },
+      ]
+    : [
+        { n: 1, label: "Choose your PC", short: "Advice", go: () => setPage('advice') },
+        { n: 2, label: "Assembly guide", short: "Assemble", go: () => { const v = useViewer.getState(); if (v.guideKind === 'maintenance') v.openAssembly(); else setPage('build') } },
+      ]
   return (
     <nav aria-label="Your steps" className={`flex items-center text-[13px] ${compact ? 'gap-1.5' : 'gap-2'}`}>
       <BackHome />
@@ -494,15 +511,15 @@ export function FlowSteps({ current, maintenance = false, compact = false }: { c
           <div key={it.n} className={`flex items-center ${compact ? 'gap-1.5' : 'gap-2'}`}>
             {i > 0 && <span className={`h-px bg-line-strong ${compact ? 'w-3' : 'w-5'}`} aria-hidden />}
             <button
-              onClick={() => setPage(it.page)}
+              onClick={it.go}
               aria-current={on ? 'step' : undefined}
               className={`flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 ${focus} ${on ? 'bg-surface font-semibold text-ink' : 'text-ink-2 hover:text-ink'}`}
             >
               <span className={`grid size-5 place-items-center rounded-full text-[11px] font-semibold ${on ? 'bg-accent text-white' : 'bg-fill text-ink-2'}`}>
                 {it.n}
               </span>
-              <span className={`whitespace-nowrap ${compact ? '' : 'sm:hidden'}`}>{it.short}</span>
-              {!compact && <span className="hidden whitespace-nowrap sm:inline">{it.label}</span>}
+              {/* Cùng một tên bước ở mọi trang (trước đây trang chat ghi tên dài, trang 3D ghi tên ngắn); tên dài để đọc màn hình */}
+              <span className="whitespace-nowrap" title={it.label}>{it.short}</span>
             </button>
           </div>
         )

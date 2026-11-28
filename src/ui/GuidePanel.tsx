@@ -16,6 +16,10 @@ import { maintenanceKey, recordStep, recordUsage, useMaintenance } from './maint
 import { MaintenanceEntry, Symptoms } from './maintenance/MaintenanceHub'
 import { Choices, Question } from './study/StudyParts'
 import SpringCheck from '../components/SpringCheck'
+import { findOnYourPc } from '../data/beginnerHelp'
+
+/** Bước nới ốc bơm / tản: nhấc nhẹ một đoạn ngắn (10% đường nhấc) để thấy đế đã rời khỏi CPU */
+const NUDGE = 0.1
 
 const press = 'transition-transform duration-100 ease-out active:scale-[0.97] motion-reduce:active:scale-100'
 const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -75,7 +79,7 @@ export function GuidePanel() {
       select(full ? null : current.part as PartId | null)
       // Nắp theo bước (bước chưa tháo nắp thì đóng), trừ khi người dùng đã tự mở để xem bên trong: giữ mở khi sang bước khác.
       // Toàn cảnh thì mở để thấy linh kiện được sắp xếp thế nào
-      useViewer.setState({ maintenanceLift: !full && !!current.coolerOut, sideOpen: full || !!current.panelOpen || useViewer.getState().sideManual, powered: false })
+      useViewer.setState({ maintenanceLift: full ? 0 : current.coolerOut === 'nudge' ? NUDGE : current.coolerOut ? 1 : 0, sideOpen: full || !!current.panelOpen || useViewer.getState().sideManual, powered: !full && !!current.running })
       return
     }
     if (full) {
@@ -180,12 +184,12 @@ export function GuidePanel() {
         Back to the model and components
       </button>
 
-      <p className="mt-4 text-[13px] font-semibold text-ink-2">{machineLabel}</p>
+      <p className="mt-4 text-[13px] font-semibold text-ink-2">PC SmartCare · {machineLabel.trim()}</p>
       <h1 className="display mt-1">{isMaintenance ? TASKS[task].title : 'Assembly guide'}</h1>
       <p className="mt-3 text-[15px] leading-[1.47] text-ink-2">
-        {isMaintenance ? 'One task at a time. Follow the safety checks and tell us whether you needed help.' : 'Follow the steps in order. Mark each one complete as you go; the 3D view follows your progress.'}
+        {isMaintenance ? 'One task at a time. Follow the safety checks. When a step is finished, record whether you did it yourself or with help. You can stop at any step: close the case, plug it back in and ask a technician.' : 'Follow the steps in order. Mark each one complete as you go; the 3D view follows your progress.'}
       </p>
-      {isMaintenance && <><p className="mt-3 text-[12px] text-ink-3">Reference illustration: {machineLabel}. {cooler === 'unknown' ? 'Cooler not identified: compare it with the pictures before loosening anything.' : ''} Written instructions follow your chosen cooler. Use your component manual for exact catches and mounting hardware.</p><MaintenanceEntry className="mt-3" /></>}
+      {isMaintenance && <><p className="mt-3 text-[12px] text-ink-3">{[`Reference illustration: ${machineLabel.trim()}.`, cooler === 'unknown' ? 'Cooler not identified: compare it with the pictures before loosening anything.' : '', 'Written instructions follow your chosen cooler. Use your component manual for exact catches and mounting hardware.'].filter(Boolean).join(' ')}</p><MaintenanceEntry className="mt-3" /></>}
       {isMaintenance && storageWarning && <p className="mt-3 text-[13px] text-info">Browser storage is unavailable. Progress and reminder dates last for this tab only; use a calendar export to keep reminders.</p>}
       {queueProblem && <p role="alert" className="mt-3 text-[13px] text-info">This browser cannot save study events. Keep this tab open and connect to the server before leaving.</p>}
       {!isMaintenance && !hasGpu && <p className="mt-3 text-[13px] text-info">Your selected build uses integrated graphics. The model and guide omit the dedicated GPU.</p>}
@@ -326,9 +330,20 @@ function StepBody({
   onReplay: (() => void) | null
 }) {
   const tab = tabbable ? 0 : -1
+  // Bảo dưỡng trên máy thật: chỉ cách nhận ra linh kiện (phản hồi 22/11: "không tìm thấy linh kiện ở máy")
+  const cooler = useViewer((s) => s.maintenanceCooler)
+  const find = maintenance ? findOnYourPc(step.part ?? step.id, cooler) : null
   return (
     <div className="pr-4 pb-4 pl-[50px] text-[14px] leading-[1.45]">
       <p className="text-ink-2">{step.why}</p>
+
+      {find && (
+        <div className="mt-3 rounded-xl bg-surface px-3 py-2 ring-1 ring-line">
+          <p className="text-[12px] font-semibold text-ink-2">Finding it on your PC</p>
+          <p className="mt-0.5 text-[13px] text-ink">{find}</p>
+          <p className="mt-1 text-[12px] text-ink-3">Your PC may look different from the 3D model. If you cannot find it, select Get help with this step and describe what you see, or stop here.</p>
+        </div>
+      )}
 
       {behind && (
         <p className="mt-3 rounded-xl bg-info-bg px-3 py-2 text-[13px] text-info">
@@ -352,7 +367,13 @@ function StepBody({
         </div>
       )}
 
-      <p className="mt-3 text-[12px] font-semibold text-ink-2">Follow these instructions</p>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className="text-[12px] font-semibold text-ink-2">Follow these instructions</p>
+        {/* Trợ giúp thật nằm ngay cạnh hướng dẫn; mở trợ giúp không đổi tiến độ */}
+        <button onClick={() => useViewer.getState().setHelpOpen(true)} tabIndex={tab} className={`shrink-0 rounded-full px-2 py-0.5 text-[12.5px] font-medium text-link hover:underline ${focus}`}>
+          Get help with this step
+        </button>
+      </div>
       <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 text-ink marker:text-ink-3">
         {step.actions.map((a) => (
           <li key={a} className="pl-1">
@@ -391,7 +412,7 @@ function StepBody({
             {maintenance ? "Done it myself" : last ? "Done, the PC has a display" : "Complete this step"}
           </button>
         )}
-        {maintenance && !done && <button disabled={!!behind} onClick={onHelp} tabIndex={tab} className={`rounded-full bg-fill px-4 py-2 text-[14px] text-ink disabled:opacity-40 ${focus}`}>I needed help</button>}
+        {maintenance && !done && <button disabled={!!behind} onClick={onHelp} tabIndex={tab} title="Record that someone or something helped you finish this step" className={`rounded-full bg-fill px-4 py-2 text-[14px] text-ink disabled:opacity-40 ${focus}`}>Completed with help</button>}
         {onReplay && (
           <button onClick={onReplay} tabIndex={tab} className={`rounded-full bg-fill px-4 py-2 text-[14px] font-medium text-ink hover:bg-fill-hover ${press} ${focus}`}>
             Replay installation
@@ -445,7 +466,6 @@ export function GuideCaption() {
       {/* Màn hướng dẫn không có bảng nút của trang xem máy: mở / đóng nắp hông ngay trên hình để nhìn vào trong */}
       <button
         onClick={toggleSide}
-        aria-pressed={sideOpen}
         className={`pointer-events-auto flex items-center gap-1.5 px-3.5 py-2 text-[14px] font-medium text-link hover:text-ink ${pill} ${press} ${focus}`}
       >
         <SidePanel size={15} aria-hidden />

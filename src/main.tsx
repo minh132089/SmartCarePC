@@ -3,6 +3,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import Root from './Root'
+import { startRouting } from './routing'
+
+// Trang dữ liệu phản hồi (/feedback) có đường riêng; còn lại địa chỉ trang đi theo màn hình đang mở
+if (!location.pathname.startsWith('/feedback') && location.hash !== '#feedback') startRouting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

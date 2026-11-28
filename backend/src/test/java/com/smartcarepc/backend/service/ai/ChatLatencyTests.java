@@ -31,6 +31,76 @@ import tools.jackson.databind.json.JsonMapper;
 
 class ChatLatencyTests {
     @Test
+    void moiLanGoiAiChuaLaiThoiGianDungThe() {
+        // Chờ tới hạn chung trừ 8 giây cho bước dựng thẻ (không còn cắt 40 giây mỗi lần); còn 5 giây: không gọi nữa
+        assertThat(Io.within(java.time.Duration.ofSeconds(85), ChatService::aiWait).toSeconds()).isBetween(76L, 77L);
+        assertThat(Io.within(java.time.Duration.ofSeconds(20), ChatService::aiWait).toSeconds()).isBetween(11L, 12L);
+        assertThat(Io.within(java.time.Duration.ofSeconds(5), ChatService::aiWait)).isZero();
+        assertThat(Io.within(java.time.Duration.ofSeconds(20), ChatService::wrapUp)).isTrue();
+        assertThat(Io.within(java.time.Duration.ofSeconds(85), ChatService::wrapUp)).isFalse();
+    }
+
+    @Test
+    void daNeuCardRamHayDoPhanGiaiThiKhongHoiLaiMucGame() {
+        // Ca kiểm tra 23/11 (GPT-6.1-sol hỏi lại thay vì làm): người dùng đã nêu cấu hình cụ thể
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC game 31 triệu, bắt buộc đúng RTX 4060 8GB, RAM 32GB, SSD 1TB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Build PC chơi game Full HD 27 triệu, card nvida, RAM 16GB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Cần PC Mini-ITX chơi game 33 triệu, RAM 16GB.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game 30 triệu, không cần mini ITX, dùng mATX bình thường.")) & 2).isEqualTo(2);
+        assertThat(ChatService.knownWorkloadTopics(List.of("Cần máy học AI CUDA 40 triệu, RAM 32GB, SSD 1TB."))).isEqualTo(3);
+        // RAM / SSD không nói lên mức game hay loại đồ họa: vẫn hỏi
+        assertThat(ChatService.knownWorkloadTopics(List.of("Mình cần PC chơi game,25 triệu, RAM16GB SSD512GB.")) & 2).isZero();
+        assertThat(ChatService.knownWorkloadTopics(List.of("Mình cần PC thiết kế đồ họa,30 triệu, RAM32GB SSD1TB.")) & 1).isZero();
+        assertThat(ChatService.knownWorkloadTopics(List.of("Tôi chạy CUDA, cần PC 43 triệu, GPU NVIDIA ít nhất 12GB, RAM 32GB và SSD 1TB."))).isEqualTo(3);
+        // Chỉ nói "chơi game" và ngân sách: vẫn hỏi mức game
+        assertThat(ChatService.knownWorkloadTopics(List.of("PC chơi game 20 triệu")) & 2).isZero();
+    }
+
+    @Test
+    void voVaTanMiniItxCoThatKhongBiLoaiNham() {
+        // Ca kiểm tra 23/11 (h12, h13 PC Mini-ITX game): hàng thật bị loại nên không dựng được cấu hình nào
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ Case LIAN-LI Q58X4 Black")).isTrue();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí CPU Thermalright AXP90 - X36 cho máy tính iTX | mITX | HTPC")).isTrue();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí Thermalright AXP120-X67")).isTrue();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Mini LIAN LI A4H2O Black Pcie 4.0 (MINI TOWER/MÀU ĐEN/PCIE 4.0)")).isTrue();
+        assertThat(ChatService.fitsCode("psu_sfx", "Cooler Master V650 SFX Gold 650W 80 PLUS Gold Modular SFX Power Supply 12V v3.42")).isTrue();
+        assertThat(com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(
+                "Cooler Master V650 SFX Gold 650W 80 PLUS Gold Modular SFX Power Supply 12V v3.42"))).isEqualTo("psu");
+        assertThat(com.smartcarepc.backend.service.price.PriceEngine.kind(com.smartcarepc.backend.service.price.PriceEngine.norm(
+                "Tản nhiệt khí Cooler Master Hyper 212 Black"))).isEqualTo("cooler");
+        // Vẫn loại tản tháp và tản nước
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt khí CPU Deepcool AK400")).isFalse();
+        assertThat(ChatService.fitsCode("low_profile_47", "Tản nhiệt nước AIO 240mm ITX")).isFalse();
+        assertThat(ChatService.fitsCode("case_mini_sff", "Vỏ máy tính Xigmatek Gaming X mATX")).isFalse();
+    }
+
+    @Test
+    void ssdThayTheChoNangCapGiuDungChuanCamVaDungHangDungLuong() {
+        // Ca kiểm tra 24/11 (office-hdd): BX500 500GB chưa xác minh giá, SSD đã xác minh là bản 512GB
+        assertThat(UpgradeService.upgradeSameSpec("ssd", "Ổ cứng SSD Crucial BX500 500GB ct500bx500ssd1", "Ổ cứng SSD Biwin M100 512GB 2.5 inch SATA III")).isTrue();
+        assertThat(UpgradeService.upgradeSameSpec("ssd", "Ổ cứng SSD Crucial BX500 500GB ct500bx500ssd1", "SSD Kingston NV2 500GB M.2 NVMe")).isFalse();
+        assertThat(UpgradeService.upgradeSameSpec("ssd", "Ổ cứng SSD Crucial BX500 500GB ct500bx500ssd1", "SSD Kingston A400 1TB SATA")).isFalse();
+    }
+
+    @Test
+    void tenCardKhongGhiChuCardVanDungLoai() {
+        // Bộ ca 24/11 h09 - h11: tên tiếng Anh không có "card" / "VGA" bị tính sai loại ở bước tự tìm card
+        assertThat(ChatService.ofKind("gpu", "MSI GeForce RTX 4070 SUPER 12G VENTUS 2X OC")).isTrue();
+        assertThat(ChatService.ofKind("gpu", "Card màn hình ASUS Dual GeForce RTX 4060 8GB")).isTrue();
+        // Không đọc ra chip, hay rõ là loại khác: vẫn loại
+        assertThat(ChatService.ofKind("gpu", "MSI MAG A650BN 650W 80 Plus Bronze")).isFalse();
+        assertThat(ChatService.ofKind("gpu", "Nguồn máy tính Corsair RM750e 750W")).isFalse();
+    }
+
+    @Test
+    void nganSachVietHoaCoDauVanNhanDuoc() {
+        // Ca thật 23/11: "tôi muốn build PC 20 TRIỆU" bị hỏi lại ngân sách (Ệ hoa không khớp "triệu" khi thiếu UNICODE_CASE)
+        assertThat(ChatService.hasBudget("tôi muốn build PC 20 TRIỆU và chơi được game nặng AAA")).isTrue();
+        assertThat(ChatService.hasBudget("NGÂN SÁCH 15 Triệu")).isTrue();
+        assertThat(ChatService.hasBudget("chơi game AAA")).isFalse();
+    }
+
+    @Test
     void slowModelCannotExtendTheWholeRequestDeadline() {
         var client = mock(LlmClient.class);
         var search = mock(ProductSearch.class);
@@ -58,8 +128,10 @@ class ChatLatencyTests {
     }
 
     @Test
-    void missingTierKeepsTheNormalModelAndRepairPath() {
-        run(false, 3);
+    void missingTierIsBuiltByCodeWithoutAnotherModelRound() {
+        // 24/11: tên hàng không ghi chữ chỉ loại ("Intel Core i3-12100 BOX") không còn bị coi là sai loại, nên code tự dựng được
+        // Chất lượng từ Phù hợp và trả kết quả ngay, không cần lượt AI thứ ba (trước đây 3 lượt)
+        run(false, 2);
     }
 
     private void run(boolean includeQuality, int expectedModelCalls) {
@@ -122,7 +194,7 @@ class ChatLatencyTests {
         var answer = service.reply(new ChatRequest(List.of(new ChatRequest.Message("user", "Máy học Word Excel, ngân sách 8 triệu")),
                 null, null, "advice"));
         assertThat(answer.build()).isNotNull();
-        if (includeQuality) assertThat(answer.options()).extracting(o -> o.tier()).containsExactly("cheap", "balanced", "quality");
+        assertThat(answer.options()).extracting(o -> o.tier()).containsExactly("cheap", "balanced", "quality");
         assertThat(answer.reply().split("\\s+")).hasSizeLessThan(100);
         assertThat(answer.reply()).doesNotContain("Kingston", "Corsair", "MSI", "khác Phù hợp");
         verify(client, times(expectedModelCalls)).complete(any());

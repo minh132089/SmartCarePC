@@ -20,6 +20,8 @@ import { guideView } from '../data/guideViews'
 import type { Machine, Vec3 } from '../data/installPaths'
 import { Box3, Spherical, Vector3 } from 'three'
 import { ToolKit } from './ToolKit'
+import { preloadModels } from './Models'
+import type { AssemblyKey } from '../data/assembly'
 
 export function Scene() {
   const buildId = useViewer((s) => s.buildId)
@@ -35,6 +37,8 @@ export function Scene() {
   const covered = useViewer((s) => s.inspecting !== null)
   const wrap = useRef<HTMLDivElement>(null)
   const [onScreen, setOnScreen] = useState(true)
+  // Model của các bước sau (và của máy khác) tải ngầm khi cảnh 3D mở, không tải ở trang chủ
+  useEffect(() => preloadModels(), [])
   useEffect(() => {
     const el = wrap.current
     if (!el) return
@@ -59,7 +63,8 @@ export function Scene() {
       <ambientLight intensity={0.9} />
       <directionalLight position={[6, 9, 8]} intensity={2.2} />
       <directionalLight position={[-6, 4, -4]} intensity={0.8} />
-      {/* Đèn bên trong thùng máy, giống đèn LED của case thật */}
+      {/* Đèn chiếu vào trong thùng máy để nhìn rõ linh kiện (như đèn soi khi làm máy). Không phải đèn LED của máy: đèn LED tắt theo
+          nguồn ở bước bảo dưỡng (Models.tsx LED_MATERIAL), đèn này vẫn giữ để bên trong không tối om */}
       <pointLight position={[0, 1, 0.6]} intensity={6} distance={6} decay={1.5} />
       <Environment resolution={256}>
         <Lightformer intensity={5} position={[0, 6, 4]} scale={[10, 4, 1]} />
@@ -116,26 +121,37 @@ function SwapIn({ children }: { children: ReactNode }) {
   )
 }
 
+/** Hướng nhìn mặc định của hướng dẫn: phía hông mở, cũng là góc camera lúc mở cảnh (các hướng riêng đo so với góc này) */
+const OPEN_SIDE: Vec3 = [5.2, 3, 10]
+/** Lệch quá góc này (rad, ~25°) so với hướng của bước thì đổi bước sẽ đưa camera về; lệch ít thì để yên góc người dùng chỉnh */
+const DRIFT = 0.44
+
 /**
- * Bước lắp có hướng nhìn riêng (data/guideViews.ts, vd card sau tấm đỡ của Mini, nguồn dưới tấm che): camera bay vòng
- * quanh máy tới hướng đó, giữ khoảng cách; rời bước thì quay về góc người dùng đang xem trước khi bay.
- * Chỉ bay lúc đổi bước; giữa chừng người dùng vẫn tự xoay được.
+ * Mỗi bước hướng dẫn có một hướng nhìn: hướng riêng (data/guideViews.ts, vd card sau tấm đỡ của Mini, nguồn dưới tấm che)
+ * hoặc phía hông mở. Đổi bước mà camera đang lệch xa hướng đó (người dùng đã xoay ra sau, khung trước che linh kiện)
+ * thì camera bay vòng quanh máy về hướng của bước, giữ khoảng cách (QA 23/11 UX-02). Đóng hướng dẫn thì quay về góc
+ * người dùng đang xem trước lần bay đầu. Chỉ bay lúc đổi bước; giữa chừng người dùng vẫn tự xoay được.
  */
 function GuideCamera({ machine }: { machine: Machine }) {
-  const view = useViewer((s) => (s.guide && !s.guideFull ? guideView(machine, s.guidePart, s.guideKind === 'maintenance') : null))
+  const view = useViewer((s) => (s.guide && !s.guideFull ? (guideView(machine, s.guidePart, s.guideKind === 'maintenance') ?? OPEN_SIDE) : null))
   const part = useViewer((s) => s.guidePart)
+  // Hai bước liền nhau cùng một linh kiện (Wipe rồi Paste đều là tản): vẫn là bước mới, vẫn đưa camera về hướng của bước
+  const index = useViewer((s) => s.guideIndex)
   const scene = useThree((s) => s.scene)
   const controls = useThree((s) => s.controls) as unknown as { object: { position: Vector3 }; target: Vector3; update: () => void } | null
   const invalidate = useThree((s) => s.invalidate)
   const anim = useRef<{ from: Spherical; to: Spherical; fromT: Vector3; toT: Vector3; t: number } | null>(null)
   /** Góc và điểm nhìn người dùng đang dùng trước khi bay sang hướng riêng, để quay về đúng chỗ */
   const saved = useRef<{ sph: Spherical; target: Vector3 } | null>(null)
-  const shown = useRef<Vec3 | null>(null)
+  const shown = useRef<{ view: Vec3 | null; part: AssemblyKey | null; index: number }>({ view: null, part: null, index: -1 })
 
   useEffect(() => {
-    if (!controls || view === shown.current) return
-    shown.current = view
-    const from = new Spherical().setFromVector3(controls.object.position.clone().sub(controls.target))
+    if (!controls || (view === shown.current.view && part === shown.current.part && index === shown.current.index)) return
+    shown.current = { view, part, index }
+    const offset = controls.object.position.clone().sub(controls.target)
+    // Phía hông mở mà người dùng đang nhìn gần đúng hướng đó: không kéo camera
+    if (view === OPEN_SIDE && !anim.current && !saved.current && offset.angleTo(new Vector3(...view)) < DRIFT) return
+    const from = new Spherical().setFromVector3(offset)
     const fromT = controls.target.clone()
     let to: Spherical
     let toT: Vector3
@@ -149,7 +165,7 @@ function GuideCamera({ machine }: { machine: Machine }) {
         if (o.userData.step === part) box.expandByObject(o)
       })
       const base = saved.current.target
-      toT = box.isEmpty() ? base.clone() : base.clone().lerp(box.getCenter(new Vector3()), 0.7)
+      toT = view === OPEN_SIDE || box.isEmpty() ? base.clone() : base.clone().lerp(box.getCenter(new Vector3()), 0.7)
     } else {
       if (!saved.current) return
       to = saved.current.sph
@@ -163,7 +179,7 @@ function GuideCamera({ machine }: { machine: Machine }) {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     anim.current = { from, to: new Spherical(to.radius, to.phi, theta), fromT, toT, t: reduce ? 1 : 0 }
     invalidate()
-  }, [view, part, scene, controls, invalidate])
+  }, [view, part, index, scene, controls, invalidate])
 
   useFrame((_, dt) => {
     const a = anim.current

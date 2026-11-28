@@ -20,9 +20,11 @@ export interface GuideStep {
   warning?: string
   /** Dấu hiệu cho biết đã lắp đúng */
   check: string
-  /** Bảo trì giữ máy lắp đủ, chỉ nhấc đế tản khi lau / bôi keo. */
-  coolerOut?: boolean
+  /** Bảo trì giữ máy lắp đủ, chỉ nhấc đế tản khi lau / bôi keo; 'nudge' = vừa nới ra, nhấc nhẹ (bước tháo ốc bơm). */
+  coolerOut?: boolean | 'nudge'
   panelOpen?: boolean
+  /** Bảo dưỡng: bước làm khi máy đang chạy (nghe tiếng quạt): quạt quay, đèn sáng. Các bước khác máy đã tắt và rút điện. */
+  running?: boolean
 }
 
 export interface GuideMachine {

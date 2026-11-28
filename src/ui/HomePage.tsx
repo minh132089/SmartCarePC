@@ -1,5 +1,5 @@
 import { ArrowRight } from '@phosphor-icons/react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { useReducedMotion } from 'motion/react'
 import { AnimateIcon } from '@animate-ui/react/icons'
 import { Tilt, TiltContent } from '@animate-ui/react/primitives/effects/tilt'
@@ -34,11 +34,12 @@ export function HomePage() {
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="mx-auto flex min-h-full max-w-[1080px] flex-col px-4 pt-5 pb-10 md:px-8">
         <header className="flex items-center justify-between gap-3">
-          <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">SmartCare PC</span>
+          <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">PC SmartCare</span>
           <div className="flex items-center gap-2">
             {!code && (
               <button onClick={() => openStudy('join')} className={`rounded-full px-3 py-1.5 text-[13px] font-medium text-link hover:bg-fill ${focus}`}>
-                Study participant? Enter your code
+                <span className="sm:hidden">Study code</span>
+                <span className="hidden sm:inline">Study participant? Enter your code</span>
               </button>
             )}
             <FeedbackButton />
@@ -123,16 +124,20 @@ function Choice({ icon, title, text, need, onClick, index, tilt }: { icon: React
     const off = setTimeout(() => setGreet(false), start + 1500)
     return () => { clearTimeout(on); clearTimeout(off) }
   }, [index, reduce])
+  const id = useId()
   const card = (
     <AnimateIcon animate={greet} animateOnHover animateOnTap asChild>
       <button
         type="button"
+        // Tên đọc màn hình ngắn gọn (chỉ tên chức năng); mô tả và phần "You will need" đọc như phần mô tả
+        aria-labelledby={`${id}-t`}
+        aria-describedby={`${id}-d ${id}-n`}
         className={`group flex h-full w-full flex-col rounded-[24px] bg-panel p-5 text-left ring-1 ring-line transition-shadow duration-150 hover:shadow-lg hover:ring-line-strong ${press} ${focus}`}
       >
         <span className="grid size-12 place-items-center rounded-2xl bg-fill text-accent">{icon}</span>
-        <span className="mt-4 text-[20px] leading-tight font-semibold tracking-[-0.015em] text-ink">{title}</span>
-        <span className="mt-2 text-[14.5px] leading-[1.5] text-ink-2">{text}</span>
-        <span className="mt-4 rounded-xl bg-surface px-3 py-2.5 text-[13px] leading-[1.45] text-ink-2">
+        <span id={`${id}-t`} className="mt-4 text-[20px] leading-tight font-semibold tracking-[-0.015em] text-ink">{title}</span>
+        <span id={`${id}-d`} className="mt-2 text-[14.5px] leading-[1.5] text-ink-2">{text}</span>
+        <span id={`${id}-n`} className="mt-4 rounded-xl bg-surface px-3 py-2.5 text-[13px] leading-[1.45] text-ink-2">
           <strong className="block text-[12px] font-semibold tracking-[0.04em] text-ink-3 uppercase">You will need</strong>
           {need}
         </span>

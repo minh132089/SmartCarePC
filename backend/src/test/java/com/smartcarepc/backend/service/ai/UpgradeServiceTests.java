@@ -387,6 +387,66 @@ class UpgradeServiceTests {
     }
 
     @Test
+    void nguoiDungNeuOCungMaTroLyChot0MonThiNhacLaiKemMonVuaNganSach() {
+        // Ca acceptance 24/11 office-hdd: 8 SSD đã xác minh giá 1,59 - 1,95 triệu, ngân sách 3,5 triệu, trợ lý vẫn chốt 0 món
+        var sata = product("Ổ Cứng SSD SSTC Sata III M100 512GB", 1_590_000L);
+        when(search.offer(sata.url())).thenReturn(new Offer(sata.title(), sata.shop(), sata.priceVnd(), null, sata.url(), null, true, 36, Instant.now()));
+        when(search.search(any())).thenReturn(List.of(sata));
+        var office = new UpgradeInfo("Intel Core i5-6500", "ASUS H110M-K", "8GB DDR4, 1 stick", "none", "HDD 1TB", "300W", "standard",
+                "Office work: Word Excel and web; Windows takes two minutes to start", 3_500_000L);
+        reply(toolCall("s", "search_products", "{\"query\":\"SSD SATA 2.5 500GB\"}"),
+                toolCall("p1", "propose_upgrade", "{\"summary\":\"Faster startup\",\"items\":[]}"),
+                toolCall("p2", "propose_upgrade", "{\"summary\":\"Faster startup\",\"items\":[{\"category\":\"ssd\",\"product_id\":\"s1-1\"}]}"),
+                answer("Add the SSTC 512GB SATA SSD and install Windows on it."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "I want a faster Windows startup. Upgrade storage first, keep CPU and motherboard.")),
+                null, null, "upgrade", office), s -> { });
+
+        assertThat(toolResult(2)).contains("asked to upgrade the SSD").contains("SSTC Sata III M100 512GB").contains("1.59 million");
+        assertThat(res.build().items()).singleElement().satisfies(l -> assertThat(l.category()).isEqualTo("ssd"));
+    }
+
+    @Test
+    void ramReNhatVanVuotNganSachThiNoiRoMonVaSoTienThieu() {
+        var kit = product("Ram desktop Kingston Fury Beast Black EXPO 32GB (2x16GB) DDR5 6000Mhz (KF560C36BBE2K2-32)", 14_599_000L);
+        when(search.offer(kit.url())).thenReturn(new Offer(kit.title(), kit.shop(), kit.priceVnd(), null, kit.url(), null, true, 36, Instant.now()));
+        when(search.search(any())).thenReturn(List.of(kit));
+        var itx = new UpgradeInfo("AMD Ryzen 5 7600", "ASUS ROG STRIX B650E-I GAMING WIFI", "16GB DDR5, 2 sticks", "RTX 4060 8GB", "NVMe SSD 1TB",
+                "SFX 650W", "mini", "Programming Android Studio Docker; memory is full, need 32GB", 12_000_000L);
+        reply(toolCall("s", "search_products", "{\"query\":\"DDR5 32GB 2x16\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
+                answer("Nothing fits."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "Please upgrade only my RAM to 32GB. I have two memory slots, both occupied.")),
+                null, null, "upgrade", itx), s -> { });
+
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("No 32 GB DDR5 memory kit fits your 12 million VND budget").contains("14.599 million")
+                .contains("2.599 million").doesNotContain("not recommending a purchase");
+    }
+
+    @Test
+    void cardDuoiMucVramKhongDuocNhacLaiVaNoiRoCardDatYeuCauVuotNganSach() {
+        // Lượt đầy đủ 24/11 ai-vram: cần 12 GB, lời nhắc đưa RTX 4060 8GB vừa ngân sách, trợ lý từ chối đúng rồi người dùng nhận
+        // câu chung "store prices and stock could not be confirmed in time"
+        var small = product("Card màn hình Colorful GeForce RTX 4060 Nb Duo 8GB V5-V", 8_290_000L);
+        var big = product("Card màn hình ASUS Dual GeForce RTX 3060 12GB", 14_440_000L);
+        for (var p : List.of(small, big)) {
+            when(search.offer(p.url())).thenReturn(new Offer(p.title(), p.shop(), p.priceVnd(), null, p.url(), null, true, 36, Instant.now()));
+        }
+        when(search.search(any())).thenReturn(List.of(small, big));
+        var pc = new UpgradeInfo("Intel Core i5-10400", "ASUS PRIME B460M-A", "32GB DDR4, 2 sticks", "GTX 1650 4GB", "SSD NVMe 1TB",
+                "650W", "standard", "AI machine learning CUDA PyTorch: upgrade only GPU, need at least 12GB VRAM", 10_000_000L);
+        reply(toolCall("s", "search_products", "{\"query\":\"RTX 3060 12GB\"}"),
+                toolCall("p1", "propose_upgrade", "{\"items\":[]}"),
+                answer("No 12GB card fits."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user",
+                "Upgrade only the GPU for CUDA and PyTorch. I need at least 12GB VRAM, keep the other parts.")), null, null, "upgrade", pc), s -> { });
+
+        assertThat(res.build()).isNull();
+        assertThat(res.reply()).contains("at least 12 GB of VRAM").contains("RTX 3060 12GB").contains("4.44 million")
+                .doesNotContain("could not be confirmed in time");
+    }
+
+    @Test
     void keHoachRongVanKhongDuocBiaGia() {
         reply(toolCall("s", "search_products", "{\"query\":\"RTX\"}"),
                 toolCall("p1", "propose_upgrade", "{\"items\":[]}"),

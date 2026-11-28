@@ -5,7 +5,8 @@ import { PrimaryButton, QuietButton, focus } from './StudyParts'
 import { FeedbackOverview } from './FeedbackOverview'
 import { GapSummary } from './GapSummary'
 import { measuresOf } from './gapStats'
-import { participantOf, score as num, type FeedbackRow as Row } from './feedbackStats'
+import { participantOf, score as num, versionOf, type FeedbackRow as Row } from './feedbackStats'
+import { VersionCompare } from './VersionCompare'
 import { MaintenanceSummary, type MaintenanceRow } from '../maintenance/MaintenanceSummary'
 import LatticeLoader from '../../components/LatticeLoader'
 
@@ -41,6 +42,10 @@ export function FeedbackAdmin() {
   const [maintenanceRows, setMaintenanceRows] = useState<MaintenanceRow[] | null>(null)
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'stars' | 'study'>('all')
+  /** Phiên bản app đang xem (appVersion.ts): 'all' hoặc một bản, áp cho cả gap effect, tổng quan và danh sách */
+  const [version, setVersion] = useState<string>('all')
+  const versions = useMemo(() => [...new Set((rows ?? []).map(versionOf))].sort(), [rows])
+  const inVersion = useMemo(() => (rows ?? []).filter((r) => version === 'all' || versionOf(r) === version), [rows, version])
 
   const load = useCallback(async (k: string) => {
     if (!k) return
@@ -107,10 +112,10 @@ export function FeedbackAdmin() {
 
   const shown = useMemo(
     () =>
-      (rows ?? []).filter((r) =>
+      inVersion.filter((r) =>
         filter === 'stars' ? num(r.answers.stars) != null : filter === 'study' ? r.participantCode != null : true,
       ),
-    [rows, filter],
+    [inVersion, filter],
   )
   const download = async () => {
     // Khoá gửi qua header, không nằm trong địa chỉ (tránh lưu vào log truy cập)
@@ -183,8 +188,8 @@ export function FeedbackAdmin() {
   return (
     <div className="feedback-dashboard h-full overflow-y-auto bg-canvas">
       <div className="mx-auto max-w-[1240px] px-4 py-8 md:px-8">
-        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Back to SmartCare PC</a>
-        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">SMARTCARE PC · USER EXPERIENCE RESEARCH</p>
+        <a href="/" className={`mb-5 inline-block text-[13px] text-link hover:underline ${focus}`}>← Back to PC SmartCare</a>
+        <p className="mb-2 text-[11px] font-semibold tracking-[.14em] text-ink-3">PC SMARTCARE · USER EXPERIENCE RESEARCH</p>
         <header className="flex flex-wrap items-center gap-3">
           <h1 className="display min-w-0 flex-1">Feedback data</h1>
           <QuietButton onClick={() => void load(key)}>
@@ -225,10 +230,29 @@ export function FeedbackAdmin() {
           ))}
         </div>
 
+        {versions.length > 1 && (
+          <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="App version">
+            {['all', ...versions].map((v) => (
+              <button
+                key={v}
+                role="radio"
+                aria-checked={version === v}
+                onClick={() => setVersion(v)}
+                className={`rounded-full px-3 py-1.5 text-[13.5px] ring-1 ${focus} ${
+                  version === v ? 'bg-ink font-medium text-on-ink ring-ink' : 'bg-surface text-ink ring-line-strong hover:bg-fill'
+                }`}
+              >
+                {v === 'all' ? 'All versions' : `App ${v}`}
+              </button>
+            ))}
+          </div>
+        )}
+
         {error && <p role="alert" className="mt-3 text-[13px] text-bad">{error}</p>}
         {busy && <div className="mt-5 text-ink-2"><LatticeLoader label="Loading feedback" fontSize={13} /></div>}
 
-        {rows && <GapSummary feedback={rows} events={maintenanceRows ?? []} />}
+        {rows && <VersionCompare feedback={rows} events={maintenanceRows ?? []} />}
+        {rows && <GapSummary feedback={inVersion} events={maintenanceRows ?? []} />}
         {rows && <FeedbackOverview rows={shown} />}
         {rows && <MaintenanceSummary rows={maintenanceRows} feedback={rows} error={maintenanceError} download={viewOnly ? undefined : () => void downloadMaintenance()} />}
 

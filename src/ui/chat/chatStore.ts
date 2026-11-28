@@ -158,10 +158,25 @@ interface ChatState {
  * Mỗi chế độ chat có một kho riêng, nằm ngoài component nên chuyển trang qua lại hội thoại vẫn còn.
  * Gọi /api/chat/jobs của backend (Vite chuyển tiếp sang cổng 8083); khoá AI chỉ nằm ở backend.
  */
-function createChat(mode: ChatMode) {
+/**
+ * Hội thoại tư vấn mua mới và nâng cấp giữ qua lần tải lại trang trong cùng tab (sessionStorage): F5 ở kế hoạch không quay
+ * về form trống (QA review 23/11). Đóng tab là mất, để máy dùng chung cho nhiều người tham gia không lộ hội thoại cũ.
+ */
+const chatKey = (mode: ChatMode) => `pcsc-chat:${mode}`
+function loadMessages(mode: ChatMode, keep: boolean): Msg[] {
+  if (!keep) return []
+  try {
+    const raw = sessionStorage.getItem(chatKey(mode))
+    return raw ? (JSON.parse(raw) as Msg[]) : []
+  } catch {
+    return []
+  }
+}
+
+function createChat(mode: ChatMode, keep = false) {
   let abort: AbortController | null = null
-  return create<ChatState>((set, get) => ({
-    messages: [],
+  const store = create<ChatState>((set, get) => ({
+    messages: loadMessages(mode, keep),
     busy: false,
     stage: null,
     error: null,
@@ -202,11 +217,22 @@ function createChat(mode: ChatMode) {
       set({ messages: [], busy: false, stage: null, error: null })
     },
   }))
+  if (keep)
+    store.subscribe((s, prev) => {
+      if (s.messages === prev.messages) return
+      try {
+        if (s.messages.length) sessionStorage.setItem(chatKey(mode), JSON.stringify(s.messages.slice(-30)))
+        else sessionStorage.removeItem(chatKey(mode))
+      } catch { /* đầy hoặc bị chặn: chỉ mất phần giữ qua lần tải lại */ }
+    })
+  return store
 }
 
-export const useAdviceChat = createChat('advice')
+export const useAdviceChat = createChat('advice', true)
 export const useAssemblyChat = createChat('assembly')
-export const useUpgradeChat = createChat('upgrade')
+/** Trợ giúp trong bài bảo dưỡng: hội thoại riêng, không lẫn câu hỏi và lỗi của hướng dẫn lắp máy */
+export const useStepChat = createChat('assembly')
+export const useUpgradeChat = createChat('upgrade', true)
 
 /** Trang nâng cấp: kèm tên sản phẩm của kế hoạch trước, để câu hỏi tiếp ("card rẻ hơn được không") biết đang nói món nào */
 function planWire(m: Msg) {

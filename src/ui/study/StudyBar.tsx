@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Flask, NotePencil, Star } from '@phosphor-icons/react'
 import { useViewer } from '../../store'
 import { collect, type AnswerMap } from './answers'
-import { BASELINE, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, type Lang, type RatingKind } from './questions'
+import { BASELINE, FEEDBACK, FOLLOWUP, RATING_FORM, RATING_QUESTIONS, withCompare, type Lang, type RatingKind, type StudyQuestion } from './questions'
 import { QuestionList } from './QuestionList'
-import { CODE_PATTERN, PHASE_LABEL, newSubmissionId, pendingForm, sendFeedback, useSending, useStudy, type Phase } from './study'
+import { CODE_PATTERN, PHASE_LABEL, flushQueue, isQueued, newSubmissionId, pendingForm, postponeBaseline, sendFeedback, useSending, useStudy, type Phase } from './study'
 import { Choices, Dialog, focus, LangToggle, PrimaryButton, Question, QuietButton } from './StudyParts'
 import { tr, useFormLang } from './lang'
 import { useMaintenance } from '../maintenance/maintenanceState'
@@ -126,6 +126,8 @@ function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
+  /** Đã cất trên máy vì không tới được máy chủ: hàm đóng hộp thoại sau khi người dùng đọc thông báo */
+  const [queued, setQueued] = useState<(() => void) | null>(null)
   const [submissionId] = useState(newSubmissionId)
   // Ở form cuối, câu bảo dưỡng chỉ dành cho người có máy bàn (hoặc chưa rõ vì trả lời form đầu trên máy khác)
   const questions = form === 'baseline' ? BASELINE : FOLLOWUP.filter((q) => q.key !== 'maint_done' || ownPc == null || ownPc === 'desktop')
@@ -134,7 +136,11 @@ function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
   const profile = { age: answers.participant_age, occupation: answers.participant_occupation }
   const profileOk = validParticipant(profile)
   if (!profileOk) { delete answers.participant_age; delete answers.participant_occupation }
+  // Chỉ điền tuổi (hoặc chỉ nghề) thì cặp này bị bỏ khi gửi: không còn câu nào thì chưa cho gửi (trước đây nút Gửi vẫn bật)
+  const nothing = empty || Object.keys(answers).length === 0
   const close = () => !busy && open(null)
+  // "Để sau" ở form đầu: không tự bật lại mỗi lần tải lại trang trong phiên này (nút trên thanh nghiên cứu vẫn mở được)
+  const later = () => { if (busy) return; if (form === 'baseline') postponeBaseline(); open(null) }
 
   const submit = async () => {
     const r = await sendFeedback({ machine: null, answers: { form, form_lang: lang, ...answers } }, submissionId)
@@ -142,6 +148,8 @@ function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
     if (profileOk) saveProfile(profile as Participant)
     markAnswered(form)
     if (form === 'baseline' && typeof answers.own_pc === 'string') setOwnPc(answers.own_pc)
+    // Chưa tới được máy chủ, đã cất trên máy: nói rõ rồi mới đóng (trước đây đóng ngay như đã gửi xong)
+    if (r === 'queued') return setQueued(() => () => { open(null); if (form === 'baseline' && answers.own_pc === 'desktop') useMaintenance.getState().open('dust') })
     open(null)
     if (form === 'baseline' && answers.own_pc === 'desktop') useMaintenance.getState().open('dust')
   }
@@ -153,20 +161,24 @@ function StudyForm({ form }: { form: 'baseline' | 'followup' }) {
       footer={
         <>
           {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
-          <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
-          <PrimaryButton onClick={submit} disabled={busy || empty}>
+          {queued && <QueuedNote id={submissionId} lang={lang} />}
+          {!queued && <QuietButton onClick={later}>{tr(lang, "Later", 'Để sau')}</QuietButton>}
+          {queued ? <PrimaryButton onClick={queued}>{tr(lang, "Close", 'Đóng')}</PrimaryButton> : <PrimaryButton onClick={submit} disabled={busy || nothing}>
             {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Send", 'Gửi')}
-          </PrimaryButton>
+          </PrimaryButton>}
         </>
       }
     >
+      {/* Đã cất trên máy: khoá form, sửa thêm sẽ không vào bản đang chờ gửi */}
+      <fieldset disabled={!!queued} className="m-0 min-w-0 border-0 p-0">
       <LangToggle lang={lang} onChange={setLang} />
       <p className="mb-5 text-[14px] leading-[1.5] text-ink-2">
         {form === 'baseline'
-          ? tr(lang, "About 3 minutes. Please answer before you use the app's advice or guides, so we can compare with your answers at the end of the study. There are no right or wrong answers, and you can skip any question.", 'Khoảng 3 phút. Bạn trả lời trước khi dùng phần tư vấn hay hướng dẫn của app, để cuối nghiên cứu so sánh với câu trả lời lúc đó. Không có đúng hay sai, câu nào cũng bỏ qua được.')
+          ? tr(lang, "About 3 minutes. Please answer before you use the app's advice or guides, so we can compare with your answers at the end of the study. There are no right or wrong answers. Answer at least one question; you can skip the rest.", 'Khoảng 3 phút. Bạn trả lời trước khi dùng phần tư vấn hay hướng dẫn của app, để cuối nghiên cứu so sánh với câu trả lời lúc đó. Không có đúng hay sai. Trả lời ít nhất một câu, các câu khác bỏ qua được.')
           : tr(lang, "About 4 minutes. Some questions are the same as on your first day; answer them as things are for you now, not as you answered before.", 'Khoảng 4 phút. Một số câu giống hôm đầu; bạn trả lời theo đúng hiện tại, không cần nhớ lần trước đã chọn gì.')}
       </p>
       <QuestionList questions={questions} answers={a} onChange={setA} lang={lang} />
+      </fieldset>
     </Dialog>
   )
 }
@@ -186,7 +198,8 @@ function FeedbackDialog() {
   const { open, markAnswered } = useStudy()
   const { lang, setLang } = useFormLang()
   const viewed = useViewer((s) => s.familyId ?? s.buildId)
-  const here = useViewer((s): RatingKind => (s.page === 'upgrade' ? 'upgrade' : s.page === 'build' && s.guide && s.guideKind === 'maintenance' ? 'maintenance' : 'build'))
+  const here = useViewer((s): RatingKind => (s.page === 'upgrade' ? 'upgrade' : s.page === 'build' && s.guideKind === 'maintenance' ? 'maintenance' : 'build'))
+  const advised = useViewer((s) => s.advisedBuild != null)
   const onBuildPage = useViewer((s) => s.page === 'build')
   const run = useMaintenance((s) => s.run)
   const [kind, setKind] = useState<RatingKind>(here)
@@ -194,12 +207,15 @@ function FeedbackDialog() {
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
+  /** Đã cất trên máy vì không tới được máy chủ: hàm đóng hộp thoại sau khi người dùng đọc thông báo */
+  const [queued, setQueued] = useState<(() => void) | null>(null)
   const [submissionId] = useState(newSubmissionId)
-  const questions = RATING_QUESTIONS[kind]
+  const questions = ratingQuestions(kind, advised)
   const { answers, empty } = collect(questions, a)
   const machine = kind === 'build' ? (onBuildPage ? viewed : null) : kind === 'maintenance' ? run?.machine ?? null : null
   // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
   const close = () => !busy && open(null)
+  const later = close
 
   const submit = async () => {
     const extra = kind === 'maintenance' && run ? { task: run.task } : {}
@@ -209,6 +225,7 @@ function FeedbackDialog() {
     )
     if (r === 'failed') return setFailed(true)
     markAnswered(ratingAnswered(kind))
+    if (r === 'queued') return setQueued(() => () => open(null))
     open(null)
   }
 
@@ -219,13 +236,16 @@ function FeedbackDialog() {
       footer={
         <>
           {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
-          <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
-          <PrimaryButton onClick={submit} disabled={busy || (empty && stars === 0)}>
+          {queued && <QueuedNote id={submissionId} lang={lang} />}
+          {!queued && <QuietButton onClick={later}>{tr(lang, "Later", 'Để sau')}</QuietButton>}
+          {queued ? <PrimaryButton onClick={queued}>{tr(lang, "Close", 'Đóng')}</PrimaryButton> : <PrimaryButton onClick={submit} disabled={busy || (empty && stars === 0)}>
             {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Send", 'Gửi')}
-          </PrimaryButton>
+          </PrimaryButton>}
         </>
       }
     >
+      {/* Đã cất trên máy: khoá form, sửa thêm sẽ không vào bản đang chờ gửi */}
+      <fieldset disabled={!!queued} className="m-0 min-w-0 border-0 p-0">
       <LangToggle lang={lang} onChange={setLang} />
       <p className="mb-4 text-[14px] leading-[1.5] text-ink-2">{tr(lang, "About two minutes. There are no right or wrong answers, and every question is optional.", 'Khoảng hai phút. Không có đúng hay sai, câu nào cũng bỏ qua được.')}</p>
       <Question label={tr(lang, "Which part of the app is your feedback about?", 'Bạn muốn góp ý về phần nào của app?')}>
@@ -237,6 +257,7 @@ function FeedbackDialog() {
       <div className="mt-5">
         <QuestionList key={kind} questions={questions} answers={a} onChange={setA} lang={lang} />
       </div>
+      </fieldset>
     </Dialog>
   )
 }
@@ -303,18 +324,23 @@ function RatingDialog() {
   const { lang, setLang } = useFormLang()
   const viewed = useViewer((s) => s.familyId ?? s.buildId)
   const run = useMaintenance((s) => s.run)
+  const advised = useViewer((s) => s.advisedBuild != null)
   const [stars, setStars] = useState(0)
   const [a, setA] = useState<AnswerMap>({})
   const busy = useSending((s) => s.sending)
   const [failed, setFailed] = useState(false)
+  /** Đã cất trên máy vì không tới được máy chủ: hàm đóng hộp thoại sau khi người dùng đọc thông báo */
+  const [queued, setQueued] = useState<(() => void) | null>(null)
   const [submissionId] = useState(newSubmissionId)
-  const questions = RATING_QUESTIONS[kind]
+  // Lắp theo máy mẫu, chưa nhận cấu hình gợi ý nào: không hỏi cấu hình có vừa ngân sách / hợp nhu cầu không
+  const questions = ratingQuestions(kind, advised)
   const copy = RATING_COPY[kind]
   const { answers } = collect(questions, a)
   // Máy của phản hồi: máy đang xem khi lắp; bản bảo dưỡng vừa làm (họ máy, tản, có card); nâng cấp là máy của người dùng
   const machine = kind === 'build' ? viewed : kind === 'maintenance' ? run?.machine ?? null : null
   // Đang gửi thì không cho đóng (đóng rồi mở lại giữa chừng dễ gửi trùng)
   const close = () => !busy && open(null)
+  const later = close
 
   const submit = async () => {
     const extra = kind === 'maintenance' && run ? { task: run.task } : {}
@@ -322,6 +348,7 @@ function RatingDialog() {
     // Không tới được máy chủ và không cất được trên máy: giữ form và câu trả lời để thử lại
     if (r === 'failed') return setFailed(true)
     markAnswered(ratingAnswered(kind))
+    if (r === 'queued') return setQueued(() => () => open(null))
     open(null)
   }
 
@@ -332,13 +359,16 @@ function RatingDialog() {
       footer={
         <>
           {failed && <p className="mr-auto text-[13px] text-bad">{tr(lang, "Could not send. Check your connection and select Send again.", 'Chưa gửi được. Kiểm tra kết nối rồi bấm Gửi lại.')}</p>}
-          <QuietButton onClick={close}>{tr(lang, "Later", 'Để sau')}</QuietButton>
-          <PrimaryButton onClick={submit} disabled={busy || stars === 0}>
+          {queued && <QueuedNote id={submissionId} lang={lang} />}
+          {!queued && <QuietButton onClick={later}>{tr(lang, "Later", 'Để sau')}</QuietButton>}
+          {queued ? <PrimaryButton onClick={queued}>{tr(lang, "Close", 'Đóng')}</PrimaryButton> : <PrimaryButton onClick={submit} disabled={busy || stars === 0}>
             {busy ? tr(lang, "Sending…", 'Đang gửi…') : failed ? tr(lang, "Send again", 'Gửi lại') : tr(lang, "Submit rating", 'Gửi đánh giá')}
-          </PrimaryButton>
+          </PrimaryButton>}
         </>
       }
     >
+      {/* Đã cất trên máy: khoá form, sửa thêm sẽ không vào bản đang chờ gửi */}
+      <fieldset disabled={!!queued} className="m-0 min-w-0 border-0 p-0">
       <LangToggle lang={lang} onChange={setLang} />
       <p className="text-[14px] leading-[1.5] text-ink-2">{tr(lang, ...copy.ask)}</p>
       <div className="mt-3">
@@ -346,6 +376,50 @@ function RatingDialog() {
       </div>
       <p className="mt-5 mb-1 text-[13px] text-ink-3">{tr(lang, "Have two more minutes? Your answers help the team improve the app. Every question is optional.", 'Còn hai phút nữa không? Câu trả lời giúp nhóm cải thiện app. Câu nào cũng bỏ qua được.')}</p>
       <QuestionList questions={questions} answers={a} onChange={setA} lang={lang} />
+      </fieldset>
     </Dialog>
+  )
+}
+
+/**
+ * Câu hỏi phản hồi của một chức năng. Lắp theo máy mẫu, chưa nhận cấu hình gợi ý nào: bỏ hai câu cấu hình có vừa ngân sách /
+ * hợp nhu cầu không, rồi đánh số lại để câu đầu là 1 (số nằm sẵn trong câu chữ).
+ */
+function ratingQuestions(kind: RatingKind, advised: boolean): StudyQuestion[] {
+  if (kind !== 'build' || advised) return RATING_QUESTIONS[kind]
+  const renumber = (text: string, n: number) => text.replace(/^\d+\.\s*/, `${n}. `)
+  return withCompare(FEEDBACK
+    .filter((q) => q.key !== 'budget_fit' && q.key !== 'purpose_fit')
+    .map((q, i) => ({ ...q, text: renumber(q.text, i + 1), ...(q.vi ? { vi: { ...q.vi, text: renumber(q.vi.text, i + 1) } } : {}) })))
+}
+
+/**
+ * Phản hồi đã cất trên máy vì chưa tới được máy chủ: nói rõ, cho thử gửi lại ngay. Tới được máy chủ thì báo đã gửi
+ * (chỉ khi máy chủ xác nhận, tức bản này đã rời hàng đợi).
+ */
+function QueuedNote({ id, lang }: { id: string; lang: Lang }) {
+  const [state, setState] = useState<'saved' | 'trying' | 'sent' | 'still'>('saved')
+  const retry = async () => {
+    setState('trying')
+    await flushQueue()
+    setState(isQueued(id) ? 'still' : 'sent')
+  }
+  return (
+    <div role="status" className="mr-auto flex flex-wrap items-center gap-2 text-[13px]">
+      {state === 'sent' ? (
+        <p className="text-ok">{tr(lang, "Sent. Thank you.", 'Đã gửi. Cảm ơn bạn.')}</p>
+      ) : (
+        <>
+          <p className="text-info">
+            {state === 'still'
+              ? tr(lang, "Still not reachable. Your answers stay saved in this browser and are sent automatically later.", 'Vẫn chưa kết nối được. Câu trả lời vẫn được lưu trên trình duyệt này và sẽ tự gửi sau.')
+              : tr(lang, "The server is not reachable right now. Your answers are saved in this browser and are sent automatically when it is back.", 'Máy chủ đang không kết nối được. Câu trả lời đã được lưu trên trình duyệt này và sẽ tự gửi khi máy chủ hoạt động lại.')}
+          </p>
+          <QuietButton onClick={() => void retry()} disabled={state === 'trying'}>
+            {state === 'trying' ? tr(lang, "Trying…", 'Đang thử…') : tr(lang, "Try again now", 'Gửi lại ngay')}
+          </QuietButton>
+        </>
+      )}
+    </div>
   )
 }

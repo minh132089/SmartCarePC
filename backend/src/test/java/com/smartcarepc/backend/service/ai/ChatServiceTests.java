@@ -14,6 +14,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -341,6 +343,34 @@ class ChatServiceTests {
     }
 
     @Test
+    void bonThanhTrenBoHaiKheThiDoiSangHaiThanhLonHonGiuTongDungLuong() {
+        // Rà soát 24/11 creator-video: trợ lý muốn "2x16GB" mà chọn thanh 8GB, code thành 4 x 8GB trên bo "2 khe RAM", không có cấu hình nào
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard ASRock H610M-H2/M.2 DDR4 | LGA 1700, mATX, 2 khe RAM","A",1_490_000L,"https://a.vn/mb",null);
+        var eight = new ProductSearch.Product("RAM PC SSTC 8GB DDR4 | (1x8GB), 3200MHz","A",1_350_000L,"https://a.vn/r8",null);
+        var sixteen = new ProductSearch.Product("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz","A",2_910_000L,"https://a.vn/r16",null);
+        var products = List.of(mb,eight,sixteen);
+        when(search.search(any())).thenReturn(products);
+        for(var p:products)when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":4,"spec":"32GB DDR4","product_id":"s1-2"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","máy dựng video RAM 32GB 36 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("16GB");
+            assertThat(line.quantity()).isEqualTo(2);
+        });
+    }
+
+    @Test
     void khongTimDuocBoBonKheThiKhongHienBonThanhTrenHaiKhe() {
         assertThat(ramSlotsResponse(false).build()).isNull();
     }
@@ -404,6 +434,88 @@ class ChatServiceTests {
                 {"code":"ram_ddr4","quantity":4,"spec":"%s","product_id":"s1-2"}]}
                 """.formatted(misleadingKit ? "2x16GB DDR4" : "64GB DDR4")),answer("Xong."),answer("Xong."),answer("Xong."));
         return service.reply(new ChatRequest(List.of(new Message("user","máy RAM 64GB 36 triệu")),null,null,"advice"));
+    }
+
+    @Test
+    void can64GbMaKhongCoThanh32GbThiDungBonThanh16GbTrenBoBonKhe() {
+        // Rà soát 24/11 e08: 64GB DDR4, không có thanh 32GB nào có link mua, bo 2 khe: phải ra 4 x 16GB trên bo 4 khe
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-E DDR4","A",2_149_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz","A",2_910_000L,"https://a.vn/ram",null);
+        var msi = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/msi",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram));
+        when(search.search(org.mockito.ArgumentMatchers.contains("MSI PRO B760M-P"))).thenReturn(List.of(msi));
+        for(var p:List.of(mb,ram,msi))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":2,"spec":"32GB DDR4","product_id":"s1-2"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","PC chơi game, 36 triệu, RAM 64GB, SSD 1TB")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.quantity()).isEqualTo(4);
+        }).anySatisfy(line -> assertThat(line.productName()).contains("B760M-P"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {4, 8})
+    void troLyChonThanh8GbCho64GbThiDoiSangBonThanh16Gb(int quantity) {
+        // Full 24/11 e08 lần hai: trợ lý chọn 8 x 8GB (rồi 4 x 8GB = 32GB) trên bo 2 khe, không thanh 32GB nào có link mua
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-E DDR4","A",2_149_000L,"https://a.vn/mb",null);
+        var ram8 = new ProductSearch.Product("RAM PC SSTC 8GB DDR4 | (1x8GB), 3200MHz","A",439_000L,"https://a.vn/r8",null);
+        var ram16 = new ProductSearch.Product("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz","A",1_200_000L,"https://a.vn/r16",null);
+        var msi = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/msi",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram8,ram16));
+        when(search.search(org.mockito.ArgumentMatchers.contains("MSI PRO B760M-P"))).thenReturn(List.of(msi));
+        for(var p:List.of(mb,ram8,ram16,msi))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":%d,"spec":"64GB DDR4","product_id":"s1-2"}]}
+                """.formatted(quantity)),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","PC chơi game, 36 triệu, RAM 64GB, SSD 1TB")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> {
+            assertThat(line.category()).isEqualTo("ram");
+            assertThat(line.productName()).contains("16GB");
+            assertThat(line.quantity()).isEqualTo(4);
+        }).anySatisfy(line -> assertThat(line.productName()).contains("B760M-P"));
+    }
+
+    @Test
+    void boGigabyteBonKheHetHangThiThuBoBonKheKhacCungSocket() {
+        // Lượt đầy đủ 24/11 g16, e08: RAM 64GB DDR4 trên bo 2 khe, không có thanh 32GB mua được, chỉ tìm một mẫu Gigabyte nên
+        // không đổi được bo, ba lần propose đều hỏng
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-E DDR4","A",2_149_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product("RAM Kingston 16GB DDR4","A",2_000_000L,"https://a.vn/ram",null);
+        var msi = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/msi",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram));
+        when(search.search(org.mockito.ArgumentMatchers.contains("MSI PRO B760M-P"))).thenReturn(List.of(msi));
+        for(var p:List.of(mb,ram,msi))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"RAM","budget_vnd":36000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":4,"spec":"64GB DDR4","product_id":"s1-2"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","máy RAM 64GB 36 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).anySatisfy(line -> assertThat(line.productName()).contains("B760M-P"));
     }
 
     @Test
@@ -1014,6 +1126,22 @@ class ChatServiceTests {
         var cheapLine = res.options().stream().filter(o -> "cheap".equals(o.tier())).findFirst().orElseThrow().items().getFirst();
         assertThat(cheapLine.spec()).isEqualTo("1 TB NVMe");
         assertThat(cheapLine.reason()).isEqualTo("Mở game nhanh");
+    }
+
+    @Test
+    void cauTiepTheoNhoDoiLinhKienThiKhongHoiLaiMucGame() {
+        // Bộ chấm cuối 24/11: "Đổi RAM lên 32GB và SSD lên 1TB, giữ 32 triệu" bị hỏi lại "game nhẹ hay nặng"
+        when(search.enabled()).thenReturn(true);
+        reply(answer("Will you mainly play lighter esports games or demanding AAA games?"), answer("Xong."));
+
+        var res = service.reply(new ChatRequest(List.of(new Message("user", "PC game32 triệu RAM16GB, SSD512GB."),
+                new Message("assistant", "Mình sẽ kiểm tra cấu hình theo yêu cầu tiếp theo."),
+                new Message("user", "Đổi RAM lên 32GB và SSD lên 1TB, giữ 32 triệu.")), null, null, "advice"));
+
+        // Câu hỏi không được gửi cho người dùng: trợ lý được nhắc giả định rồi làm luôn
+        assertThat(sent).hasSize(2);
+        assertThat(sent.get(1).get("messages").toString()).contains("Assume common requirements");
+        assertThat(res.reply()).doesNotContain("esports");
     }
 
     @Test
@@ -1859,6 +1987,92 @@ class ChatServiceTests {
         var r3060 = new ProductSearch.Product("Card Gigabyte GeForce RTX 3060 12GB", "C", 7_000_000L, "https://c.vn/1", null);
         assertThat(ChatService.equivalents("gpu", now, List.of(msi, ti, r3060), false, false, false)).containsExactly(msi);
         assertThat(ChatService.vram("Card MSI GeForce RTX 4060 Ventus 2X 8G")).isEqualTo(8);
+    }
+
+    @Test
+    void quatLapThemKhongCoLinkMuaThiBoQuatKhongChanPhuongAn() {
+        // Ca thật 24/11: quạt 120mm không có link mua chặn cả phương án, trợ lý dựng lại một vòng, câu trả lời mất 108 giây
+        when(compatibility.check(any())).thenReturn(new CompatibilityResponse(true,List.of(),List.of()));
+        for(String[] p:List.of(new String[]{"mb_matx","motherboard"},new String[]{"ram_ddr4","ram"},new String[]{"fan120","fans"})) {
+            when(components.findByCode(p[0])).thenReturn(part(p[0],p[1],p[1]));
+        }
+        when(search.enabled()).thenReturn(true);
+        var mb = new ProductSearch.Product("Mainboard MSI PRO B760M-P DDR4","A",2_590_000L,"https://a.vn/mb",null);
+        var ram = new ProductSearch.Product("RAM Kingston 8GB DDR4","A",600_000L,"https://a.vn/ram",null);
+        var fan = new ProductSearch.Product("Quạt tản nhiệt Phanteks M25 G2 120mm","A",309_000L,"https://a.vn/fan",null);
+        when(search.search(any())).thenReturn(List.of(mb,ram,fan));
+        for(var p:List.of(mb,ram))when(search.offer(p.url())).thenReturn(new com.smartcarepc.backend.service.price.Offer(p.title(),"A",p.priceVnd(),null,p.url(),null,true,36,java.time.Instant.now()));
+        when(search.directLink(any(),any(),any())).thenAnswer(inv -> inv.getArgument(2));
+        reply(toolCall("s","search_products","{\"query\":\"parts\"}"),toolCall("p","propose_build","""
+                {"tier":"balanced","summary":"Văn phòng","budget_vnd":20000000,"items":[{"code":"mb_matx","product_id":"s1-1"},
+                {"code":"ram_ddr4","quantity":2,"spec":"16GB DDR4","product_id":"s1-2"},{"code":"fan120","product_id":"s1-3"}]}
+                """),answer("Xong."),answer("Xong."),answer("Xong."));
+        var res = service.reply(new ChatRequest(List.of(new Message("user","máy văn phòng 20 triệu")),null,null,"advice"));
+        assertThat(res.build()).isNotNull();
+        assertThat(res.build().items()).noneSatisfy(line -> assertThat(line.category()).isEqualTo("fans"));
+    }
+
+    @Test
+    void cungLoaiThanhRamTenKhacVanLaCungHang() {
+        // Ca thật 24/11: Phù hợp lấy thanh SSTC 8GB 1,35 triệu, Rẻ có cùng loại 439 nghìn mà tên ghi khác
+        String a = "RAM PC SSTC 8GB DDR4 | (1x8GB), 3200MHz, Intel/AMD U3200A-C22-8GB", b = "Ram PC SSTC 8GB DDR4 (3200 Mhz)";
+        assertThat(ChatService.sameOffer(a, b)).isTrue();
+        assertThat(ChatService.sameOffer(a, "Ram PC SSTC 16GB DDR4 (3200 Mhz)")).isFalse();
+        assertThat(ChatService.sameOffer(a, "Ram PC SSTC 8GB DDR4 (2666 Mhz)")).isFalse();
+        assertThat(ChatService.sameOffer(a, "Ram PC Kingston Fury 8GB DDR4 3200MHz")).isFalse();
+        assertThat(ChatService.sameOffer(a, "RAM SSTC 16GB (2x8GB) DDR4 3200MHz")).isFalse();
+        assertThat(ChatService.sameOffer("Ram Corsair Vengeance RS RGB 1x8GB 3200", "Ram Corsair Vengeance LPX 8GB DDR4 3200MHz")).isFalse();
+    }
+
+    @Test
+    void thuTuNangTheoMucDich() {
+        // Rà soát 24/11: Chất lượng của đồ họa 2D nâng card, dựng video nâng card +4,7 triệu, lập trình nâng SSD, văn phòng nâng CPU
+        java.util.function.Function<String, String> purpose = t -> ChatService.purposeOf(List.of(t), ChatService.needs(List.of(t)));
+        assertThat(purpose.apply("Máy làm đồ họa 2D, chủ yếu Photoshop và Illustrator, ngân sách 25 triệu.")).isEqualTo("2d");
+        assertThat(purpose.apply("Máy dựng 3D bằng Blender, render Cycles, ngân sách 35 triệu.")).isEqualTo("3d");
+        assertThat(purpose.apply("Máy dựng video 4K bằng Premiere và DaVinci Resolve, ngân sách 30 triệu.")).isEqualTo("video");
+        assertThat(purpose.apply("Máy chạy AI, train model nhỏ bằng PyTorch CUDA, ngân sách 40 triệu.")).isEqualTo("ai");
+        assertThat(purpose.apply("Máy học online, Word, Excel, Zoom, ngân sách 10 triệu.")).isEqualTo("office");
+        assertThat(purpose.apply("Máy lập trình, chạy Docker và Android Studio, ngân sách 20 triệu.")).isEqualTo("dev");
+        assertThat(purpose.apply("tôi có 20 triệu và muốn chơi game nặng AAA hãy giúp tôi build PC với")).isEqualTo("game");
+        assertThat(ChatService.upgradeOrder("2d", null)).startsWith("ram", "cpu");
+        assertThat(ChatService.upgradeOrder("office", null)).containsExactly("ram", "ssd", "cpu");
+        assertThat(ChatService.upgradeOrder("game", null)).startsWith("gpu");
+        assertThat(ChatService.ramCeiling("office")).isEqualTo(16);
+    }
+
+    @Test
+    void ramLaKhongDungKhiNang() {
+        assertThat(ChatService.oddRam("RAM PC Samsung/Micron/Hynix 64GB DDR4 | (1x64GB), 2400MHz, Intel/AMD")).isTrue();
+        assertThat(ChatService.oddRam("RAM PC Kingmax Blade X 16GB DDR4 | (1x16GB), 3200MHz")).isFalse();
+        assertThat(ChatService.oddRam("Ram PC SSTC 8GB DDR4 (3200 Mhz)")).isFalse();
+    }
+
+    @Test
+    void mayAiChiNangLenChipDuVram() {
+        // Máy AI 40 triệu 24/11: RTX 4060 Ti 16GB, mọi chip trong 15 hạng đều ít VRAM hơn, Phù hợp thừa 9,4 triệu
+        assertThat(ChatService.vramUpgrades("rtx4060ti", 16).stream().filter(c -> c.startsWith("rtx")).toList())
+                .startsWith("rtx5060ti", "rtx3090", "rtx4070tisuper", "rtx5070ti").doesNotContain("rtx4070", "rtx5070", "rtx3070");
+        assertThat(ChatService.gpuChip("Card MSI GeForce RTX 4070 Ti SUPER 16G VENTUS 3X")).isEqualTo("rtx4070tisuper");
+    }
+
+    @Test
+    void nangCardChoChatLuongBoQuaChipChiNhinhHon() {
+        // Ca thật 24/11: RTX 4060 chỉ thử Arc B580 / RX 7600 XT / RTX 3060 Ti (gần như ngang), Chất lượng thành nâng CPU
+        assertThat(ChatService.gpuStepUps("rtx4060")).startsWith("rx6700xt", "rtx5060", "rtx4060ti")
+                .contains("arcb580", "rx7600xt", "rtx3060ti");
+        // Chip đầu bảng không còn chip mạnh hơn rõ rệt: giữ danh sách cũ
+        assertThat(ChatService.gpuStepUps("rtx5070ti")).isEqualTo(ChatService.gpuUpgrades("rtx5070ti")).containsExactly("rx9070xt");
+    }
+
+    @Test
+    void voKhongGhiCoVanDoiDuocSangVoReGhiRoCo() {
+        // Ca thật 24/11: vỏ Fractal Torrent Compact 3,9 triệu (tên không ghi ATX / mATX) trong máy game 20 triệu, code không đổi
+        // được vỏ nên hạ card RTX 4060 xuống RX 6600
+        var now = new ProductSearch.Product("CASE FRACTAL DESIGN TORRENT COMPACT RGB BLACK TG LIGHT TINT", "A", 3_900_000L, "https://a.vn/case", null);
+        var matx = new ProductSearch.Product("Vỏ máy tính EDRA ECS1105 Micro-ATX", "B", 290_000L, "https://b.vn/case", null);
+        var unknown = new ProductSearch.Product("Vỏ máy tính Xigmatek Gaming X", "B", 590_000L, "https://b.vn/x", null);
+        assertThat(ChatService.equivalents("case", now, List.of(matx, unknown), false, false, false)).containsExactly(matx);
     }
 
     @Test

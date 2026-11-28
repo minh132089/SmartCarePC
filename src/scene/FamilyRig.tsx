@@ -141,12 +141,12 @@ const v = (p: number[]) => new Vector3(p[0] / 100, p[1] / 100, p[2] / 100)
 
 /** Hai ống nước Ø11 từ cút trên bơm, đi lên trên bo rồi tới hai đầu ống dưới bình két (phía +x). */
 function Hoses({ f, ihs }: { f: Family; ihs: Mm3 }) {
-  const lift = useViewer(s => s.guide && s.guideKind === 'maintenance' && s.maintenanceLift)
+  const lift = useViewer(s => (s.guide && s.guideKind === 'maintenance' ? s.maintenanceLift : 0))
   const tubes = useMemo(() => {
     const R = f.radiator!
     const fx = RAD_FITTING_X[R.kind]
     return PUMP_FITTINGS.map((pf, i) => {
-      const offset = lift ? installPath(f.id, 'cooler.1', [0, 0, 1.9]).map(n => n * 100) as Mm3 : [0, 0, 0] as Mm3
+      const offset = installPath(f.id, 'cooler.1', [0, 0, 1.9]).map(n => n * 100 * lift) as Mm3
       const a = add(add(ihs, pf), offset)
       const b = add(R.origin, [fx, -40, i === 0 ? -15 : 15])
       const midY = (a[1] + b[1] - 50) / 2

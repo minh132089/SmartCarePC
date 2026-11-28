@@ -114,7 +114,8 @@ public class UpgradeService {
 
     private static final List<Map<String, Object>> TOOLS = List.of(
             tool("search_products", "Search Vietnamese computer stores for real products. Each result has a short id, title, "
-                    + "shop, price_vnd, verified (price read on the store page) and in_stock.",
+                    + "shop, price_vnd, verified (price read on the store page) and in_stock. price_trend (when present) is the "
+                    + "last week's price and stock history: when parts are otherwise equal, prefer the stable, in-stock one.",
                     Map.of("type", "object", "properties", Map.of(
                             "query", Map.of("type", "string", "description", "Short query for one part type or one model")),
                             "required", List.of("query"))),
@@ -133,9 +134,9 @@ public class UpgradeService {
                                     "required", List.of("category", "product_id")))),
                             "required", List.of("items"))));
 
-    private static final Pattern WATTS = Pattern.compile("(\\d{3,4})\\s*w\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NVME = Pattern.compile("\\b(nvme|m\\.?2|pcie)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern SFX = Pattern.compile("\\bsfx", Pattern.CASE_INSENSITIVE);
+    private static final Pattern WATTS = Pattern.compile("(\\d{3,4})\\s*w\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern NVME = Pattern.compile("\\b(nvme|m\\.?2|pcie)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern SFX = Pattern.compile("\\bsfx", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     private final LlmClient client;
     private final ProductSearch search;
@@ -190,6 +191,8 @@ public class UpgradeService {
         /** Câu mới nhất xin phương án rẻ hơn: kế hoạch mới phải rẻ hơn kế hoạch trước */
         volatile boolean wantsCheaper;
         String requiredGpuVendor;
+        /** Mục đích và lời người dùng (để đọc yêu cầu như VRAM tối thiểu khi giải thích vì sao không có kế hoạch) */
+        volatile String userText = "";
         RamGoal ramGoal;
         /** Món bị bỏ ở lần đề xuất cuối vì không kiểm tra được giá / còn hàng */
         volatile List<String> dropped = List.of();
@@ -219,6 +222,8 @@ public class UpgradeService {
         if (budget != null) pc = new UpgradeInfo(pc.cpu(), pc.motherboard(), pc.ram(), pc.gpu(), pc.storage(), pc.psu(),
                 pc.caseSize(), pc.purpose(), budget);
         Turn turn = new Turn(pc);
+        turn.userText = pc.purpose() + " " + history.stream().filter(m -> "user".equals(m.role())).map(ChatRequest.Message::content)
+                .filter(Objects::nonNull).reduce("", (a, b) -> a + " " + b);
         if (laptop(turn.pc)) {
             return new ChatResponse("This upgrade adviser is for desktop PCs. Laptop upgrades depend on the exact model: many have "
                     + "soldered memory and a single M.2 slot, so check the manufacturer's service manual for your model or ask a repair "
@@ -259,20 +264,29 @@ public class UpgradeService {
         }
         int searchRounds = 0, proposeRounds = 0;
         boolean nudged = false, retried = false;
+        long started = System.nanoTime();
         for (int round = 0; round < MAX_ROUNDS && !Io.expired(); round++) {
+            // Sắp hết giờ mà kế hoạch đã kiểm tra xong: trả kế hoạch, không chờ AI viết thêm (xem ChatService.ANSWER_BUDGET)
+            if (round > 0 && ChatService.wrapUp() && turn.plan != null) {
+                log.info("Upgrade vòng {}: còn {} ms, đã có kế hoạch, trả kết quả không chờ thêm lượt AI", round + 1,
+                        Io.remainingNanos(Long.MAX_VALUE) / 1_000_000);
+                return respond(null, turn);
+            }
+            boolean lateSearch = System.nanoTime() - started > ChatService.SEARCH_CUTOFF.toNanos();
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("max_tokens", maxTokens);
             if (disableThinking) body.put("thinking", Map.of("type", "disabled"));
             body.put("messages", messages);
-            body.put("tools", searchRounds >= MAX_SEARCH_ROUNDS
+            body.put("tools", searchRounds >= MAX_SEARCH_ROUNDS || lateSearch
                     ? TOOLS.stream().filter(t -> !"search_products".equals(((Map<?, ?>) t.get("function")).get("name"))).toList()
                     : TOOLS);
             if (proposeRounds >= MAX_PROPOSE_ROUNDS) body.put("tool_choice", "none");
             var first = Io.async(() -> client.complete(body));
             Map<String, Object> res;
             try {
-                res = Io.await(first, Duration.ofSeconds(40), null);
+                var wait = ChatService.aiWait();
+                res = wait.isZero() ? null : Io.await(first, wait, null);
             } catch (AiUnavailableException e) {
                 if (turn.plan == null) throw e;
                 log.warn("Upgrade: provider failed after the plan was checked; returning the checked card");
@@ -281,8 +295,9 @@ public class UpgradeService {
             // AI chậm một lượt (nhà cung cấp quá tải): còn thời gian thì gọi thêm một lần, vẫn giữ lượt đầu, nhận lượt nào xong trước
             if (res == null && turn.plan == null && !retried && Io.remainingNanos(Long.MAX_VALUE) > Duration.ofSeconds(25).toNanos()) {
                 retried = true;
-                log.warn("Upgrade: AI không trả lời trong 40 giây, gọi thêm một lần");
-                res = Io.await(firstSuccess(first, Io.async(() -> client.complete(body))), Duration.ofSeconds(40), null);
+                log.warn("Upgrade: AI không trả lời kịp, gọi thêm một lần");
+                var again = ChatService.aiWait();
+                res = again.isZero() ? null : Io.await(firstSuccess(first, Io.async(() -> client.complete(body))), again, null);
             }
             if (res == null) {
                 if (turn.plan != null) return respond(null, turn);
@@ -307,7 +322,7 @@ public class UpgradeService {
             }
             messages.add(message);
             var names = calls.stream().map(c -> String.valueOf(((Map<?, ?>) c.get("function")).get("name"))).toList();
-            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS;
+            boolean searchClosed = searchRounds >= MAX_SEARCH_ROUNDS || lateSearch;
             boolean proposeClosed = proposeRounds >= MAX_PROPOSE_ROUNDS;
             if (names.contains("search_products") && !searchClosed) {
                 searchRounds++;
@@ -342,10 +357,10 @@ public class UpgradeService {
     }
 
     private static final Pattern FOLLOW_UP_BUDGET = Pattern.compile(
-            "(?iu)(?:\\b(?:total\\s+)?budget\\b|ngân sách)\\s*:?\\s*"
+            "(?iuU)(?:\\b(?:total\\s+)?budget\\b|ngân sách)\\s*:?\\s*"
                     + "(?:(?:is|now|of|to|only|just|up to|at most|maximum|là|còn|chỉ|của tôi|của mình|có|hiện tại|bây giờ|lên|xuống|tối đa)\\s+){0,6}"
                     + "((?:vnd\\s*)?\\d+(?:[.,]\\d+)*\\s*(?:million|mil|triệu|tr\\b|củ|m\\b|vnd|đồng|đ|₫)?)");
-    private static final Pattern NEGATED_BUDGET = Pattern.compile("(?iu)\\b(?:don't|do not|not|không|đừng)\\b[^.!?;\\n]*$");
+    private static final Pattern NEGATED_BUDGET = Pattern.compile("(?iuU)\\b(?:don't|do not|not|không|đừng)\\b[^.!?;\\n]*$");
     private static final Pattern COMPONENT_BUDGET = Pattern.compile("(?iu)\\b(?:gpu|card|vga|ram|memory|ssd|storage|cpu|motherboard|psu|case|cooler)\\s+$");
 
     /** Only explicit total-budget statements in follow-ups override the form, never a quoted component price. */
@@ -420,12 +435,194 @@ public class UpgradeService {
             m.put("verified", checked != null);
             var offer = search.offer(p.url());
             if (offer != null && offer.inStock() != null) m.put("in_stock", offer.inStock());
+            String trend = search.trend(p.url());
+            if (trend != null) m.put("price_trend", trend);
             rows.add(m);
         }
+        log.info("Upgrade: tìm \"{}\": {} kết quả, {} đã xác minh giá, giá {}", query, rows.size(),
+                rows.stream().filter(r -> Boolean.TRUE.equals(r.get("verified"))).count(), rows.stream().map(r -> r.get("price_vnd")).toList());
         return rows;
     }
 
     /** Giá đọc trên chính trang cửa hàng, đúng sản phẩm và còn hàng; null nếu chưa đủ chứng cứ */
+    /**
+     * Giá đã xác minh của món: dùng bằng chứng còn hạn, chưa có thì đọc chính trang sản phẩm ngay (24/11: bên nâng cấp chỉ xem
+     * bằng chứng có sẵn, món chưa ai mở trang bị coi là "không xác minh được" dù đọc trang là xác minh được)
+     */
+    private Offer confirm(ProductSearch.Product p) {
+        Offer offer = checked(p);
+        if (offer != null || p == null || p.url() == null) return offer;
+        if (Io.remainingNanos(Long.MAX_VALUE) < Duration.ofSeconds(12).toNanos()) return null;
+        search.refreshQuote(p.url(), p.title());
+        return checked(p);
+    }
+
+    private static final java.util.regex.Pattern VRAM_MIN = java.util.regex.Pattern.compile(
+            "(?iu)(?:at least|minimum|min\\.?|≥|>=|tối thiểu|ít nhất|từ)\\s*(\\d{1,2})\\s*gb|(\\d{1,2})\\s*gb\\s*(?:vram|or more|trở lên)");
+
+    /**
+     * Không có kế hoạch vì món đáp ứng yêu cầu đều vượt ngân sách: nói rõ món rẻ nhất đã xác minh và vượt bao nhiêu, thay cho câu
+     * chung chung (ca kiểm tra 24/11 ai-vram: card NVIDIA 12 GB rẻ nhất 10,999 triệu, ngân sách 10 triệu, người dùng chỉ nhận
+     * "không khuyên mua"). Hiện chỉ cho card đồ họa có VRAM tối thiểu; null nếu không áp dụng.
+     */
+    String cheapestOverBudget(Turn turn) {
+        Integer vramNeed = vramNeed(turn);
+        if (vramNeed == null) return cheapestAskedOverBudget(turn);
+        int need = vramNeed;
+        ProductSearch.Product best = null;
+        Offer bestOffer = null;
+        for (var p : turn.results.values()) {
+            if (p.title() == null || !"gpu".equals(PriceEngine.kind(PriceEngine.norm(p.title())))) continue;
+            Integer vram = ChatService.vram(p.title());
+            if (vram == null || vram < need) continue;
+            if (turn.requiredGpuVendor != null && !turn.requiredGpuVendor.equals(ChatService.vendorOf(ChatService.gpuChip(p.title())))) continue;
+            Offer o = checked(p);
+            if (o == null || o.priceVnd() == null) continue;
+            if (bestOffer == null || o.priceVnd() < bestOffer.priceVnd()) { best = p; bestOffer = o; }
+        }
+        long budget = turn.pc.budgetVnd();
+        if (best == null || bestOffer.priceVnd() <= budget) return null;
+        return "No graphics card with at least " + need + " GB of VRAM fits your " + ChatService.millions(budget)
+                + " budget at today's store prices. The cheapest one I could confirm is " + best.title() + " at "
+                + ChatService.millions(bestOffer.priceVnd()) + (best.shop() == null ? "" : " (" + best.shop() + ")") + ", "
+                + ChatService.millions(bestOffer.priceVnd() - budget) + " over your budget. Keep your current card for now, raise the "
+                + "budget by about that amount, or ask again later: graphics card prices change often.";
+    }
+
+    /** VRAM tối thiểu người dùng nêu ("at least 12GB VRAM"); null nếu không nêu */
+    private static Integer vramNeed(Turn turn) {
+        var m = VRAM_MIN.matcher(turn.userText == null ? "" : turn.userText);
+        return m.find() ? Integer.valueOf(m.group(1) != null ? m.group(1) : m.group(2)) : null;
+    }
+
+    private static final Map<String, Pattern> ASKED = Map.of(
+            "ssd", Pattern.compile("(?iu)\\b(storage|ssd|hdd|hard (?:disk|drive)|drive|ổ cứng|o cung)\\b"),
+            "ram", Pattern.compile("(?iu)\\b(ram|memory|bộ nhớ)\\b(?!\\s*slots?)"),
+            "gpu", Pattern.compile("(?iu)\\b(gpu|graphics card|video card|vga|card (?:đồ họa|màn hình)|rtx|gtx|radeon)\\b"));
+
+    /** Loại linh kiện người dùng nêu tên để nâng cấp ("Upgrade storage first", "only my RAM"); nêu nhiều loại hoặc không nêu thì null */
+    static String askedCategory(String text) {
+        if (text == null) return null;
+        List<String> hits = ASKED.entrySet().stream().filter(e -> e.getValue().matcher(text).find()).map(Map.Entry::getKey).toList();
+        return hits.size() == 1 ? hits.getFirst() : null;
+    }
+
+    /** Kết quả đã tìm của lượt này, đúng loại người dùng nêu, đã xác minh giá và còn hàng, rẻ nhất trước */
+    private List<Map.Entry<ProductSearch.Product, Offer>> checkedOfAsked(Turn turn, String category) {
+        String ddr = "ram".equals(category) ? ramType(turn.pc) : null;
+        List<Map.Entry<ProductSearch.Product, Offer>> out = new ArrayList<>();
+        for (var p : new LinkedHashSet<>(turn.results.values())) {
+            if (p.title() == null || !category.equals(PriceEngine.kind(PriceEngine.norm(p.title())))) continue;
+            if ("ram".equals(category) && (ChatService.serverRam(p.title()) || ddr != null
+                    && !ddr.equals(ProductRules.read("ram", p.title()).ramType()))) continue;
+            Integer goal = "ram".equals(category) ? ramGoalOf(turn) : null;
+            if (goal != null) {
+                Integer gb = ChatService.amount("ram", p.title());
+                if (gb == null || gb < goal) continue;
+            }
+            if ("gpu".equals(category) && turn.requiredGpuVendor != null
+                    && !turn.requiredGpuVendor.equals(ChatService.vendorOf(ChatService.gpuChip(p.title())))) continue;
+            // Không gợi ý card dưới mức VRAM người dùng nêu (full 24/11 ai-vram: cần 12 GB, lời nhắc đưa RTX 4060 8GB, trợ lý
+            // từ chối đúng rồi người dùng nhận câu chung "không xác nhận được giá")
+            Integer vramNeed = "gpu".equals(category) ? vramNeed(turn) : null;
+            if (vramNeed != null && (ChatService.vram(p.title()) == null || ChatService.vram(p.title()) < vramNeed)) continue;
+            Offer o = checked(p);
+            if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock()) || !ChatService.plausible(category, o.priceVnd())) continue;
+            out.add(Map.entry(p, o));
+        }
+        out.sort(java.util.Comparator.comparingLong(e -> e.getValue().priceVnd()));
+        return out;
+    }
+
+    /** Trợ lý chốt 0 món dù người dùng nêu loại cần nâng cấp và kết quả đã có món vừa ngân sách: nhắc lại, kèm vài món đó */
+    String emptyPlanNudge(Turn turn) {
+        String category = askedCategory(turn.userText);
+        if (category == null || "ram".equals(category) && ramType(turn.pc) == null) return null;
+        var fits = checkedOfAsked(turn, category).stream().filter(e -> e.getValue().priceVnd() <= turn.pc.budgetVnd()).limit(3).toList();
+        if (fits.isEmpty()) return null;
+        String list = fits.stream().map(e -> "\"" + e.getKey().title() + "\" (" + ChatService.millions(e.getValue().priceVnd()) + ")")
+                .collect(java.util.stream.Collectors.joining(", "));
+        return "The owner asked to upgrade the " + plainName(category) + ", so an empty plan does not answer "
+                + "the request. These search results have a verified price and stock within the budget: " + list + ". Propose one that "
+                + "fits this PC; only if none can fit, return no items and state the concrete reason.";
+    }
+
+    /** Dung lượng RAM người dùng muốn: từ mục đích, không có thì từ lời nhắn ("upgrade only my RAM to 32GB") */
+    private static Integer ramGoalOf(Turn turn) {
+        return turn.ramGoal != null ? Integer.valueOf(turn.ramGoal.gb()) : ChatService.requestedRam(List.of(turn.userText));
+    }
+
+    private static String plainName(String category) {
+        return switch (category) {
+            case "ssd" -> "SSD";
+            case "ram" -> "memory";
+            case "gpu" -> "graphics card";
+            default -> CATEGORIES.get(category).toLowerCase(Locale.ROOT);
+        };
+    }
+
+    /** Không có kế hoạch vì món rẻ nhất (đã xác minh) của loại người dùng nêu vẫn vượt ngân sách: nói rõ món, giá và số tiền thiếu */
+    String cheapestAskedOverBudget(Turn turn) {
+        String category = askedCategory(turn.userText);
+        if (category == null) return null;
+        var all = checkedOfAsked(turn, category);
+        long budget = turn.pc.budgetVnd();
+        if (all.isEmpty() || all.getFirst().getValue().priceVnd() <= budget) return null;
+        var best = all.getFirst();
+        Integer goal = ramGoalOf(turn);
+        String what = "ram".equals(category) && goal != null ? goal + " GB " + Objects.requireNonNullElse(ramType(turn.pc), "") + " memory kit"
+                : plainName(category);
+        return "No " + what.replaceAll("\\s+", " ").strip() + " fits your " + ChatService.millions(budget) + " budget at today's store prices. "
+                + "The cheapest one I could confirm is " + best.getKey().title() + " at " + ChatService.millions(best.getValue().priceVnd())
+                + (best.getKey().shop() == null ? "" : " (" + best.getKey().shop() + ")") + ", "
+                + ChatService.millions(best.getValue().priceVnd() - budget) + " over your budget. Keep your current part for now, raise the "
+                + "budget by about that amount, or ask again later: prices change often.";
+    }
+
+    /** Số món cùng thông số được đọc trang khi món trợ lý chọn không xác minh được */
+    static final int ALTERNATIVES_TO_READ = 3;
+
+    /**
+     * Món cùng loại và cùng thông số (upgradeSameSpec), giá đã xác minh: món đã có bằng chứng thì lấy rẻ nhất; không có thì đọc
+     * trang tối đa ALTERNATIVES_TO_READ món rẻ nhất trong các kết quả đã tìm của lượt này
+     */
+    private Map.Entry<ProductSearch.Product, Offer> verifiedAlternative(String category, String want, ProductSearch.Product chosen, Turn turn) {
+        List<ProductSearch.Product> same = new ArrayList<>();
+        Map.Entry<ProductSearch.Product, Offer> best = null;
+        for (var q : turn.results.values()) {
+            if (q == chosen || q.title() == null || q.url() == null || same.contains(q)) continue;
+            if (!want.equals(PriceEngine.kind(PriceEngine.norm(q.title())))) continue;
+            if (!upgradeSameSpec(category, chosen.title(), q.title())) continue;
+            if ("ram".equals(category) && ChatService.serverRam(q.title())) continue;
+            same.add(q);
+            Offer o = checked(q);
+            if (o == null || o.priceVnd() == null || Boolean.FALSE.equals(o.inStock())) continue;
+            if (best == null || o.priceVnd() < best.getValue().priceVnd()) best = Map.entry(q, o);
+        }
+        if (best != null) return best;
+        same.sort(java.util.Comparator.comparing(q -> q.priceVnd() == null ? Long.MAX_VALUE : q.priceVnd()));
+        for (var q : same.subList(0, Math.min(ALTERNATIVES_TO_READ, same.size()))) {
+            Offer o = confirm(q);
+            if (o != null && o.priceVnd() != null && !Boolean.FALSE.equals(o.inStock())) return Map.entry(q, o);
+        }
+        return null;
+    }
+
+    /**
+     * Cùng thông số để đổi món chưa xác minh giá. SSD: dung lượng lệch tối đa 10% (500 GB và 512 GB là một hạng) và cùng chuẩn
+     * cắm M.2 hay SATA (bo máy cũ có thể không có khe M.2). Loại khác theo ChatService.sameSpec.
+     */
+    static boolean upgradeSameSpec(String category, String now, String other) {
+        if (!"ssd".equals(category)) return ChatService.sameSpec(category, now, other);
+        Integer a = ChatService.amount("ssd", now), b = ChatService.amount("ssd", other);
+        if (a == null || b == null || Math.abs(a - b) > a * 0.1) return false;
+        return m2(now) == m2(other);
+    }
+
+    private static boolean m2(String title) {
+        return title.matches("(?iu).*\\b(?:m[.\\s]?2|nvme|pcie)\\b.*") && !title.matches("(?iu).*\\b2[.,]5\\s*(?:inch|in|[\"”]).*");
+    }
+
     private Offer checked(ProductSearch.Product p) {
         if (p == null || p.url() == null) return null;
         Offer offer = search.offer(p.url());
@@ -450,11 +647,12 @@ public class UpgradeService {
                 errors.add("Only one " + category + " line is allowed; use buy_qty for several of the same product.");
                 continue;
             }
-            var p = turn.results.get(id);
-            if (p == null) {
+            var found = turn.results.get(id);
+            if (found == null) {
                 errors.add(category + ": product_id \"" + id + "\" is not a search result. Pick an id returned by search_products.");
                 continue;
             }
+            var p = found;
             String kind = PriceEngine.kind(PriceEngine.norm(p.title()));
             String want = "motherboard".equals(category) ? "mainboard" : category;
             if (kind != null && !kind.equals(want)) {
@@ -465,12 +663,23 @@ public class UpgradeService {
                 errors.add("ram: \"" + p.title() + "\" is server memory (ECC / registered) and does not suit a desktop PC.");
                 continue;
             }
-            Offer offer = checked(p);
+            Offer offer = confirm(p);
             if (offer == null) {
-                errors.add(category + ": the price or stock of \"" + p.title() + "\" could not be confirmed on the store page. "
-                        + "Choose a result with verified = true and in_stock = true.");
-                continue;
+                // Món chưa xác minh được giá: tự lấy món cùng thông số đã xác minh trong kết quả tìm (ca kiểm tra 23/11: RAM DDR5
+                // 32GB chưa xác minh, trợ lý bỏ cuộc với 0 món dù kết quả có bộ khác cùng thông số)
+                var alt = verifiedAlternative(category, want, p, turn);
+                if (alt != null) {
+                    log.info("Upgrade: {} \"{}\" chưa xác minh giá, dùng món cùng thông số \"{}\" ({})", category, p.title(),
+                            alt.getKey().title(), alt.getValue().priceVnd());
+                    p = alt.getKey();
+                    offer = alt.getValue();
+                } else {
+                    errors.add(category + ": the price or stock of \"" + p.title() + "\" could not be confirmed on the store page. "
+                            + "Choose a result with verified = true and in_stock = true.");
+                    continue;
+                }
             }
+            search.track(p.url(), p.title());
             Object rawQty = item.get("buy_qty");
             if (rawQty != null && (!(rawQty instanceof Number q) || !Double.isFinite(q.doubleValue())
                     || q.doubleValue() != q.intValue() || q.intValue() < 1 || q.intValue() > 4)) {
@@ -530,6 +739,11 @@ public class UpgradeService {
                     + "previous plan (" + ChatService.millions(turn.previousTotal) + "). Count any extra power supply too, and choose parts that "
                     + "cost less in total.");
         }
+        if (errors.isEmpty() && picks.isEmpty() && !lastChance) {
+            // Ca acceptance 24/11 office-hdd: tìm ra 8 SSD đã xác minh giá 1,59 - 1,95 triệu (ngân sách 3,5 triệu) mà trợ lý chốt 0 món
+            String nudge = emptyPlanNudge(turn);
+            if (nudge != null) errors.add(nudge);
+        }
         if (!errors.isEmpty()) {
             turn.lastErrors = List.copyOf(errors);
             log.info("Upgrade: đề xuất chưa đạt: {}", errors);
@@ -542,6 +756,7 @@ public class UpgradeService {
         }
         turn.plan = new Plan(text(input.get("summary")), List.copyOf(picks), warnings, unknowns);
         log.info("Upgrade: chốt {} món, tổng {}", picks.size(), total);
+        if (picks.isEmpty()) log.info("Upgrade: trợ lý chốt không mua gì, tóm tắt: {}", String.valueOf(input.get("summary")).replaceAll("\\s+", " "));
         Map<String, Object> ok = new LinkedHashMap<>();
         ok.put("ok", true);
         ok.put("total_vnd", total);
@@ -762,12 +977,16 @@ public class UpgradeService {
         if (fresh != null && fresh < need) {
             errors.add("psu: \"" + psu.product().title() + "\" (" + fresh + "W) is below the " + need + "W this PC's graphics card needs.");
         }
+        if (psu != null && (gpu != null || oldGpu) && !ChatService.psuTrusted(psu.product().title())) {
+            errors.add("psu: \"" + psu.product().title() + "\" has no 80 Plus / Cybenetics rating and is not from an established power "
+                    + "supply brand. Choose a certified unit for a PC with a graphics card.");
+        }
         Pick caseNew = by.get("case");
         boolean newCase = caseNew != null;
         boolean sfxPsu = psu != null && SFX.matcher(psu.product().title()).find();
         if (psu != null && newCase && !sfxPsu) {
             String c = caseNew.product().title().toLowerCase(Locale.ROOT);
-            boolean atxPsu = c.matches(".*\\batx\\s*(psu|power|nguồn)\\b.*|.*\\bps2\\b.*") && !c.matches(".*\\bsfx\\b.*\\bonly\\b.*");
+            boolean atxPsu = c.matches("(?U).*\\batx\\s*(psu|power|nguồn)\\b.*|.*\\bps2\\b.*") && !c.matches(".*\\bsfx\\b.*\\bonly\\b.*");
             boolean small = c.matches(".*\\b(itx|sff|sfx)\\b.*") || c.matches(".*\\bmini\\b(?!\\s*-?\\s*tower).*");
             if (small && !atxPsu) {
                 errors.add("psu: the new case \"" + caseNew.product().title() + "\" is a small (ITX / SFF) case that usually takes only SFX "
@@ -846,14 +1065,14 @@ public class UpgradeService {
     }
 
     private static final Pattern AI_USE = Pattern.compile(
-            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE);
+            "\\b(ai|machine learning|deep learning|stable diffusion|llms?|cuda|pytorch|tensorflow|comfyui)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern GAMING_USE = Pattern.compile(
-            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE);
+            "\\b(gam(e|es|ing)|fps|esports?|valorant|cs2|pubg|fortnite|league of legends|lol|gta|cyberpunk|elden ring)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Việc cần nhiều RAM ngoài game: có thì không chặn mua thêm RAM */
     private static final Pattern HEAVY_USE = Pattern.compile(
             "\\b(stream(ing)?|video|edit(ing)?|premiere|resolve|render|3d|blender|program(ming)?|docker|android studio|virtual machine|vm|ai|"
-                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE);
-    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE);
+                    + "machine learning|llm|photoshop|design|mods?)\\b|dựng phim|lập trình|thiết kế", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern OLD_GT = Pattern.compile("\\bgt\\s?(710|730|1030)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /**
      * Công suất nguồn hãng khuyên cho cả máy, bổ sung GPU_PSU cho card yếu / mạnh mà máy cũ hay có. GPU_PSU của trang lắp máy
      * mới để mặc định 550W và sàn 450W khi chọn nguồn mới; với nguồn ĐANG CÓ thì phải theo đúng mức của card (GTX 1650,
@@ -1015,11 +1234,11 @@ public class UpgradeService {
     /** Chipset đời cũ phần lớn không có khe M.2 (Intel 6x/7x/8x, AMD FM2+/AM3+); vài mẫu có, nên chỉ cảnh báo */
     static final Set<String> NO_M2 = Set.of("h61", "h67", "p67", "z68", "b75", "h77", "z77", "q77", "h81", "b85", "h87", "z87", "q87",
             "a68h", "a78", "a88x", "970", "990fx", "990x");
-    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE);
-    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CHIPSET_TOKEN = Pattern.compile("\\b(a68h|a88x|990fx|990x|970|[abhqpxz]\\d{2,3})[a-z]?\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern STICKS = Pattern.compile("(\\d)\\s*(sticks?|thanh)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern ITX_BOARD = Pattern.compile("\\bitx\\b|\\b[abhxz]\\d{3}e?[-\\s]?i\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern KIT_COUNT = Pattern.compile("(\\d)\\s*[x×]\\s*\\d+\\s*gb", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern KIT_COUNT_AFTER = Pattern.compile("\\d+\\s*gb\\s*[x×]\\s*(\\d)\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     /** Mã chipset trong tên bo ("ASUS H81M-K" -> "h81"), null nếu không đọc được */
     static String chipsetToken(String board) {
@@ -1052,7 +1271,7 @@ public class UpgradeService {
         if (m.find()) return Integer.parseInt(m.group(1));
         var after = KIT_COUNT_AFTER.matcher(title);
         if (after.find()) return Integer.parseInt(after.group(1));
-        return title.toLowerCase(Locale.ROOT).matches(".*\\b(kit|dual channel|bộ)\\b.*") ? null : 1;
+        return title.toLowerCase(Locale.ROOT).matches("(?U).*\\b(kit|dual channel|bộ)\\b.*") ? null : 1;
     }
 
     /** Công suất nguồn người dùng ghi, vd "550W", "Cooler Master 650 W"; null nếu không đọc được */
@@ -1108,12 +1327,17 @@ public class UpgradeService {
         String reply = draft == null ? null : checkedReply(draft.replaceAll("(?s)<think>.*?</think>", ""), turn);
         if (plan == null) return new ChatResponse(noPlan(turn));
         if (plan.items().isEmpty()) {
+            // Lỗi duy nhất là lời nhắc "kế hoạch rỗng" mà trợ lý vẫn chốt 0 món: báo món rẻ nhất đạt yêu cầu và số tiền thiếu nếu có
+            boolean onlyEmptyNudge = !turn.lastErrors.isEmpty() && turn.lastErrors.stream().allMatch(e -> e.contains("an empty plan does not answer"));
+            if (onlyEmptyNudge && cheapestOverBudget(turn) != null) return new ChatResponse(cheapestOverBudget(turn));
             if (!turn.lastErrors.isEmpty()) return new ChatResponse(noPlan(turn));
             if (ramType(turn.pc) == null && turn.pc.purpose().toLowerCase(Locale.ROOT).matches(".*\\b(ram|memory)\\b.*")) {
                 return new ChatResponse("Before choosing RAM, check its DDR generation and the number of free memory slots. "
                         + "Read the label on a memory module, or find the motherboard model in Windows System Information "
                         + "(BaseBoard Product) and check its manual. Update your PC details with that information and ask again.");
             }
+            String overBudget = cheapestOverBudget(turn);
+            if (overBudget != null) return new ChatResponse(overBudget);
             return new ChatResponse("I am not recommending a purchase for this budget and request. Keep your current parts for now. "
                     + "If something still feels slow, describe that symptom and confirm your motherboard and power supply details "
                     + "so the next upgrade can target the problem.");
@@ -1162,20 +1386,20 @@ public class UpgradeService {
         out.append(" More RAM helps when your applications run out of memory.");
         var others = picks.stream().filter(p -> !"ram".equals(p.category())).map(p -> p.product().title()).toList();
         if (!others.isEmpty()) out.append(" Also buy: ").append(String.join("; ", others)).append('.');
-        out.append(" Keep the other current parts. Check the fit and installation conditions on the card before buying.");
+        out.append(" Keep the other current parts. Before buying, check that the memory type and speed match your motherboard.");
         return out.toString();
     }
 
-    private static final Pattern MILLIONS = Pattern.compile("(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MILLIONS = Pattern.compile("(?U)(?<![\\p{L}\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(million|mil|triệu|tr|m)\\b(?!\\.\\d)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern DONG = Pattern.compile(
-            "(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
-                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE);
+            "(?U)(?:(?:vnd|₫)\\s*(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})(?![\\d.,]*\\s*(?:million|mil|triệu|tr|m)\\b))"
+                    + "|(?:(?<![\\p{L}\\d.,])(\\d{1,3}(?:[.,]\\d{3})+|\\d{4,})\\s*(?:vnd|₫|đồng|đ|dong)(?![\\p{L}\\d]))", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Số kiểu hàng nghìn ("10,000,000", "1.190.000") hoặc từ 6 chữ số (mã CPU như 12400 có 5), không kèm đơn vị đo (MHz, GB, W, mm...) */
     private static final Pattern BARE = Pattern.compile(
-            "(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
-            Pattern.CASE_INSENSITIVE);
+            "(?U)(?<![\\p{L}\\d.,-])(\\d{1,3}(?:[.,]\\d{3})+|\\d{6,})(?![\\d.,]*\\s*(?:mhz|ghz|hz|gb|tb|mb|w|mm|cm|rpm|p|fps|x|million|mil|triệu|tr|m|vnd|₫|đồng|đ|dong)\\b)(?!\\p{L})",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     /** Chữ "giá / costs / priced" đi kèm một con số ngay sau: coi là báo giá */
-    private static final Pattern PRICE_WORD = Pattern.compile("\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PRICE_WORD = Pattern.compile("(?U)\\b(costs?|priced|prices?|giá)\\b[^.!?\\d]{0,20}\\d", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LINK = Pattern.compile("\\[([^\\]]*)\\]\\(\\s*https?://[^)]*\\)|https?://\\S+|www\\.\\S+");
 
     /** Câu có nhắc tiền: số có đơn vị tiền, số kiểu hàng nghìn / từ 5 chữ số không đơn vị đo, hay chữ "giá / costs" kèm số */
@@ -1213,7 +1437,7 @@ public class UpgradeService {
      * câu; bỏ hết thì trả null để dùng câu dẫn có sẵn.
      */
     /** Chữ của công cụ bị trợ lý chép lại ("Plan accepted.") không phải lời tư vấn */
-    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TOOL_ECHO = Pattern.compile("\\b(plan|upgrade|proposal)\\s+(is\\s+|was\\s+|has been\\s+)?accepted\\b", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     static String checkedReply(String draft, Turn turn) {
         if (draft == null) return null;
@@ -1273,13 +1497,13 @@ public class UpgradeService {
 
     private static final Pattern PREVIOUS_PRICE = Pattern.compile("\\((\\d{4,12}) VND\\)");
     private static final Pattern CHEAPER = Pattern.compile(
-            "\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
-            Pattern.CASE_INSENSITIVE);
+            "(?U)\\b(cheaper|less expensive|lower (cost|price)|cost less|costs less|save money|on a tighter budget)\\b|rẻ hơn|đỡ tốn|tiết kiệm hơn",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern LAPTOP_WORDS = Pattern.compile(
-            "\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE);
+            "(?U)\\b(laptop|notebook|macbook|ultrabook|thinkpad|ideapad|vivobook|zenbook)\\b|máy tính xách tay|xách tay", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern MOBILE_CPU = Pattern.compile(
             "\\bi[3579][\\s-]*\\d{4,5}(u|h|hs|hx|hk|g[1-7]|p|y)\\b|\\bryzen\\s*[3579]\\s*\\d{4}(u|h|hs|hx)\\b|\\bultra\\s*[579]\\s*\\d{3}(h|u|v)\\b",
-            Pattern.CASE_INSENSITIVE);
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS);
 
     /** Laptop (theo lời người dùng hay mã CPU di động như i5-1135G7, Ryzen 5 5500U): app chỉ tư vấn máy để bàn */
     static boolean laptop(UpgradeInfo pc) {

@@ -28,6 +28,19 @@ public final class ProductRules {
     }
 
     /** Số khe theo đúng SKU, nguồn hãng ghi tại docs/ai-advice-standard.md; không suy từ chipset. */
+    /**
+     * Tản đã đối chiếu socket trên trang hãng (24/11/2026): thermalright.com Assassin X 120 Refined SE "Intel:115x/1200/1700/1851
+     * AMD:AM4/AM5"; jonsbo.com CR-1200 "Intel LGA115X/1200/1700/1851, AMD AM4/AM5". Tản này khỏi cảnh báo "chưa xác minh gá"
+     * (cảnh báo lặp ở mọi cấu hình làm người mới lo không cần thiết)
+     */
+    static boolean coolerVerified(String title, String socket) {
+        if (title == null || socket == null) return false;
+        String t = title.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
+        boolean known = t.contains("thermalright") && t.contains("assassin x 120 refined se")
+                || t.contains("jonsbo") && t.matches(".*\\bcr 1200\\b.*") && !t.contains("evo");
+        return known && java.util.Set.of("LGA1151", "LGA1200", "LGA1700", "LGA1851", "AM4", "AM5").contains(socket);
+    }
+
     public static Integer memorySlots(String title) {
         if (title == null) return null;
         String t = title.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
@@ -35,8 +48,26 @@ public final class ProductRules {
         if (t.contains("gigabyte") && t.contains("h610m h v3") && t.contains("ddr4")) return 2;
         if (t.contains("gigabyte") && t.contains("b760m gaming plus wifi") && t.contains("ddr4")) return 4;
         if (t.contains("gigabyte") && t.contains("b760 gaming x") && t.contains("ddr4")) return 4;
+        // Đối chiếu trang thông số của hãng 24/11/2026: msi.com PRO B760M-P DDR4 "4x DDR4", PRO A520M-S "2x DDR4";
+        // asus.com PRIME B550M-A "4 x DIMM", PRIME B660M-K D4 "2x DIMM"; gigabyte.com B760M DS3H DDR4 "4 DIMMs"
+        if (t.contains("msi") && t.contains("pro b760m p") && t.contains("ddr4")) return 4;
+        if (t.contains("msi") && t.contains("pro a520m s")) return 2;
+        if (t.contains("asus") && t.contains("prime b550m a")) return 4;
+        if (t.contains("asus") && t.contains("prime b660m k")) return 2;
+        if (t.contains("gigabyte") && t.contains("b760m ds3h") && t.contains("ddr4")) return 4;
+        // gigabyte.com B760M D DDR4: "2 x DDR4 DIMM sockets"
+        if (t.contains("gigabyte") && t.contains("b760m d ddr4")) return 2;
+        // Cửa hàng hay ghi số khe ngay trên tên: "2 khe RAM", "4 khe ram DDR4", "2 x DIMM", "RAM slots: 4" (ca thật 24/11 e08:
+        // "ASRock H610M-H2/M.2 DDR4 | LGA 1700, mATX, 2 khe RAM" nhận 4 thanh mà vẫn báo tương thích)
+        Matcher m = SLOTS_IN_TITLE.matcher(title);
+        if (m.find()) return Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2) != null ? m.group(2) : m.group(3));
         return null;
     }
+
+    private static final Pattern SLOTS_IN_TITLE = Pattern.compile(
+            "(?iu)(?<![\\w.])([1-8])\\s*(?:x\\s*)?(?:khe|slots?)\\s*(?:cắm\\s*)?(?:ram|dimm|ddr\\d?|drr\\d?)\\b"
+                    + "|(?<![\\w.])([1-8])\\s*x?\\s*dimm\\b"
+                    + "|\\b(?:ram|dimm|memory)\\s*slots?\\s*:?\\s*([1-8])\\b");
 
     public enum Severity { ERROR, WARNING, RECOMMENDATION, UNKNOWN }
 
@@ -236,7 +267,15 @@ public final class ProductRules {
                     "The exact motherboard's CPU Support List and minimum BIOS version have not been verified.",
                     "Check the manufacturer's CPU support page for the exact motherboard model before buying."));
         }
-        if (cpu.socket() != null && titles.get("cooler") != null) {
+        String coolerOnly = coolerVendor(titles.get("cooler"));
+        String cpuVendor = cpu.socket() == null ? null : cpu.socket().startsWith("LGA") ? "Intel" : "AMD";
+        if (coolerOnly != null && cpuVendor != null && !coolerOnly.equals(cpuVendor)) {
+            // Ca thật 24/11: "Deepcool ALTA 9 PWM 1700" (chỉ gá LGA1851 / 1700) được chọn cho Ryzen 5 5600 AM4
+            out.add(new Finding("COOLER_SOCKET", Severity.ERROR, List.of("cooler", "cpu"),
+                    "The cooler \"" + titles.get("cooler") + "\" only has " + coolerOnly + " mounting hardware, but the CPU uses socket "
+                            + cpu.socket() + ": it cannot be mounted.",
+                    "Choose a cooler that lists socket " + cpu.socket() + "."));
+        } else if (cpu.socket() != null && titles.get("cooler") != null && !coolerVerified(titles.get("cooler"), cpu.socket())) {
             out.add(new Finding("COOLER_MOUNT", Severity.UNKNOWN, List.of("cooler", "cpu"),
                     "The cooler mounting kit has not been verified for socket " + cpu.socket() + "; Intel and AMD mounting hardware differs.",
                     "Check the cooler specification page for support for " + cpu.socket() + "."));
@@ -252,6 +291,24 @@ public final class ProductRules {
                     "Count included and additional fans before buying; do not exceed the case's supported mounts."));
         }
         return out;
+    }
+
+    private static final Pattern COOLER_INTEL = Pattern.compile(
+            "\\blga\\s*-?\\s*\\d{4}|\\b(?:1700|1851)\\b|\\bnh-l9i\\b|\\bnh-u\\d+si\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern COOLER_AMD = Pattern.compile("\\bam[45]\\b|\\bnh-l9a\\b|\\bwraith\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ANY_INTEL = Pattern.compile("\\bintel\\b|\\blga\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ANY_AMD = Pattern.compile("\\bamd\\b|\\bam[45]\\b|\\bryzen\\b", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Tản chỉ có gá cho một hãng CPU, đọc từ tên: "Intel" khi tên ghi socket Intel (LGA1700, "PWM 1700", NH-L9i) mà không
+     * nhắc AMD; "AMD" khi ghi AM4 / AM5 (NH-L9a, Wraith) mà không nhắc Intel. Tên không ghi gì thì null (không đoán).
+     */
+    static String coolerVendor(String title) {
+        if (title == null) return null;
+        boolean intel = COOLER_INTEL.matcher(title).find(), amd = COOLER_AMD.matcher(title).find();
+        if (intel && !amd && !ANY_AMD.matcher(title).find()) return "Intel";
+        if (amd && !intel && !ANY_INTEL.matcher(title).find()) return "AMD";
+        return null;
     }
 
     /**

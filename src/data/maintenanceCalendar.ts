@@ -15,7 +15,7 @@ function fold(line: string) {
 }
 export function reminderIcs(r: CalendarReminder, now = new Date()) {
   return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SmartCare PC//Maintenance//EN', 'CALSCALE:GREGORIAN',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PC SmartCare//Maintenance//EN', 'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT', `UID:${r.uid}@smartcarepc`, `DTSTAMP:${now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
     `DTSTART;VALUE=DATE:${compact(r.date)}`, `DTEND;VALUE=DATE:${compact(addDays(r.date, 1))}`,
     `RRULE:FREQ=MONTHLY;INTERVAL=${r.months}`, `SUMMARY:${escape(TASKS[r.task].title)}`,

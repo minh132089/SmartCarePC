@@ -184,7 +184,52 @@ export const UPGRADE_FEEDBACK: StudyQuestion[] = [
   },
 ]
 
-export const RATING_QUESTIONS: Record<RatingKind, StudyQuestion[]> = { build: FEEDBACK, maintenance: MAINTENANCE_FEEDBACK, upgrade: UPGRADE_FEEDBACK }
+/**
+ * So với bản trước (v1, trước 23/11/2026): người dùng tự so (feedback-v2). Hiện ngay đầu mọi form chấm sao / góp ý, không hỏi
+ * trước "đã dùng bản cũ chưa" (user 24/11: đây là bản v2, hỏi thẳng luôn). Câu cũ giữ nguyên chữ và key để điểm v1 và v2 vẫn
+ * so được với nhau. Thang 1 - 5, 3 = như cũ.
+ */
+const COMPARE = { type: 'scale', low: "Much worse", high: "Much better" } as const
+const COMPARE_VI = { low: 'Tệ hơn nhiều', high: 'Tốt hơn nhiều' }
+export const COMPARE_V1: StudyQuestion[] = [
+  { key: 'cmp_speed', text: "Compared with before, how fast does the adviser reply now?", hint: "3 means about the same", ...COMPARE,
+    section: "Compared with the earlier version",
+    vi: { text: 'So với trước, trợ lý trả lời nhanh hơn hay chậm hơn?', hint: '3 là như cũ', ...COMPARE_VI, section: 'So với bản trước' } },
+  { key: 'cmp_accuracy', text: "Compared with before, how well do the suggested parts match what you asked for?", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'So với trước, linh kiện gợi ý đúng với yêu cầu của bạn hơn hay kém hơn?', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_clarity', text: "Compared with before, how easy is it to know what to do next (buy, install, maintain)?", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'So với trước, bạn dễ biết việc cần làm tiếp (mua, lắp, bảo dưỡng) hơn hay khó hơn?', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_overall', text: "Overall, compared with the earlier version, the app is…", hint: "3 means about the same", ...COMPARE,
+    vi: { text: 'Nhìn chung, so với bản trước, app…', hint: '3 là như cũ', ...COMPARE_VI } },
+  { key: 'cmp_notes', text: "What is better or worse than before?", type: 'text',
+    vi: { text: 'Điều gì tốt hơn hoặc tệ hơn so với trước?' } },
+]
+
+/** Câu cũ (đã bỏ từ 24/11): chỉ để trang /feedback vẫn hiện đáp án của các phản hồi đã trả lời câu này */
+const USED_V1: StudyQuestion = {
+  key: 'used_v1',
+  text: "Have you used an earlier version of PC SmartCare (before 23 November 2026)?",
+  type: 'single',
+  options: [
+    { value: 'yes', label: "Yes", vi: 'Có' },
+    { value: 'no', label: "No", vi: 'Chưa' },
+    { value: 'unsure', label: "I don't remember", vi: 'Không nhớ' },
+  ],
+  vi: { text: 'Bạn đã từng dùng bản PC SmartCare trước ngày 23/11/2026 chưa?' },
+}
+
+/** Nhóm "so với bản trước" lên đầu, câu cũ theo sau dưới tiêu đề riêng để không lẫn vào nhóm so sánh */
+export function withCompare(base: StudyQuestion[]): StudyQuestion[] {
+  return [...COMPARE_V1, ...base.map((q, i) => i === 0
+    ? { ...q, section: "About this version", ...(q.vi ? { vi: { ...q.vi, section: 'Về bản này' } } : {}) }
+    : q)]
+}
+
+export const RATING_QUESTIONS: Record<RatingKind, StudyQuestion[]> = {
+  build: withCompare(FEEDBACK),
+  maintenance: withCompare(MAINTENANCE_FEEDBACK),
+  upgrade: withCompare(UPGRADE_FEEDBACK),
+}
 
 /** Giá trị "form" gửi lên máy chủ cho từng hộp chấm sao (post_build giữ nguyên như dữ liệu cũ) */
 export const RATING_FORM: Record<RatingKind, string> = { build: 'post_build', maintenance: 'post_maintenance', upgrade: 'post_upgrade' }
@@ -195,7 +240,10 @@ export const RATING_FORM: Record<RatingKind, string> = { build: 'post_build', ma
  */
 export function questionsOf(answers: Record<string, unknown>): StudyQuestion[] {
   const kind = answers.form === 'post_maintenance' ? 'maintenance' : answers.form === 'post_upgrade' ? 'upgrade' : answers.form === 'general' ? answers.feature : 'build'
-  return kind === 'maintenance' ? MAINTENANCE_FEEDBACK : kind === 'upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
+  const base = kind === 'maintenance' ? MAINTENANCE_FEEDBACK : kind === 'upgrade' ? UPGRADE_FEEDBACK : FEEDBACK
+  // Phản hồi có trả lời phần "so với bản trước" (feedback-v2): hiện cả các câu đó trên trang /feedback
+  const legacy = answers.used_v1 != null ? [USED_V1] : []
+  return answers.used_v1 != null || COMPARE_V1.some((q) => answers[q.key] != null) ? [...legacy, ...COMPARE_V1, ...base] : base
 }
 
 /* ---------- Ba nhóm câu lõi: hỏi y nguyên ở lần đầu và cuối nghiên cứu ---------- */

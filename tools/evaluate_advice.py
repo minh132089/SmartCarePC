@@ -13,6 +13,17 @@ MIN_PRICES = 100
 MAX_CAPTURE_GAP_SECONDS = 600
 
 
+
+# Mẫu câu hỏi lại trong bộ ca viết bằng tiếng Việt; app hỏi bằng tiếng Anh. Thêm từ tương đương, không nới luật
+EN_EQUIV = {"ngân sách": "budget", "bao nhiêu": "how much", "chủ yếu": "main use", "mục đích": "use", "làm gì": "use the PC for",
+            "việc gì": "what for", "chưa kiểm chứng": "not been verified", "chưa xác minh": "not verified",
+            "không": "not", "thiếu": "missing", "chưa": "not yet"}
+
+
+def english_pattern(pattern):
+    extra = [en for vi, en in EN_EQUIV.items() if vi in pattern]
+    return pattern + ("|" + "|".join(re.escape(e) for e in extra) if extra else "")
+
 def acceptance_passed(cases_total, price_total, decision_rate, advice_rate, price_rate, threshold=THRESHOLD):
     return (cases_total >= MIN_CASES and price_total >= MIN_PRICES
             and min(decision_rate, advice_rate, price_rate) >= threshold)
@@ -81,12 +92,14 @@ def evaluate_case(gold, result):
         issues.append("đã có bản Rẻ đủ yêu cầu nhưng không ưu tiên khi người dùng muốn rẻ nhất")
     if not cards and "tiers" not in expected and not expected.get("noCards"):
         explanation = result.get("reply", "")
-        specific = re.search(r"Phương án .*(?:thiếu|vượt|chưa tìm|không tìm|chưa đủ)|chưa kiểm chứng|chưa xác minh|(?:RAM|VRAM|SSD|CPU|card).*(?:thiếu|chưa đủ)", explanation, re.I)
+        # App trả lời bằng tiếng Anh từ khi giao diện chuyển sang tiếng Anh: chấp nhận cả hai thứ tiếng, luật chấm giữ nguyên
+        specific = re.search(r"Phương án .*(?:thiếu|vượt|chưa tìm|không tìm|chưa đủ)|chưa kiểm chứng|chưa xác minh|(?:RAM|VRAM|SSD|CPU|card).*(?:thiếu|chưa đủ)"
+                             r"|Option .*(?:missing|over|not found|could not|no )|not (?:yet )?verified|(?:RAM|VRAM|SSD|CPU|card|GPU).*(?:missing|not enough|too low)", explanation, re.I)
         if not expected.get("allowUnavailable") or not specific:
             issues.append("chưa có phương án và chưa giải thích được lý do")
-    if expected.get("mustExplainMoney") and not re.search(r"\d+(?:[.,]\d+)?\s*(?:triệu|tr\b)", result.get("reply", ""), re.I):
+    if expected.get("mustExplainMoney") and not re.search(r"\d+(?:[.,]\d+)?\s*(?:triệu|tr\b|million)", result.get("reply", ""), re.I):
         issues.append("thiếu giải thích bằng số tiền")
-    if expected.get("replyPattern") and not re.search(expected["replyPattern"], result.get("reply", ""), re.I):
+    if expected.get("replyPattern") and not re.search(english_pattern(expected["replyPattern"]), result.get("reply", ""), re.I):
         issues.append("chưa hỏi lại hoặc giải thích đúng điểm cần xác nhận")
     for tier, card in by_tier.items():
         lines = card.get("items") or []
@@ -104,9 +117,9 @@ def evaluate_case(gold, result):
         if budget is not None and total > tier_cap(budget, tier):
             issues.append(f"{tier}: vượt ngân sách")
         if budget is not None and total > budget:
-            name = {"cheap": "Rẻ", "balanced": "Phù hợp", "quality": "Chất lượng"}.get(tier, tier)
-            row = next((row for row in result.get("reply", "").splitlines() if f"**{name}:" in row), "")
-            if "vượt ngân sách" not in row or "gợi ý chính" in row:
+            names = {"cheap": ("Rẻ", "Budget"), "balanced": ("Phù hợp", "Best fit"), "quality": ("Chất lượng", "Upgraded")}.get(tier, (tier,))
+            row = next((row for row in result.get("reply", "").splitlines() if any(f"**{n}:" in row for n in names)), "")
+            if not re.search(r"vượt ngân sách|over budget", row, re.I) or re.search(r"gợi ý chính|recommended", row, re.I):
                 issues.append(f"{tier}: lời tư vấn chưa ghi rõ vượt ngân sách gốc")
         for line in lines:
             if not line.get("sourceUrl") or line.get("priceMaxVnd") is None:

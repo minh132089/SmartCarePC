@@ -65,7 +65,7 @@ public class PriceEngine {
             Map.entry("case", Pattern.compile("^vo\\b|\\bvo may tinh\\b|\\bvo case\\b|^case\\b")),
             Map.entry("mainboard", Pattern.compile("\\bbo mach chu\\b|\\bmainboard\\b|^main\\b")),
             Map.entry("gpu", Pattern.compile("\\b(?:card|cac) (?:man hinh|do hoa)\\b|\\bvga\\b")),
-            Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b")),
+            Map.entry("psu", Pattern.compile("\\bnguon\\b|\\bpsu\\b|\\bpower supply\\b")),
             Map.entry("ssd", Pattern.compile("\\bo cung\\b|\\bssd\\b")),
             // "bộ nhớ cache / đệm" trong tên CPU không phải RAM
             Map.entry("ram", Pattern.compile("^ram\\b|\\bbo nho\\b(?! (cache|dem|l[23]))|^ram ")),
@@ -117,7 +117,7 @@ public class PriceEngine {
     private static final int PAGE_PARSER_VERSION = 9;
     /** used: từ khoá -> lần cuối có người tìm (để kho giá biết nên làm mới từ khoá nào); file cũ không có thì null */
     private record Snapshot(Map<String, Cached> searches, Map<String, Offer> offers, Map<String, Long> pageRead, int parserVersion,
-            Map<String, Long> used) {
+            Map<String, Long> used, Map<String, Watched> watch) {
     }
 
     /*
@@ -186,6 +186,8 @@ public class PriceEngine {
                 if (snap.offers() != null) byUrl.putAll(snap.offers());
                 long usedSince = System.currentTimeMillis() - USED_WINDOW.toMillis();
                 if (snap.used() != null) snap.used().forEach((k, at) -> { if (at != null && at > usedSince) used.put(k, at); });
+                long watchSince = System.currentTimeMillis() - WATCH_KEEP.toMillis();
+                if (snap.watch() != null) snap.watch().forEach((u, w) -> { if (w != null && w.lastUsed() > watchSince) watch.put(u, w); });
                 log.info("Nạp bộ nhớ đệm giá: {} từ khoá, {} link, {} trang đã đọc, {} từ khoá hay dùng", cache.size(), byUrl.size(),
                         pageRead.size(), used.size());
             } catch (RuntimeException e) {
@@ -195,13 +197,15 @@ public class PriceEngine {
         saver.scheduleWithFixedDelay(this::saveCache, 5, 5, TimeUnit.MINUTES);
         // Kho giá chạy nền khi engine bật (test tự tạo PriceEngine không có file cache nên không chạy)
         if (enabled && indexOn) refresher.scheduleWithFixedDelay(this::warmIndex, 2, WARM_EVERY.toMinutes(), TimeUnit.MINUTES);
-        log.info("Kho giá: {}", enabled && indexOn ? "bật" : "tắt");
+        if (enabled) watcher.scheduleWithFixedDelay(this::refreshWatched, 3, WATCH_EVERY.toMinutes(), TimeUnit.MINUTES);
+        log.info("Kho giá: {}, theo dõi giá {} món", enabled && indexOn ? "bật" : "tắt", watch.size());
     }
 
     /** Tắt backend: dừng lịch lưu và chờ lượt đang chạy xong, rồi lưu lần cuối (không để hai lượt ghi cùng lúc) */
     @jakarta.annotation.PreDestroy
     void saveOnShutdown() {
         refresher.shutdownNow();
+        watcher.shutdownNow();
         saver.shutdown();
         try {
             saver.awaitTermination(10, TimeUnit.SECONDS);
@@ -223,12 +227,123 @@ public class PriceEngine {
             var tmp = file.resolveSibling(file.getFileName() + ".tmp");
             long usedSince = System.currentTimeMillis() - USED_WINDOW.toMillis();
             used.values().removeIf(at -> at < usedSince);
+            long watchSince = System.currentTimeMillis() - WATCH_KEEP.toMillis();
+            watch.values().removeIf(w -> w.lastUsed() < watchSince);
             JSON.writeValue(tmp.toFile(), new Snapshot(keep, new LinkedHashMap<>(byUrl), new LinkedHashMap<>(pageRead), PAGE_PARSER_VERSION,
-                    new LinkedHashMap<>(used)));
+                    new LinkedHashMap<>(used), new LinkedHashMap<>(watch)));
             java.nio.file.Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (Exception e) {
             log.warn("Không lưu được bộ nhớ đệm giá: {}", e.getMessage());
         }
+    }
+
+    /*
+     * Theo dõi giá ngầm (người dùng 24/11: "cửa hàng thay đổi thì theo dõi giá, người dùng không biết, chỉ AI biết").
+     * Món từng lên thẻ cấu hình / kế hoạch nâng cấp được đọc lại trang mỗi WATCH_EVERY ở nền, nên:
+     *  - khi có người hỏi, món đó thường đã "xác minh" sẵn (trong VERIFIED_TTL), không phải đọc trang lúc người dùng chờ và ít
+     *    lỗi "không xác minh được giá" khi cửa hàng chậm / chặn đúng lúc đó;
+     *  - lịch sử giá / còn hàng của món cho trợ lý biết món nào hay đổi giá, hay hết hàng (trend, trường price_trend của kết quả tìm).
+     * Không có giao diện cho người dùng. Món không lên thẻ lại trong WATCH_KEEP thì thôi theo dõi.
+     */
+    public record Point(long at, Long price, Boolean inStock) {
+    }
+
+    public record Watched(String title, long lastUsed, List<Point> history) {
+    }
+
+    static final Duration WATCH_EVERY = Duration.ofMinutes(8);
+    static final Duration WATCH_KEEP = Duration.ofDays(7);
+    /** Trang còn mới hơn từng này thì lượt nền bỏ qua */
+    static final Duration WATCH_FRESH = Duration.ofMinutes(6);
+    static final int WATCH_BATCH = 60;
+    static final int WATCH_POINTS = 60;
+    /** Giá và còn hàng không đổi thì cứ từng này mới ghi thêm một điểm (đủ để biết giá đứng yên bao lâu) */
+    static final Duration WATCH_SAMPLE = Duration.ofHours(6);
+    private final Map<String, Watched> watch = new ConcurrentHashMap<>();
+    private final java.util.concurrent.ScheduledExecutorService watcher = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "price-watch");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Bắt đầu (hoặc tiếp tục) theo dõi một món vừa lên thẻ */
+    public void track(String url, String title) {
+        if (url == null || title == null) return;
+        long now = System.currentTimeMillis();
+        watch.compute(url, (k, w) -> w == null ? new Watched(title, now, List.of()) : new Watched(w.title(), now, w.history()));
+        if (pageChecked(url)) note(url, byUrl.get(url));
+    }
+
+    /** Ghi một điểm giá / còn hàng cho món đang theo dõi: khi đổi, hoặc sau WATCH_SAMPLE */
+    void note(String url, Offer o) {
+        if (o == null || url == null) return;
+        long now = System.currentTimeMillis();
+        watch.computeIfPresent(url, (k, w) -> {
+            Point last = w.history().isEmpty() ? null : w.history().getLast();
+            boolean changed = last == null || !java.util.Objects.equals(last.price(), o.priceVnd())
+                    || !java.util.Objects.equals(last.inStock(), o.inStock());
+            if (!changed && now - last.at() < WATCH_SAMPLE.toMillis()) return w;
+            List<Point> h = new ArrayList<>(w.history());
+            h.add(new Point(now, o.priceVnd(), o.inStock()));
+            while (h.size() > WATCH_POINTS) h.removeFirst();
+            return new Watched(w.title(), w.lastUsed(), List.copyOf(h));
+        });
+    }
+
+    /** Lượt nền: đọc lại trang các món đang theo dõi (món dùng gần đây trước), nghỉ 3 - 7 giờ sáng như kho giá */
+    void refreshWatched() {
+        int hour = java.time.LocalTime.now().getHour();
+        if (hour >= 3 && hour < 7) return;
+        refreshWatchedNow();
+    }
+
+    /** Đọc lại trang các món đang theo dõi, không xét giờ (test gọi thẳng) */
+    void refreshWatchedNow() {
+        long now = System.currentTimeMillis();
+        watch.values().removeIf(w -> now - w.lastUsed() > WATCH_KEEP.toMillis());
+        int done = 0;
+        long t0 = System.nanoTime();
+        var todo = watch.entrySet().stream().sorted(Comparator.comparingLong((Map.Entry<String, Watched> e) -> e.getValue().lastUsed()).reversed())
+                .toList();
+        for (var e : todo) {
+            if (done >= WATCH_BATCH || Thread.currentThread().isInterrupted()) break;
+            Long at = pageRead.get(clean(e.getKey()));
+            if (at != null && System.currentTimeMillis() - at < WATCH_FRESH.toMillis()) continue;
+            try {
+                yieldToUsers();
+                Io.detached(Duration.ofSeconds(20), () -> readPage(e.getKey(), e.getValue().title(), true));
+                done++;
+            } catch (RuntimeException ex) {
+                log.debug("Theo dõi giá \"{}\" lỗi: {}", e.getKey(), ex.getMessage());
+            }
+        }
+        if (done > 0) log.info("Theo dõi giá: đọc lại {} / {} món trong {} ms", done, watch.size(), (System.nanoTime() - t0) / 1_000_000);
+    }
+
+    /**
+     * Xu hướng của món đang theo dõi trong 7 ngày cho trợ lý (null nếu chưa có gì đáng nói): giá tăng / giảm bao nhiêu phần trăm,
+     * số lần hết hàng
+     */
+    public String trend(String url) {
+        var w = url == null ? null : watch.get(url);
+        if (w == null || w.history().size() < 2) return null;
+        long since = System.currentTimeMillis() - Duration.ofDays(7).toMillis();
+        List<Point> h = w.history().stream().filter(p -> p.at() >= since).toList();
+        if (h.size() < 2) return null;
+        List<String> out = new ArrayList<>();
+        Point first = h.stream().filter(p -> p.price() != null).findFirst().orElse(null);
+        Point last = null;
+        for (int i = h.size() - 1; i >= 0; i--) if (h.get(i).price() != null) { last = h.get(i); break; }
+        if (first != null && last != null && first != last && !first.price().equals(last.price()) && first.price() > 0) {
+            long pct = Math.round((last.price() - first.price()) * 100.0 / first.price());
+            long days = Math.max(1, Math.round((last.at() - first.at()) / 86_400_000.0));
+            if (pct != 0) out.add("price " + (pct > 0 ? "up " : "down ") + Math.abs(pct) + "% over " + days + (days == 1 ? " day" : " days"));
+        }
+        int outs = 0;
+        for (int i = 0; i < h.size(); i++)
+            if (Boolean.FALSE.equals(h.get(i).inStock()) && (i == 0 || !Boolean.FALSE.equals(h.get(i - 1).inStock()))) outs++;
+        if (outs > 0) out.add("out of stock " + outs + (outs == 1 ? " time" : " times") + " this week");
+        return out.isEmpty() ? null : String.join("; ", out);
     }
 
     /** Bỏ kết quả hết hạn; còn quá MAX_CACHED từ khoá thì bỏ những từ khoá cũ nhất (không xoá sạch như trước) */
@@ -319,6 +434,7 @@ public class PriceEngine {
                     if (page != null && Boolean.FALSE.equals(page.inStock())) {
                         byUrl.put(url, page);
                         pageRead.put(clean(url), System.currentTimeMillis());
+                        note(url, page);
                     }
                     return null;
                 }
@@ -326,6 +442,7 @@ public class PriceEngine {
                 if (pageRead.size() > 5000) pageRead.clear();
                 pageRead.put(clean(url), System.currentTimeMillis());
                 byUrl.put(url, page);
+                note(url, page);
                 if (!samePage(expectTitle, page.title())) {
                     log.debug("readPage {}: sai biến thể (trang \"{}\", cần \"{}\")", url, page.title(), expectTitle);
                     remember(url + "|" + expectTitle);
@@ -343,6 +460,7 @@ public class PriceEngine {
     /** Chốt báo giá: dành thời gian cho bước dựng thẻ và đối chiếu, không dùng chứng cứ sắp hết hạn. */
     public Offer quote(String url, String expectedTitle) {
         if (url == null) return null;
+        track(url, expectedTitle);
         String key = clean(url);
         Long at = pageRead.get(key);
         // Giữ chứng cứ còn hạn trong khi đọc lại. Xoá timestamp trước khi tải làm yêu cầu đồng thời
@@ -943,6 +1061,8 @@ public class PriceEngine {
 
     /** Loại linh kiện khớp sớm nhất trong chuỗi đã bỏ dấu, null nếu không nhận ra */
     public static String kind(String normalized) {
+        // Tên hãng "Cooler Master" không phải loại "tản nhiệt": nguồn "Cooler Master V650 SFX" từng bị xếp vào tản (23/11)
+        normalized = normalized.replace("cooler master", "coolermaster");
         if (normalized.matches(".*\\b(de tan nhiet|tan nhiet laptop|tan nhiet notebook|cooling ?pad|notepal|notebook cooler)\\b.*")) return "accessory";
         if (normalized.matches(".*\\b(quat|fan)\\b.*")
                 && normalized.matches(".*\\b(cam tay|du lich|quat ban|quat de ban|quat sac|tich dien|jisulife)\\b.*")) return "appliance";

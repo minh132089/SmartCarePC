@@ -118,6 +118,16 @@ public class ProductSearch {
         return OfferEvidence.verified(expectedTitle, offer, engine.pageChecked(url)) ? offer : null;
     }
 
+    /** Theo dõi giá ngầm (PriceEngine.track): món vừa lên thẻ cấu hình / kế hoạch */
+    public void track(String url, String title) {
+        if (engine.enabled()) engine.track(url, title);
+    }
+
+    /** Xu hướng giá / còn hàng 7 ngày của món đang theo dõi, cho trợ lý; null nếu chưa có */
+    public String trend(String url) {
+        return engine.enabled() ? engine.trend(url) : null;
+    }
+
     public Offer refreshQuote(String url, String title) {
         return engine.quote(url, title);
     }
