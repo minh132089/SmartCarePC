@@ -28,7 +28,6 @@ public static class Toasts
 
         var main = r.Source switch
         {
-            ToastSource.Setup => "Open SmartCarePC",
             _ when r.Task is not null => "Start guide",
             _ when r.Rule == Rules.RamFullRule => "See upgrade options",
             _ => null,

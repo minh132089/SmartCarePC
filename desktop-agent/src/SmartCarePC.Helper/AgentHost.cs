@@ -9,10 +9,15 @@ namespace SmartCarePC.Helper;
 /// <summary>Ảnh chụp trạng thái cho cửa sổ Status</summary>
 public sealed record StatusSnapshot(
     HealthSample? Last,
-    IReadOnlyDictionary<string, RuleStatus> Rules,
+    OverallStatus Overall,
+    IReadOnlyDictionary<string, RuleResult> Rules,
     IReadOnlyList<string>? Disks,
     (long? Free, long? Total) Drive,
     int? ShutdownsThisWeek,
+    int? BlueScreensThisWeek,
+    int? DiskErrorsThisWeek,
+    int? HardwareErrorsThisWeek,
+    DateTimeOffset? LastBoot,
     MaintenancePlan? Plan,
     DateTimeOffset? PausedUntil,
     AgentSettings Settings,
@@ -37,8 +42,11 @@ public sealed class AgentHost : IDisposable
 
     IReadOnlyList<string>? disks;
     (long? Free, long? Total) drive;
-    IReadOnlyList<DateTimeOffset>? shutdowns;
-    Dictionary<string, RuleStatus> lastRules = new();
+    IReadOnlyList<DateTimeOffset>? shutdowns, blueScreens, diskErrors, hardwareErrors;
+    DateTimeOffset? lastBoot;
+    Dictionary<string, RuleResult> lastRules = new();
+    // Quạt đứng chỉ báo một lần mỗi đợt; giữ lời báo trên Status thêm 1 giờ để người dùng kịp thấy
+    (Finding Finding, DateTimeOffset At)? lastFanAlert;
     volatile StatusSnapshot? snapshot;
     int pendingEvents;
 
@@ -115,7 +123,22 @@ public sealed class AgentHost : IDisposable
         disks = SystemChecks.DiskHealth();
         drive = SystemChecks.SystemDrive();
         shutdowns = SystemChecks.UnexpectedShutdowns();
+        blueScreens = SystemChecks.BlueScreens();
+        diskErrors = SystemChecks.DiskErrors();
+        hardwareErrors = SystemChecks.HardwareErrors();
+        lastBoot = SystemChecks.LastBoot();
     }
+
+    /// <summary>Danh sách sự kiện Event Log của luật, để nhớ lần mới nhất đã báo</summary>
+    IReadOnlyList<DateTimeOffset>? EventsFor(string? rule) => rule switch
+    {
+        Rules.BlueScreenRule => blueScreens,
+        Rules.DiskErrorsRule => diskErrors,
+        Rules.HardwareErrorsRule => hardwareErrors,
+        _ => null,
+    };
+
+    DateTimeOffset? AlertedUpTo(string rule) => state.Health.EventAlertedUpTo.TryGetValue(rule, out var t) ? t : null;
 
     List<Finding> Evaluate(DateTimeOffset now)
     {
@@ -133,9 +156,16 @@ public sealed class AgentHost : IDisposable
             [Rules.DriveLowRule] = Rules.SystemDriveLow(drive.Free, drive.Total),
             [Rules.ShutdownRule] = Rules.UnexpectedShutdowns(shutdowns, now, state.Health.ShutdownAlertedUpTo),
             [Rules.RamFullRule] = Rules.RamFull(state.Health.RamDays, today),
+            [Rules.BlueScreenRule] = Rules.BlueScreens(blueScreens, now, AlertedUpTo(Rules.BlueScreenRule)),
+            [Rules.DiskErrorsRule] = Rules.DiskErrors(diskErrors, now, AlertedUpTo(Rules.DiskErrorsRule)),
+            [Rules.HardwareErrorsRule] = Rules.HardwareErrors(hardwareErrors, now, AlertedUpTo(Rules.HardwareErrorsRule)),
+            [Rules.IdleBusyRule] = Rules.BusyWhileIdle(tracker.UserInputSeen, state.Health.IdleBusyDays, today),
+            [Rules.NoRestartRule] = Rules.NoRestart(lastBoot, now),
         };
-        // Luật quạt chỉ báo một lần mỗi đợt; giữ trạng thái Alert hiện trên Status cho dễ hiểu
-        lastRules = results.ToDictionary(kv => kv.Key, kv => kv.Value.Status);
+        if (results[Rules.FanStoppedRule].Finding is { } fan) lastFanAlert = (fan, now);
+        else if (lastFanAlert is { } la && now - la.At < TimeSpan.FromHours(1) && results[Rules.FanStoppedRule].Status == RuleStatus.Ok)
+            results[Rules.FanStoppedRule] = RuleResult.Alert(la.Finding with { AlreadyShown = true });
+        lastRules = results;
         return results.Values.Where(r => r.Finding is not null).Select(r => r.Finding!).ToList();
     }
 
@@ -148,6 +178,7 @@ public sealed class AgentHost : IDisposable
             try { Toasts.Show(t); } catch (Exception e) { Log.Write("toast failed: " + e.GetType().Name); continue; }
             Log.Write("shown " + t.Key);
             if (t.Rule == Rules.ShutdownRule && shutdowns is { Count: > 0 }) state.Health.ShutdownAlertedUpTo = shutdowns.Max();
+            if (t.Rule is { } r && EventsFor(r) is { Count: > 0 } ev) state.Health.EventAlertedUpTo[r] = ev.Max();
             queue.Enqueue(StudyEvents.Shown(state.Plan, t, now));
         }
         if (toasts.Count > 0) { Save(); Flush(); }
@@ -213,8 +244,10 @@ public sealed class AgentHost : IDisposable
 
     void UpdateSnapshot()
     {
-        var week = shutdowns?.Count(t => DateTimeOffset.Now - t <= TimeSpan.FromDays(7));
-        snapshot = new StatusSnapshot(tracker.Last, new Dictionary<string, RuleStatus>(lastRules), disks, drive, week, state.Plan,
+        int? Week(IReadOnlyList<DateTimeOffset>? list) => list?.Count(t => DateTimeOffset.Now - t <= TimeSpan.FromDays(7));
+        var rules = new Dictionary<string, RuleResult>(lastRules);
+        snapshot = new StatusSnapshot(tracker.Last, OverallStatus.Of(rules), rules, disks, drive,
+            Week(shutdowns), Week(blueScreens), Week(diskErrors), Week(hardwareErrors), lastBoot, state.Plan,
             state.PausedUntil, state.Settings, Baselines.Compare(state.Health.Baseline, state.Health.LoadDays), pendingEvents);
     }
 

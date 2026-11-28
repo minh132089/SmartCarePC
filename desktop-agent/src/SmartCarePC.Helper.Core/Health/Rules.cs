@@ -5,8 +5,11 @@ public enum Urgency { Urgent, Maintenance, Light }
 
 public enum RuleStatus { Ok, Alert, NotAvailable }
 
-/// <summary>Một lời nhắc theo triệu chứng. GuideTask là bài hướng dẫn cần mở (dust / paste / check), Path là trang khác (ví dụ /upgrade).</summary>
-public sealed record Finding(string Rule, Urgency Urgency, MaintenanceTask? GuideTask, string? Path, string Title, string Body, IReadOnlyDictionary<string, object> Data);
+/// <summary>
+/// Một lời nhắc theo triệu chứng. GuideTask là bài hướng dẫn cần mở (dust / paste / check), Path là trang khác (ví dụ /upgrade).
+/// AlreadyShown: đã báo cho đúng các sự kiện này rồi. Vẫn tính vào kết luận tổng trên Status, nhưng không hiện thông báo lại.
+/// </summary>
+public sealed record Finding(string Rule, Urgency Urgency, MaintenanceTask? GuideTask, string? Path, string Title, string Body, IReadOnlyDictionary<string, object> Data, bool AlreadyShown = false);
 
 public sealed record RuleResult(RuleStatus Status, Finding? Finding = null)
 {
@@ -29,6 +32,29 @@ public static class Rules
     public const string DriveLowRule = "drive_low";
     public const string ShutdownRule = "unexpected_shutdown";
     public const string RamFullRule = "ram_full";
+    public const string BlueScreenRule = "blue_screen";
+    public const string DiskErrorsRule = "disk_errors";
+    public const string HardwareErrorsRule = "hardware_errors";
+    public const string IdleBusyRule = "cpu_busy_idle";
+    public const string NoRestartRule = "no_restart";
+
+    /// <summary>Tên luật dễ hiểu cho cửa sổ Status</summary>
+    public static string DisplayName(string rule) => rule switch
+    {
+        CpuHotRule => "Processor heat",
+        GpuHotRule => "Graphics card heat",
+        FanStoppedRule => "Processor fan",
+        DiskFailingRule => "Drive health",
+        DriveLowRule => "Free space",
+        ShutdownRule => "Unexpected shutdowns",
+        RamFullRule => "Memory",
+        BlueScreenRule => "Blue error screens",
+        DiskErrorsRule => "Drive read and write errors",
+        HardwareErrorsRule => "Hardware errors",
+        IdleBusyRule => "Busy while you are away",
+        NoRestartRule => "Recent restart",
+        _ => rule,
+    };
 
     static int CountDaysInWindow(IEnumerable<string> days, string today, int window) =>
         days.Distinct().Count(d => LocalDay.TryParse(d, out _) && LocalDay.DaysBetween(d, today) is >= 0 and var n && n < window);
@@ -111,20 +137,83 @@ public static class Rules
     }
 
     /// <summary>
-    /// Tắt máy đột ngột (Event Log System, nguồn Kernel-Power, mã 41) ≥ 2 lần trong 7 ngày. Chỉ báo khi có lần mới từ lần báo trước.
+    /// Đếm sự kiện Event Log trong cửa sổ N ngày. Đủ ngưỡng thì Alert. Không có sự kiện nào mới hơn lần báo trước
+    /// thì Finding có AlreadyShown = true: Status vẫn ghi "needs attention" nhưng không hiện thông báo lại.
     /// null = không đọc được Event Log.
     /// </summary>
-    public static RuleResult UnexpectedShutdowns(IReadOnlyList<DateTimeOffset>? events, DateTimeOffset now, DateTimeOffset? alreadyAlertedUpTo)
+    static RuleResult EventCount(IReadOnlyList<DateTimeOffset>? events, DateTimeOffset now, DateTimeOffset? alreadyAlertedUpTo,
+        int needed, int windowDays, Func<int, Finding> make)
     {
         if (events is null) return RuleResult.NotAvailable;
-        var recent = events.Where(e => e <= now && now - e <= TimeSpan.FromDays(Thresholds.ShutdownWindowDays)).ToList();
-        if (recent.Count < Thresholds.ShutdownsNeeded) return RuleResult.Ok;
-        if (alreadyAlertedUpTo is { } seen && recent.Max() <= seen) return RuleResult.Ok;
-        var n = recent.Count;
-        return RuleResult.Alert(new Finding(ShutdownRule, Urgency.Maintenance, MaintenanceTask.Dust, null,
-            "Your PC turned off by itself",
-            $"Your PC shut down unexpectedly {n} times this week. A PC that gets too hot can switch itself off, and dust inside is a common cause. Cleaning takes about 30 minutes.",
-            new Dictionary<string, object> { ["count"] = n }));
+        var recent = events.Where(e => e <= now && now - e <= TimeSpan.FromDays(windowDays)).ToList();
+        if (recent.Count < needed) return RuleResult.Ok;
+        var f = make(recent.Count);
+        if (alreadyAlertedUpTo is { } seen && recent.Max() <= seen) f = f with { AlreadyShown = true };
+        return RuleResult.Alert(f);
+    }
+
+    /// <summary>Tắt máy đột ngột (Event Log System, nguồn Kernel-Power, mã 41) ≥ 2 lần trong 7 ngày. Chỉ báo khi có lần mới từ lần báo trước.</summary>
+    public static RuleResult UnexpectedShutdowns(IReadOnlyList<DateTimeOffset>? events, DateTimeOffset now, DateTimeOffset? alreadyAlertedUpTo) =>
+        EventCount(events, now, alreadyAlertedUpTo, Thresholds.ShutdownsNeeded, Thresholds.ShutdownWindowDays, n =>
+            new Finding(ShutdownRule, Urgency.Maintenance, MaintenanceTask.Dust, null,
+                "Your PC turned off by itself",
+                $"Your PC shut down unexpectedly {n} times this week. A PC that gets too hot can switch itself off, and dust inside is a common cause. Cleaning takes about 30 minutes.",
+                new Dictionary<string, object> { ["count"] = n }));
+
+    /// <summary>
+    /// Màn hình xanh (Event Log System, nguồn BugCheck, mã 1001) từ 1 lần trong 7 ngày. Không dẫn vào bài bảo dưỡng:
+    /// màn hình xanh thường do driver hoặc phần mềm, không phải bụi.
+    /// </summary>
+    public static RuleResult BlueScreens(IReadOnlyList<DateTimeOffset>? events, DateTimeOffset now, DateTimeOffset? alreadyAlertedUpTo) =>
+        EventCount(events, now, alreadyAlertedUpTo, Thresholds.BlueScreensNeeded, Thresholds.BlueScreenWindowDays, n =>
+            new Finding(BlueScreenRule, Urgency.Maintenance, null, null,
+                "Your PC hit a serious error",
+                n == 1
+                    ? "This week your PC stopped with a blue error screen and restarted. Once can happen, for example after an update. If it happens again, save your work often and ask someone who knows PCs to take a look."
+                    : $"This week your PC stopped with a blue error screen {n} times. Save your work often and ask someone who knows PCs, or a repair shop, to take a look.",
+                new Dictionary<string, object> { ["count"] = n }));
+
+    /// <summary>Lỗi đọc / ghi ổ đĩa (Event Log System, nguồn disk, mã 7 / 51 / 153) từ 3 lần trong 7 ngày. Nhắc sao lưu.</summary>
+    public static RuleResult DiskErrors(IReadOnlyList<DateTimeOffset>? events, DateTimeOffset now, DateTimeOffset? alreadyAlertedUpTo) =>
+        EventCount(events, now, alreadyAlertedUpTo, Thresholds.DiskErrorsNeeded, Thresholds.DiskErrorWindowDays, n =>
+            new Finding(DiskErrorsRule, Urgency.Maintenance, null, null,
+                "Your drive had trouble this week",
+                $"Windows had trouble reading or writing to a drive {n} times this week. This can be an early sign that the drive is wearing out. Copy your important files to another drive or to online storage.",
+                new Dictionary<string, object> { ["count"] = n }));
+
+    /// <summary>Lỗi phần cứng (Event Log System, nguồn WHEA-Logger, mã 17 / 18 / 19 / 47) từ 1 lần trong 7 ngày</summary>
+    public static RuleResult HardwareErrors(IReadOnlyList<DateTimeOffset>? events, DateTimeOffset now, DateTimeOffset? alreadyAlertedUpTo) =>
+        EventCount(events, now, alreadyAlertedUpTo, Thresholds.HardwareErrorsNeeded, Thresholds.HardwareErrorWindowDays, n =>
+            new Finding(HardwareErrorsRule, Urgency.Maintenance, null, null,
+                "Your PC reported a hardware problem",
+                "This week Windows noticed an error in a part inside your PC. Often it fixes itself. If your PC also freezes or restarts by itself, ask someone who knows PCs to take a look.",
+                new Dictionary<string, object> { ["count"] = n }));
+
+    /// <summary>
+    /// CPU bận khi không ai dùng máy (trung bình &gt; 60% suốt 30 phút không có thao tác), ở ≥ 2 ngày trong 7 ngày. Gợi ý nhẹ.
+    /// inputAvailable = đọc được lần thao tác cuối (GetLastInputInfo).
+    /// </summary>
+    public static RuleResult BusyWhileIdle(bool inputAvailable, IEnumerable<string> busyDays, string today)
+    {
+        if (!inputAvailable) return RuleResult.NotAvailable;
+        var n = CountDaysInWindow(busyDays, today, Thresholds.IdleBusyWindowDays);
+        if (n < Thresholds.IdleBusyDaysNeeded) return RuleResult.Ok;
+        return RuleResult.Alert(new Finding(IdleBusyRule, Urgency.Light, null, null,
+            "Your PC stays busy when you are away",
+            $"On {n} days this week your PC kept working hard for over half an hour while nobody was using it. A program you don't need may be running in the background. Press Ctrl + Shift + Esc to open Task Manager and see what is using it.",
+            new Dictionary<string, object> { ["days"] = n }));
+    }
+
+    /// <summary>Lần khởi động lại gần nhất quá 14 ngày. Gợi ý nhẹ. null = không đọc được.</summary>
+    public static RuleResult NoRestart(DateTimeOffset? lastBoot, DateTimeOffset now)
+    {
+        if (lastBoot is not { } boot || boot > now) return RuleResult.NotAvailable;
+        var days = (int)Math.Floor((now - boot).TotalDays);
+        if (days < Thresholds.NoRestartDays) return RuleResult.Ok;
+        return RuleResult.Alert(new Finding(NoRestartRule, Urgency.Light, null, null,
+            "Time to restart your PC",
+            $"Your PC has not restarted for {days} days. Restarting finishes updates and often makes a slow PC feel faster. Choose Restart in the Start menu, because Shut down does not fully refresh Windows.",
+            new Dictionary<string, object> { ["days"] = days }));
     }
 
     /// <summary>RAM dùng &gt; 90% trong &gt; 50% thời gian máy chạy của 7 ngày gần nhất. Gợi ý trang /upgrade, không phải bảo dưỡng.</summary>

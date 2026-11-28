@@ -17,6 +17,7 @@ public sealed class AgentState
     public int Version { get; set; } = 1;
     public MaintenancePlan? Plan { get; set; }
     public DateTimeOffset? LinkedAt { get; set; }
+    /// <summary>Ngày đã hiện thông báo chào lần đầu (khi chưa có lịch). Có giá trị rồi thì không chào lại.</summary>
     public string? SetupPromptLastDay { get; set; }
     /// <summary>Ngày gần nhất đã hiện nhắc theo lịch cho từng việc (id dust / paste / check)</summary>
     public Dictionary<string, string> ScheduleLastShown { get; set; } = new();

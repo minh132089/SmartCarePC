@@ -44,7 +44,8 @@ public static class Planner
     {
         var today = LocalDay.Of(now);
         var shown = new List<ToastRequest>();
-        var list = findings.ToList();
+        // Đã báo cho đúng các sự kiện này rồi: chỉ hiện trên Status, không thông báo lại
+        var list = findings.Where(f => !f.AlreadyShown).ToList();
         var origin = st.Plan?.Origin ?? PlanLink.DefaultOrigin;
 
         bool RuleQuiet(string rule) => st.RuleQuietUntil.TryGetValue(rule, out var until) && until > now;
@@ -62,7 +63,16 @@ public static class Planner
         {
             ToastRequest? pick = null;
             var health = list.Where(f => f.Urgency == Urgency.Maintenance && !RuleQuiet(f.Rule))
-                .OrderBy(f => f.Rule switch { Rules.ShutdownRule => 0, Rules.CpuHotRule => 1, Rules.GpuHotRule => 2, _ => 3 })
+                .OrderBy(f => f.Rule switch
+                {
+                    Rules.DiskErrorsRule => 0, // có thể mất dữ liệu
+                    Rules.BlueScreenRule => 1,
+                    Rules.ShutdownRule => 2,
+                    Rules.HardwareErrorsRule => 3,
+                    Rules.CpuHotRule => 4,
+                    Rules.GpuHotRule => 5,
+                    _ => 6,
+                })
                 .FirstOrDefault();
             if (health is not null)
             {
@@ -71,9 +81,11 @@ public static class Planner
             }
             else if (st.Plan is null)
             {
-                if (st.SetupPromptLastDay is null || LocalDay.DaysBetween(st.SetupPromptLastDay, today) >= RepeatAfterDays)
+                // Không có lịch là bình thường: nhắc bảo dưỡng theo lịch giờ do email của web lo, app chỉ kiểm tra sức khoẻ.
+                // Chỉ chào một lần để người dùng biết app đang chạy, không nhắc lại.
+                if (st.SetupPromptLastDay is null)
                 {
-                    pick = SetupToast(origin);
+                    pick = WelcomeToast();
                     st.SetupPromptLastDay = today;
                 }
             }
@@ -131,11 +143,12 @@ public static class Planner
 
     static string Join(params string[] parts) => string.Join(" ", parts.Where(p => p.Length > 0));
 
-    public static ToastRequest SetupToast(string origin) =>
+    /// <summary>Lần chạy đầu khi không có lịch: báo app đang kiểm tra máy. Không có nút, không mở web.</summary>
+    public static ToastRequest WelcomeToast() =>
         new("setup", ToastSource.Setup, Urgency.Maintenance, null, null,
-            "Open SmartCarePC to set up your reminders",
-            "Answer a few questions on the website, then send your plan to this app.",
-            origin + "/maintain", CanSnooze: false, null, new Dictionary<string, object>());
+            "SmartCarePC Helper is checking your PC",
+            "It watches your PC's health quietly and only tells you when something needs a look. To see the checks, right-click its icon near the clock and choose Status.",
+            null, CanSnooze: false, null, new Dictionary<string, object>());
 
     static ToastRequest FromFinding(Finding f, AgentState st, string origin)
     {

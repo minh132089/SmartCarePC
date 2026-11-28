@@ -2,8 +2,10 @@
 
 App nhỏ chạy ngầm ở khay hệ thống Windows 10/11 x64. Đặc tả đầy đủ ở `docs/maintenance-agent-spec.md`. App làm 2 việc:
 
-1. **Nhắc bảo dưỡng đúng hạn** bằng thông báo của Windows, theo lịch người dùng đã đặt trên web.
-2. **Tự kiểm tra sức khoẻ máy** (nhiệt độ, quạt, ổ cứng, dung lượng, tắt máy đột ngột, RAM). Thấy dấu hiệu xấu thì nhắc và chỉ đúng bài hướng dẫn.
+1. **Tự kiểm tra sức khoẻ máy** (nhiệt độ, quạt, ổ cứng, dung lượng, tắt máy đột ngột, RAM, màn hình xanh, lỗi ổ đĩa, lỗi phần cứng, CPU bận khi rảnh, lâu không khởi động lại). Gộp lại thành một kết luận "Running well / Needs attention / Needs help now". Thấy dấu hiệu xấu thì nhắc và chỉ đúng bài hướng dẫn.
+2. **Nhắc bảo dưỡng theo lịch** nếu nhận được lịch qua link `smartcarepc://`. Web đã bỏ nút gửi lịch: nhắc theo lịch giờ do email của web lo, nên thường app chỉ làm việc 1.
+
+Người dùng tải app từ GitHub Releases qua hộp Quick health check trên web hoặc email kiểm tra hằng tháng.
 
 Bấm vào thông báo thì app mở web vào thẳng bài 3D, ví dụ `https://smartcarepc.pages.dev/?baotri=dust`. App không có AI. Cài app là **tuỳ chọn** cho người tham gia nghiên cứu, cách nhắc bằng lịch trên web vẫn giữ nguyên.
 
@@ -13,23 +15,24 @@ Bấm vào thông báo thì app mở web vào thẳng bài 3D, ví dụ `https:/
 |---|---|
 | `src/SmartCarePC.Helper.Core/` | Lõi `net8.0`, không phụ thuộc Windows: đọc link, lịch, luật sức khoẻ, quyết định thông báo, hàng đợi sự kiện. Chạy test được trên Mac. |
 | `src/SmartCarePC.Helper/` | App WinForms `net8.0-windows`: icon khay, toast, đọc cảm biến, Registry, nhận link `smartcarepc://` |
-| `tests/SmartCarePC.Helper.Tests/` | xUnit, 100 test cho lõi. `fixtures/web-dates.json` là kết quả chạy thật hàm ngày tháng của web. |
+| `tests/SmartCarePC.Helper.Tests/` | xUnit, 125 test cho lõi. `fixtures/web-dates.json` là kết quả chạy thật hàm ngày tháng của web. |
 | `installer/SmartCarePCHelper.iss` | Bộ cài Inno Setup, cài cho từng người dùng, không cần admin |
 | `tools/export-web-dates.mjs` | Chạy `addDays` / `addMonths` của `src/data/maintenanceSchedule.ts` để tạo lại fixture |
-| `tools/send-test-plan.ps1` | Gửi lịch thử sang app trên Windows (thay cho nút trên web, nút này chưa làm) |
+| `tools/send-test-plan.ps1` | Gửi lịch thử sang app trên Windows (web đã bỏ nút gửi lịch, chỉ dùng để thử phần nhắc theo lịch) |
 
 | Việc | File |
 |---|---|
 | Đọc và kiểm tra link `smartcarepc://plan?d=...` | `Core/PlanLink.cs` |
 | Khi nào hiện thông báo (1 thông báo bảo dưỡng / ngày, giờ yên lặng, hoãn 7 ngày) | `Core/Planner.cs` |
-| 7 luật sức khoẻ, mỗi luật là một hàm thuần | `Core/Health/Rules.cs` |
+| 12 luật sức khoẻ, mỗi luật là một hàm thuần | `Core/Health/Rules.cs` |
+| Kết luận tổng 3 mức | `Core/Health/Overall.cs` |
 | Ngưỡng và nguồn tham khảo | `Core/Health/Thresholds.cs` |
-| Ghi đợt nóng, RAM, quạt từ các lần đo; mốc trước / sau khi vệ sinh | `Core/Health/HealthTracker.cs` |
+| Ghi đợt nóng, RAM, quạt, CPU bận khi rảnh từ các lần đo; mốc trước / sau khi vệ sinh | `Core/Health/HealthTracker.cs` |
 | Sự kiện nghiên cứu, hàng đợi gửi lại | `Core/StudyEvents.cs` |
-| Đọc cảm biến (LibreHardwareMonitorLib, GetSystemTimes, GlobalMemoryStatusEx) | `Helper/Sensors/SensorReader.cs` |
-| Ổ cứng (MSFT_PhysicalDisk), ổ đầy, Event Log, toàn màn hình | `Helper/Sensors/SystemChecks.cs` |
+| Đọc cảm biến (LibreHardwareMonitorLib, GetSystemTimes, GlobalMemoryStatusEx, GetLastInputInfo) | `Helper/Sensors/SensorReader.cs` |
+| Ổ cứng (MSFT_PhysicalDisk), ổ đầy, Event Log, lần khởi động (Win32_OperatingSystem), toàn màn hình | `Helper/Sensors/SystemChecks.cs` |
 | Vòng chạy nền | `Helper/AgentHost.cs` |
-| Menu khay, cửa sổ Status | `Helper/TrayApp.cs`, `Helper/StatusForm.cs` |
+| Menu khay, icon theo kết luận tổng, cửa sổ Status | `Helper/TrayApp.cs`, `Helper/StatusForm.cs` |
 
 ## Build và test
 
@@ -97,7 +100,23 @@ Hoãn 1 tuần trên app làm giống web: ngày hẹn thành hôm nay + 7 (`add
 
 ### Nhắc theo lịch
 
-Tới ngày hẹn (hoặc lần bật máy đầu tiên sau ngày hẹn): toast "Time to clean your PC", câu lý do kiểu "It has been 6 months since the last clean.", 2 nút **Start guide** và **Remind me in 1 week**. Chưa có lịch: toast "Open SmartCarePC to set up your reminders", bấm vào mở `<origin>/maintain`.
+Chỉ chạy khi đã nhận lịch qua link. Tới ngày hẹn (hoặc lần bật máy đầu tiên sau ngày hẹn): toast "Time to clean your PC", câu lý do kiểu "It has been 6 months since the last clean.", 2 nút **Start guide** và **Remind me in 1 week**.
+
+Không có lịch là bình thường. Lần chạy đầu app hiện một toast chào duy nhất "SmartCarePC Helper is checking your PC" (không có nút, không mở web), sau đó không nhắc gì về lịch nữa. Status ghi "This app only checks your PC's health. To get cleaning reminders by email, set them up on the SmartCarePC website".
+
+### Kết luận tổng
+
+Đầu cửa sổ Status có một dòng chữ to, icon khay và chữ khi rê chuột cũng đổi theo:
+
+| Mức | Khi nào | Icon khay |
+|---|---|---|
+| **Running well** | Không luật nào đang báo. Gợi ý nhẹ (ổ đầy, RAM, CPU bận khi rảnh, lâu không khởi động lại) chỉ hiện thành dòng "Tip:", không đổi mức | xanh dương, dấu tích |
+| **Needs attention** | Có luật bảo dưỡng hoặc Event Log đang báo: `cpu_hot`, `gpu_hot`, `unexpected_shutdown`, `blue_screen`, `disk_errors`, `hardware_errors` | cam, dấu chấm than |
+| **Needs help now** | Có luật khẩn: `disk_failing`, `fan_stopped` | đỏ, dấu chấm than |
+
+- Luật không đọc được (ví dụ nhiệt CPU, quạt khi không có quyền admin) **không tính là ổn**. Status ghi "Not checked on this PC: Processor heat, Processor fan. This app cannot read these here, so they are not counted as OK." Tooltip ghi kiểu "SmartCarePC Helper: Running well, 2 not checked".
+- Chưa luật nào chạy xong (vừa mở app): "Checking your PC", icon xám.
+- Luật Event Log đã báo rồi vẫn giữ mức Needs attention trên Status suốt 7 ngày, chỉ không hiện thông báo lại. Quạt đứng giữ Needs help now thêm 1 giờ sau lần báo.
 
 ### Luật sức khoẻ
 
@@ -110,12 +129,19 @@ Tới ngày hẹn (hoặc lần bật máy đầu tiên sau ngày hẹn): toast 
 | `drive_low` | `DriveInfo` | Ổ hệ thống còn < 10% | Gợi ý nhẹ + nút mở Storage Sense |
 | `unexpected_shutdown` | Event Log System, Kernel-Power 41 | ≥ 2 lần trong 7 ngày, có lần mới từ lần báo trước | `dust` |
 | `ram_full` | `GlobalMemoryStatusEx` | > 90% RAM trong > 50% thời gian máy chạy, 7 ngày, cần ≥ 10 giờ số đo | Gợi ý `<origin>/upgrade` |
+| `blue_screen` | Event Log System, BugCheck 1001 | ≥ 1 lần trong 7 ngày, có lần mới từ lần báo trước | Câu khuyên lưu bài, nhờ người rành xem. Không mở bài bảo dưỡng |
+| `disk_errors` | Event Log System, nguồn `disk`, mã 7 / 51 / 153 | ≥ 3 lần trong 7 ngày, có lần mới. **CHƯA CHỐT** | Nhắc sao lưu file |
+| `hardware_errors` | Event Log System, WHEA-Logger 17 / 18 / 19 / 47 | ≥ 1 lần trong 7 ngày, có lần mới. **CHƯA CHỐT** (mã 17 có thể lặp liên tục trên vài bo mạch) | Câu khuyên nhờ người rành xem nếu máy treo / tự khởi động lại |
+| `cpu_busy_idle` | `GetSystemTimes` + `GetLastInputInfo` | Tải CPU trung bình > 60% suốt 30 phút không ai chạm chuột / phím, ở ≥ 2 ngày trong 7 ngày. **CHƯA CHỐT** | Gợi ý nhẹ: mở Task Manager (Ctrl + Shift + Esc) |
+| `no_restart` | `Win32_OperatingSystem.LastBootUpTime` | ≥ 14 ngày chưa khởi động lại thật (Shut down kiểu fast startup không tính). **CHƯA CHỐT** | Gợi ý nhẹ: chọn Restart |
 
-Đo mỗi 5 giây khi máy chạy nặng (CPU ≥ 50% hoặc GPU ≥ 40%), mỗi 60 giây khi rảnh. Kiểm tra ổ cứng, dung lượng và Event Log mỗi 30 phút.
+Cả 5 luật mới chỉ dùng nguồn đọc được bằng tài khoản thường, không cài driver, không xin admin. Nguồn tham khảo và lý do từng ngưỡng ghi trong `Thresholds.cs`. `cpu_busy_idle` cần 2 ngày vì Windows tự chạy bảo trì (quét virus, cập nhật) đúng lúc máy rảnh.
+
+Đo mỗi 5 giây khi máy chạy nặng (CPU ≥ 50% hoặc GPU ≥ 40%), mỗi 60 giây khi rảnh. Kiểm tra ổ cứng, dung lượng, Event Log và lần khởi động mỗi 30 phút.
 
 ### Không làm phiền
 
-- Tối đa 1 thông báo bảo dưỡng mỗi ngày. Gợi ý nhẹ (ổ đầy, RAM) tối đa 1 lần / ngày và mỗi luật 1 lần / 7 ngày.
+- Tối đa 1 thông báo bảo dưỡng mỗi ngày (màn hình xanh, lỗi ổ đĩa, lỗi phần cứng cũng nằm trong giới hạn này, lỗi ổ đĩa được ưu tiên trước). Gợi ý nhẹ (ổ đầy, RAM, CPU bận khi rảnh, lâu không khởi động lại) tối đa 1 lần / ngày và mỗi luật 1 lần / 7 ngày.
 - Ổ cứng sắp hỏng và quạt đứng báo ngay, kể cả trong giờ yên lặng hay lúc tạm dừng. Mỗi luật tối đa 1 lần / 24 giờ.
 - Giờ yên lặng mặc định 22:00–08:00, chỉnh trong cửa sổ Status. Không báo khi đang chơi game toàn màn hình, trình chiếu, hoặc Focus Assist đang bận (`SHQueryUserNotificationState`).
 - Hiện rồi mà người dùng không bấm: 3 ngày sau mới nhắc lại. Remind me in 1 week: im đúng 7 ngày.
@@ -142,7 +168,9 @@ Vì app không cài driver và không xin admin:
 | Quạt CPU | **thường không đọc được** | Chip Super I/O, cũng qua PawnIO. Bỏ luật `fan_stopped` |
 | Nhiệt / tải GPU NVIDIA, AMD | thường đọc được | Qua thư viện của hãng card |
 | Tình trạng ổ cứng | đọc được | `MSFT_PhysicalDisk`. SMART qua WMI `root\wmi` cần admin nên không dùng |
-| Event Log System | đọc được | |
+| Event Log System | đọc được | Tắt máy đột ngột, màn hình xanh, lỗi ổ đĩa, WHEA |
+| Lần thao tác cuối (`GetLastInputInfo`) | đọc được | Chỉ biết thời điểm, không ghi phím hay chuột nào |
+| Lần khởi động (`Win32_OperatingSystem`) | đọc được | |
 
 Nếu máy đã có PawnIO (ví dụ cài cùng một app quạt khác) và người dùng tự chạy app bằng quyền admin thì app đọc được nhiệt CPU. App không bao giờ tự làm việc này. **Tất cả các dòng trên chưa thử trên máy Windows thật.**
 
@@ -156,11 +184,11 @@ Nếu máy đã có PawnIO (ví dụ cài cùng một app quạt khác) và ngư
 
 ## Việc Minh cần tự thử trên Windows 10/11 x64 thật
 
-Chưa thử được gì trên Windows. Danh sách thử:
+Chưa thử được gì trên Windows. Trên Mac chỉ chạy được test của lõi (`dotnet test`) và build app Windows. Phần đọc Event Log, `GetLastInputInfo`, `LastBootUpTime`, icon khay đổi màu và cửa sổ Status chưa chạy lần nào. Danh sách thử:
 
 1. **Cài**: chạy bộ cài bằng tài khoản thường. Không có hộp hỏi admin (UAC). SmartScreen hiện cảnh báo: More info → Run anyway, chụp ảnh lại cho hướng dẫn.
 2. **Khay**: icon hiện ở khay. Chuột phải có đủ menu. Bật / tắt Start with Windows, khởi động lại máy xem app có tự chạy không.
-3. **Chưa có lịch**: lần chạy đầu hiện "Open SmartCarePC to set up your reminders", bấm vào mở `/maintain`.
+3. **Chưa có lịch**: lần chạy đầu hiện một toast "SmartCarePC Helper is checking your PC", không có nút. Thoát app, chạy lại, đổi ngày máy +3 ngày: không hiện lại. Status ghi dòng "This app only checks your PC's health..." ở mục REMINDERS.
 4. **Nhận lịch**: `powershell -ExecutionPolicy Bypass -File tools\send-test-plan.ps1`. Trình duyệt / Windows hỏi mở app thì đồng ý. Hiện "Your reminders are on". Status thấy đúng ngày.
 5. **Link hỏng**: chạy với `-Bad`. App không crash, `log.txt` có dòng `ignored link`.
 6. **Toast theo lịch**: gửi lịch dust hôm nay (ngoài giờ yên lặng). Trong 1 phút hiện "Time to clean your PC". Bấm Start guide mở đúng bài 3D. Đổi ngày máy để thử ngày khác.
@@ -168,8 +196,11 @@ Chưa thử được gì trên Windows. Danh sách thử:
 8. **Giờ yên lặng / toàn màn hình**: đặt giờ yên lặng bao giờ hiện tại, hoặc mở game toàn màn hình: không có toast bảo dưỡng.
 9. **Cảm biến**: mở Status, ghi lại số nào đọc được, số nào "not available on this PC". Chạy nặng CPU vài phút (ví dụ Cinebench), xem tải CPU và nhiệt có ghi được không. Thử thêm một lần chạy app bằng quyền admin trên máy đã có PawnIO để so.
 10. **GPU**: chơi game hoặc chạy benchmark GPU, xem nhiệt GPU trong Status.
-11. **Ổ đĩa, Event Log**: Status có Drive health và số lần tắt máy đột ngột (không phải "not available").
+11. **Ổ đĩa, Event Log**: Status có Drive health, số lần tắt máy đột ngột, Blue error screens, Drive read and write errors, Hardware errors và Last restart (không phải "not available"). So số đếm với Event Viewer (Windows Logs → System, lọc theo nguồn BugCheck / disk / WHEA-Logger). Nếu máy từng bị màn hình xanh mà số đếm là 0, ghi lại tên nguồn hiện trong Event Viewer: bộ lọc đang dùng tên `Microsoft-Windows-WER-SystemErrorReporting` hoặc `BugCheck`.
 12. **Hiệu năng**: Task Manager, để app chạy ít nhất 30 phút. Mục tiêu dưới 1% CPU và dưới 80 MB RAM. Ghi số vào báo cáo.
 13. **Mạng**: không ở chế độ thử nghiệm, mở Resource Monitor (tab Network) hoặc Fiddler: `SmartCarePCHelper.exe` không có kết nối nào.
 14. **Thử nghiệm**: gửi lịch với `-Study P07` và `-Origin http://localhost:5173` khi chạy web và backend local. Sự kiện vào bảng `maintenance_event`. **Cần sửa backend trước**: regex `eventType` chưa có 5 loại mới, máy chủ sẽ trả 400 và app chuyển sự kiện sang `rejected`.
 15. **Gỡ**: gỡ trong Apps & features. Kiểm tra không còn `HKCU\Software\Classes\smartcarepc`, không còn mục Run, thư mục dữ liệu xoá hay giữ theo câu trả lời.
+16. **Kết luận tổng**: mở Status, dòng đầu phải là Running well / Needs attention / Needs help now, có dòng "Not checked on this PC" liệt kê nhiệt CPU, quạt nếu không đọc được. Rê chuột lên icon khay xem chữ. Chụp ảnh icon ở từng màu cho báo cáo. Màu cam và đỏ khó tạo bằng tay, nên chụp khi có máy thật đang bị lỗi (ví dụ máy từng màn hình xanh trong tuần).
+17. **CPU bận khi rảnh**: để máy chạy việc nặng (ví dụ nén file lớn, Cinebench vòng lặp) và không chạm chuột / phím 35 phút, làm 2 ngày khác nhau. Ngày thứ hai có gợi ý "Your PC stays busy when you are away" (ngoài giờ yên lặng). Kiểm tra màn hình khoá hoặc tắt màn hình có làm `GetLastInputInfo` sai không.
+18. **Lâu không khởi động lại**: Status ghi Last restart. Bấm Shut down rồi bật lại: Last restart không đổi (fast startup). Bấm Restart: thành "today". Muốn thấy gợi ý thì cần máy đã chạy 14 ngày.

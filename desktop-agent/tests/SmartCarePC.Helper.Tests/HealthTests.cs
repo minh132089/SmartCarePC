@@ -106,9 +106,12 @@ public class RulesTests
     {
         Assert.Equal(RuleStatus.Ok, Rules.UnexpectedShutdowns([Now.AddDays(-1)], Now, null).Status);
         Assert.Equal(RuleStatus.Ok, Rules.UnexpectedShutdowns([Now.AddDays(-1), Now.AddDays(-8)], Now, null).Status);
-        // Đã báo cho hai lần này rồi, chưa có lần mới
-        Assert.Equal(RuleStatus.Ok, Rules.UnexpectedShutdowns([Now.AddDays(-1), Now.AddDays(-2)], Now, Now.AddDays(-1)).Status);
-        Assert.Equal(RuleStatus.Alert, Rules.UnexpectedShutdowns([Now.AddHours(-1), Now.AddDays(-1), Now.AddDays(-2)], Now, Now.AddDays(-1)).Status);
+        // Đã báo cho hai lần này rồi, chưa có lần mới: Status vẫn ghi cần chú ý, nhưng không thông báo lại
+        var seen = Rules.UnexpectedShutdowns([Now.AddDays(-1), Now.AddDays(-2)], Now, Now.AddDays(-1));
+        Assert.Equal(RuleStatus.Alert, seen.Status);
+        Assert.True(seen.Finding!.AlreadyShown);
+        var fresh = Rules.UnexpectedShutdowns([Now.AddHours(-1), Now.AddDays(-1), Now.AddDays(-2)], Now, Now.AddDays(-1));
+        Assert.False(fresh.Finding!.AlreadyShown);
         Assert.Equal(RuleStatus.NotAvailable, Rules.UnexpectedShutdowns(null, Now, null).Status);
     }
 
@@ -140,9 +143,12 @@ public class RulesTests
             Rules.GpuHot(true, ["2026-11-27", "2026-11-28"], Today), Rules.FanStopped(true, true, 80), Rules.DiskFailing(["Warning"]),
             Rules.SystemDriveLow(1, 100), Rules.UnexpectedShutdowns([Now, Now.AddDays(-1)], Now, null),
             Rules.RamFull([Ram("2026-11-28", 12, 12)], Today),
+            Rules.BlueScreens([Now], Now, null), Rules.BlueScreens([Now, Now.AddDays(-1)], Now, null),
+            Rules.DiskErrors([Now, Now, Now], Now, null), Rules.HardwareErrors([Now], Now, null),
+            Rules.BusyWhileIdle(true, ["2026-11-27", "2026-11-28"], Today), Rules.NoRestart(Now.AddDays(-20), Now),
         }.Select(r => r.Finding!.Title + " " + r.Finding.Body).ToList();
         foreach (var text in all)
-            foreach (var word in new[] { "throttl", "SMART", "Kernel", "power supply", "PSU", "RPM", "°C" })
+            foreach (var word in new[] { "throttl", "SMART", "Kernel", "power supply", "PSU", "RPM", "°C", "BugCheck", "WHEA", "Event" })
                 Assert.DoesNotContain(word, text);
     }
 }

@@ -73,7 +73,7 @@ public sealed class SensorReader : IDisposable
                 catch (Exception) { /* một linh kiện lỗi thì bỏ qua linh kiện đó */ }
             }
         }
-        return new HealthSample(now, CpuLoad(), cpuTemp, fan, gpuLoad, gpuTemp, RamUsed());
+        return new HealthSample(now, CpuLoad(), cpuTemp, fan, gpuLoad, gpuTemp, RamUsed(), UserIdleSeconds());
     }
 
     static double? Max(double? a, double? b) => a is null ? b : b is null ? a : Math.Max(a.Value, b.Value);
@@ -130,6 +130,15 @@ public sealed class SensorReader : IDisposable
         return GlobalMemoryStatusEx(ref m) ? m.dwMemoryLoad / 100.0 : 0;
     }
 
+    /// <summary>Số giây từ lần cuối người dùng chạm chuột / bàn phím trong phiên này. Không cần quyền gì. null khi API lỗi.</summary>
+    static double? UserIdleSeconds()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info)) return null;
+        // Cả hai là số tick 32 bit, phép trừ không dấu vẫn đúng khi tick quay vòng sau 49,7 ngày
+        return unchecked((uint)Environment.TickCount - info.dwTime) / 1000.0;
+    }
+
     public void Dispose()
     {
         try { computer?.Close(); } catch { }
@@ -147,4 +156,13 @@ public sealed class SensorReader : IDisposable
 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO
+    {
+        public uint cbSize, dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
 }

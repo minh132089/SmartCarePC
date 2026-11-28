@@ -1,6 +1,9 @@
 namespace SmartCarePC.Helper.Core.Health;
 
-/// <summary>Một lần đo. Giá trị null = cảm biến không đọc được trên máy này.</summary>
+/// <summary>
+/// Một lần đo. Giá trị null = cảm biến không đọc được trên máy này.
+/// UserIdleSeconds: số giây từ lần cuối người dùng chạm chuột / bàn phím (GetLastInputInfo).
+/// </summary>
 public sealed record HealthSample(
     DateTimeOffset Time,
     double CpuLoad,
@@ -8,7 +11,8 @@ public sealed record HealthSample(
     double? CpuFanRpm,
     double? GpuLoad,
     double? GpuTempC,
-    double RamUsed);
+    double RamUsed,
+    double? UserIdleSeconds = null);
 
 /// <summary>Thời gian máy chạy trong một ngày và phần thời gian RAM gần đầy</summary>
 public sealed class RamDay
@@ -43,8 +47,12 @@ public sealed class HealthHistory
     public List<string> GpuHotDays { get; set; } = new();
     public List<RamDay> RamDays { get; set; } = new();
     public List<LoadDay> LoadDays { get; set; } = new();
+    /// <summary>Ngày có ít nhất một đợt CPU bận &gt; 60% suốt 30 phút khi không ai dùng máy</summary>
+    public List<string> IdleBusyDays { get; set; } = new();
     public bool CpuFanSeenSpinning { get; set; }
     public DateTimeOffset? ShutdownAlertedUpTo { get; set; }
+    /// <summary>Sự kiện Event Log mới nhất đã báo, theo từng luật (blue_screen, disk_errors, hardware_errors)</summary>
+    public Dictionary<string, DateTimeOffset> EventAlertedUpTo { get; set; } = new();
     public CleanBaseline? Baseline { get; set; }
 }
 
@@ -74,12 +82,17 @@ public sealed class HealthTracker(HealthHistory history)
     readonly SustainedDetector gpuHot = new(Thresholds.HotHold, MaxGap);
     readonly SustainedDetector fanStop = new(Thresholds.FanStopHold, MaxGap);
     DateTimeOffset? lastTime;
+    // Đợt không có thao tác hiện tại: lúc người dùng chạm máy lần cuối, số giây đã đo, tổng tải CPU nhân thời gian
+    DateTimeOffset? awaySince;
+    double awaySeconds, awayLoad;
+    bool awayFired;
 
     public HealthHistory History => history;
     /// <summary>Có cảm biến nào từng đọc được ở lần chạy này</summary>
     public bool CpuTempSeen { get; private set; }
     public bool GpuTempSeen { get; private set; }
     public bool FanSeen { get; private set; }
+    public bool UserInputSeen { get; private set; }
     /// <summary>Quạt vừa đứng đủ lâu; bên gọi đọc rồi đặt lại false</summary>
     public bool FanStoppedPending { get; set; }
     public HealthSample? Last { get; private set; }
@@ -91,6 +104,7 @@ public sealed class HealthTracker(HealthHistory history)
     public void Feed(HealthSample s)
     {
         var day = LocalDay.Of(s.Time);
+        var gap = lastTime is { } prev && s.Time - prev > MaxGap;
         var dt = lastTime is { } lt ? Math.Clamp((s.Time - lt).TotalSeconds, 0, Thresholds.IdleInterval.TotalSeconds * 2) : Thresholds.IdleInterval.TotalSeconds;
         lastTime = s.Time;
         Last = s;
@@ -112,11 +126,38 @@ public sealed class HealthTracker(HealthHistory history)
         if (s.CpuFanRpm is >= 1) history.CpuFanSeenSpinning = true;
         if (fanStop.Feed(s.Time, Rules.FanLooksStopped(s.CpuTempC, s.CpuFanRpm, history.CpuFanSeenSpinning))) FanStoppedPending = true;
 
+        if (s.UserIdleSeconds is { } idle) FeedAway(s, day, TimeSpan.FromSeconds(Math.Max(0, idle)), dt, gap);
+
         // Mốc nhiệt độ lúc chạy nặng, để so trước / sau khi vệ sinh
         if (s.CpuTempC is { } c && s.CpuLoad > Thresholds.CpuHotLoad) Load(day).Add(c, gpu: false);
         if (s.GpuTempC is { } g && (s.GpuLoad ?? 0) >= Thresholds.GpuBusyLoad) Load(day).Add(g, gpu: true);
 
         Prune(day);
+    }
+
+    /// <summary>
+    /// CPU bận khi không ai dùng máy. Một đợt bắt đầu từ lần chạm chuột / phím cuối. Người dùng chạm máy (mốc lùi hơn 5 giây)
+    /// hoặc mất mẫu lâu (máy ngủ) thì đếm lại. Mỗi 30 phút số đo xét một lần: tải trung bình &gt; 60% thì ghi ngày, mỗi đợt ghi một lần.
+    /// </summary>
+    void FeedAway(HealthSample s, string day, TimeSpan idle, double dt, bool gap)
+    {
+        UserInputSeen = true;
+        var since = s.Time - idle;
+        var touched = awaySince is not { } a || Math.Abs((since - a).TotalSeconds) > 5;
+        if (touched || gap || idle < TimeSpan.FromSeconds(dt))
+        {
+            awaySince = since; awaySeconds = 0; awayLoad = 0; awayFired = false;
+            return;
+        }
+        awaySeconds += dt;
+        awayLoad += s.CpuLoad * dt;
+        if (awayFired || awaySeconds < Thresholds.IdleBusyHold.TotalSeconds) return;
+        if (awayLoad / awaySeconds > Thresholds.IdleBusyLoad)
+        {
+            awayFired = true;
+            if (!history.IdleBusyDays.Contains(day)) history.IdleBusyDays.Add(day);
+        }
+        else { awaySeconds = 0; awayLoad = 0; } // 30 phút này không bận: xét tiếp 30 phút sau, vẫn trong cùng đợt
     }
 
     LoadDayWriter Load(string day)
@@ -139,6 +180,7 @@ public sealed class HealthTracker(HealthHistory history)
         bool Old(string d) => !LocalDay.TryParse(d, out _) || LocalDay.DaysBetween(d, today) > 45;
         history.CpuHotDays.RemoveAll(Old);
         history.GpuHotDays.RemoveAll(Old);
+        history.IdleBusyDays.RemoveAll(Old);
         history.RamDays.RemoveAll(x => Old(x.Day));
         history.LoadDays.RemoveAll(x => Old(x.Day));
     }

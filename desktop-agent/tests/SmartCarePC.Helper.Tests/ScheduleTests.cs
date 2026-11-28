@@ -188,14 +188,29 @@ public class PlannerTests
     }
 
     [Fact]
-    public void Without_a_plan_asks_to_set_up_on_the_website()
+    public void Without_a_plan_says_hello_once_and_never_nags()
     {
+        // Không có lịch là bình thường: nhắc theo lịch do email của web lo, app chỉ kiểm tra sức khoẻ
         var st = new AgentState();
         var t = Assert.Single(Decide(st, Noon));
         Assert.Equal("setup", t.Key);
-        Assert.Equal("Open SmartCarePC to set up your reminders", t.Title);
-        Assert.Equal("https://smartcarepc.pages.dev/maintain", t.OpenUrl);
+        Assert.Equal("SmartCarePC Helper is checking your PC", t.Title);
+        Assert.DoesNotContain("plan", t.Body);
+        Assert.Null(t.OpenUrl);
+        Assert.False(t.CanSnooze);
         Assert.Empty(Decide(st, Noon.AddDays(1)));
+        Assert.Empty(Decide(st, Noon.AddDays(3)));
+        Assert.Empty(Decide(st, Noon.AddDays(60)));
+    }
+
+    [Fact]
+    public void Without_a_plan_health_alerts_still_work()
+    {
+        var st = new AgentState { SetupPromptLastDay = "2026-11-01" };
+        var bsod = Rules.BlueScreens([Noon.AddHours(-3)], Noon, null).Finding!;
+        var t = Assert.Single(Decide(st, Noon, false, bsod));
+        Assert.Equal("health:blue_screen", t.Key);
+        Assert.Null(t.OpenUrl); // không dẫn vào bài bảo dưỡng
     }
 
     [Fact]

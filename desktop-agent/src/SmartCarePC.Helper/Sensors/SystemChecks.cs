@@ -40,16 +40,56 @@ public static class SystemChecks
     }
 
     /// <summary>Các lần tắt máy đột ngột trong 8 ngày qua (Event Log System, Microsoft-Windows-Kernel-Power, mã 41)</summary>
-    public static IReadOnlyList<DateTimeOffset>? UnexpectedShutdowns()
+    public static IReadOnlyList<DateTimeOffset>? UnexpectedShutdowns() =>
+        SystemEvents("Provider[@Name='Microsoft-Windows-Kernel-Power'] and (EventID=41)");
+
+    /// <summary>
+    /// Màn hình xanh trong 8 ngày qua: mã 1001, nguồn hiện trong Event Viewer là "BugCheck".
+    /// Trên Windows 10/11 tên provider thật là Microsoft-Windows-WER-SystemErrorReporting (EventSourceName = BugCheck).
+    /// Lọc theo cả hai tên, cần thử trên máy thật xem tên nào khớp.
+    /// </summary>
+    public static IReadOnlyList<DateTimeOffset>? BlueScreens() =>
+        SystemEvents("Provider[@Name='Microsoft-Windows-WER-SystemErrorReporting' or @Name='BugCheck'] and (EventID=1001)");
+
+    /// <summary>Lỗi đọc / ghi ổ đĩa trong 8 ngày qua: nguồn "disk", mã 7 (khối hỏng), 51 (lỗi khi ghi trang), 153 (phải thử lại)</summary>
+    public static IReadOnlyList<DateTimeOffset>? DiskErrors() =>
+        SystemEvents("Provider[@Name='disk'] and (EventID=7 or EventID=51 or EventID=153)");
+
+    /// <summary>Lỗi phần cứng trong 8 ngày qua: Microsoft-Windows-WHEA-Logger, mã 17, 18, 19, 47</summary>
+    public static IReadOnlyList<DateTimeOffset>? HardwareErrors() =>
+        SystemEvents("Provider[@Name='Microsoft-Windows-WHEA-Logger'] and (EventID=17 or EventID=18 or EventID=19 or EventID=47)");
+
+    /// <summary>
+    /// Đọc thời điểm các sự kiện trong System log, 8 ngày gần nhất (691200000 ms), tối đa 100 sự kiện.
+    /// Tài khoản thường đọc được System log. null = không đọc được.
+    /// </summary>
+    static IReadOnlyList<DateTimeOffset>? SystemEvents(string filter)
     {
         try
         {
-            const string xpath = "*[System[Provider[@Name='Microsoft-Windows-Kernel-Power'] and (EventID=41) and TimeCreated[timediff(@SystemTime) <= 691200000]]]";
+            var xpath = $"*[System[{filter} and TimeCreated[timediff(@SystemTime) <= 691200000]]]";
             using var reader = new EventLogReader(new EventLogQuery("System", PathType.LogName, xpath));
             var list = new List<DateTimeOffset>();
             for (var i = 0; i < 100 && reader.ReadEvent() is { } e; i++)
                 using (e) if (e.TimeCreated is { } t) list.Add(new DateTimeOffset(t));
             return list;
+        }
+        catch (Exception) { return null; }
+    }
+
+    /// <summary>
+    /// Lần khởi động thật gần nhất (Win32_OperatingSystem.LastBootUpTime, đọc được bằng tài khoản thường).
+    /// Shut down kiểu fast startup không đổi giá trị này, chỉ Restart mới đổi. null = không đọc được.
+    /// </summary>
+    public static DateTimeOffset? LastBoot()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(@"root\CIMV2", "SELECT LastBootUpTime FROM Win32_OperatingSystem");
+            foreach (var o in searcher.Get())
+                using (o)
+                    if (o["LastBootUpTime"] is string s) return new DateTimeOffset(ManagementDateTimeConverter.ToDateTime(s));
+            return null;
         }
         catch (Exception) { return null; }
     }
