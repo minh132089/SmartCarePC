@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { FAMILIES, FAMILY_IDS } from '../../data/families'
 import { machineOf } from '../../data/guide'
 import { addDays, day, EMPTY_ANSWERS, maintenancePlan, TASKS, type Cooler, type MaintenanceAnswers, type MaintenanceTask } from '../../data/maintenance'
 import { googleCalendarUrl, reminderIcs } from '../../data/maintenanceCalendar'
 import { useViewer } from '../../store'
-import { Choices, Dialog, PrimaryButton, Question, QuietButton, focus } from '../study/StudyParts'
+import { Choices, Dialog, PrimaryButton, Question, QuietButton, focus, press } from '../study/StudyParts'
 import { newSubmissionId, useStudy } from '../study/study'
-import { calendarLink, currentPC, flushMaintenanceQueue, LOAD_ID, recordEvent, startMaintenance, useMaintenance, type MaintenancePC } from './maintenanceState'
+import { calendarLink, currentPC, flushMaintenanceQueue, LOAD_ID, recordEvent, startMaintenance, useMaintenance, usePlanLink, type MaintenancePC } from './maintenanceState'
 
 const TASK_IDS = Object.keys(TASKS) as MaintenanceTask[]
 const THUMB = { standard_tower: '01', compact_tower: '02', showcase_dual_chamber: '03', mini_sff: '04', full_tower: '06', gaming: '07' }
@@ -116,6 +116,33 @@ function ChoosePC({ initial, task: firstTask, advised, fromCalendar, onClose }: 
     {!laptop && <Question label={fromCalendar ? 'Your calendar opened this guide' : 'What would you like to do?'}><div className="space-y-2">{TASK_IDS.map(id => <label key={id} className="flex cursor-pointer gap-3 rounded-xl bg-surface p-3 ring-1 ring-line"><input type="radio" name="maintenance-task" checked={task === id} onChange={() => setTask(id)} /><span><strong className="block text-[14px]">{TASKS[id].title}</strong><span className="text-[12px] text-ink-2">{TASKS[id].hint}</span></span></label>)}</div></Question>}
   </Dialog>
 }
+const linkButton = `inline-block rounded-full px-4 py-2 text-[14px] font-medium ${press} ${focus}`
+/**
+ * Nút gửi lịch sang app khay Windows: là thẻ <a> trỏ thẳng tới smartcarepc://plan?d=..., trình duyệt hỏi
+ * "Open SmartCarePC Helper?" rồi chuyển link cho app. Máy chưa cài app thì bấm không có gì xảy ra, nên luôn có dòng giải thích.
+ */
+export function SendPlanButton({ primary = false }: { primary?: boolean }) {
+  const link = usePlanLink()
+  if (!link) return null
+  return <a href={link} data-plan-link className={`${linkButton} ${primary ? 'bg-accent text-white hover:bg-accent-hover' : 'bg-fill text-ink hover:bg-fill-hover'}`}>Send my plan to the desktop app</a>
+}
+/** Mở trang /helper ngay trong app (đóng hộp Reminders, lịch đã lưu). Ctrl / Cmd + bấm thì để trình duyệt mở tab mới */
+function openHelper(e: MouseEvent) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+  e.preventDefault()
+  useMaintenance.getState().close()
+  useViewer.getState().setPage('helper')
+}
+/** Phần nhắc trên máy tính (Windows) trong hộp Reminders: tải app ở /helper, hoặc gửi lịch nếu đã cài */
+function DesktopReminders() {
+  const hasLink = !!usePlanLink()
+  return <section className="mt-4 rounded-xl bg-surface p-3 ring-1 ring-line">
+    <h3 className="font-semibold">Reminders on your Windows PC <span className="font-normal text-ink-3">(optional)</span></h3>
+    <p className="mt-1 text-[13px] text-ink-2">A small helper app shows these reminders even when the browser is closed, and warns you if your PC runs hot. Installing it is optional.</p>
+    <div className="mt-3 flex flex-wrap gap-2"><a href="/helper" onClick={openHelper} className={`${linkButton} bg-fill text-link hover:bg-fill-hover`}>Get desktop reminders (Windows)</a><SendPlanButton /></div>
+    {hasLink && <p className="mt-2 text-[12px] text-ink-3">Already installed? Press “Send my plan”, then allow your browser to open SmartCarePC Helper. If nothing happens, the app is not installed yet.</p>}
+  </section>
+}
 /** unanswered: chưa chọn gì thì để trống hẳn (kể cả "None"), để người dùng biết đây là câu phải trả lời */
 export function Symptoms({ value, onChange, unanswered = false }: { value: string[]; onChange: (s: string[]) => void; unanswered?: boolean }) {
   return <Choices name="maintenance-symptoms" multi value={value.length ? value : unanswered ? [] : ['none']} options={[...SYMPTOMS, { value: 'none', label: 'None' }]} onChange={v => onChange(v.includes('none') && !value.includes('none') && v.at(-1) === 'none' ? [] : v.filter(x => x !== 'none'))} />
@@ -145,6 +172,7 @@ function ReminderSetup({ pc, onClose }: { pc: MaintenancePC; onClose: () => void
       <p className="rounded-xl bg-ok-bg p-3 text-[14px] text-ok">{storageWarning ? 'Saved for this tab only: browser storage is unavailable.' : 'Reminders saved in this browser.'} Add them to your calendar to be reminded when the app is closed.</p>
       <p className="mt-3 text-[13px] text-ink-2">Google opens a draft: save it and check its notification settings. Calendar files include a reminder 1 day before; your calendar must allow notifications.</p>
       {TASK_IDS.map(t => <section key={t} className="mt-4 rounded-xl bg-surface p-3 ring-1 ring-line"><h3 className="font-semibold">{TASKS[t].title}</h3><p className="mt-1 text-[13px] text-ink-2">{dates[t]} · repeats {plan[t].months === 1 ? 'every month' : `every ${plan[t].months} months`}</p><div className="mt-3 flex flex-wrap gap-2"><QuietButton onClick={() => exportCalendar(t, 'google')}>Add to Google Calendar ↗</QuietButton><QuietButton onClick={() => exportCalendar(t, 'ics')}>Download .ics</QuietButton></div></section>)}
+      <DesktopReminders />
     </> : <>
       <p className="text-[13px] text-ink-2">No email or phone number needed. Dates are suggestions; stop and seek help if you are unsure about a physical task.</p>
       <Question label="When was your PC last cleaned?">

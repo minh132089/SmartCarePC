@@ -12,8 +12,8 @@ import { markRated, ratedBefore } from './study/rated'
 import { StudyBar } from './study/StudyBar'
 import { playTick } from './sound/sfx'
 import { maintenanceSteps, TASKS } from '../data/maintenance'
-import { maintenanceKey, recordStep, recordUsage, useMaintenance } from './maintenance/maintenanceState'
-import { MaintenanceEntry, Symptoms } from './maintenance/MaintenanceHub'
+import { maintenanceKey, recordStep, recordUsage, useMaintenance, usePlanLink } from './maintenance/maintenanceState'
+import { MaintenanceEntry, SendPlanButton, Symptoms } from './maintenance/MaintenanceHub'
 import { Choices, Question } from './study/StudyParts'
 import SpringCheck from '../components/SpringCheck'
 import { findOnYourPc } from '../data/beginnerHelp'
@@ -48,6 +48,7 @@ export function GuidePanel() {
   const isMaintenance = kind === 'maintenance'
   const run = useMaintenance(s => s.run)
   const finishMaintenance = useMaintenance(s => s.finish)
+  const agentLink = usePlanLink()
   const queueProblem = useMaintenance(s => s.queueProblem)
   const storageWarning = useMaintenance(s => s.storageWarning)
   const [who, setWho] = useState('')
@@ -231,6 +232,8 @@ export function GuidePanel() {
 
       {allDone && isMaintenance && <div ref={completionRef} className="mt-5 rounded-2xl bg-surface p-4 ring-1 ring-line">
         {run?.completed ? <><p className="font-semibold text-ok">Maintenance recorded</p><p className="mt-1 text-[13px] text-ink-2">Your next reminder date has been updated in this browser. Update any calendar events separately.</p>
+          {/* Làm xong một việc: ngày hẹn mới chỉ có trong trình duyệt, gửi lại cho app khay nếu người dùng có cài */}
+          {agentLink && <div className="mt-3 rounded-xl bg-panel p-3 ring-1 ring-line"><p className="text-[13px] text-ink-2">Using the SmartCarePC Helper app on Windows? Send it your new dates.</p><div className="mt-2"><SendPlanButton /></div></div>}
           {askMaintenanceFeedback && <button onClick={() => rate('maintenance')} className={`mt-3 rounded-full bg-accent px-4 py-2 text-[14px] font-medium text-white hover:bg-accent-hover ${press} ${focus}`}>Rate this guide</button>}
           <MaintenanceEntry className="mt-3" /></> : <>
           <Question label="Who did the work?"><Choices name="maintenance-who" value={[who]} options={[{ value: 'me-alone', label: 'Me alone' }, { value: 'with-help', label: 'Me with someone’s help' }, { value: 'someone-else', label: 'Someone else did it' }]} onChange={v => setWho(v[0])} /></Question>

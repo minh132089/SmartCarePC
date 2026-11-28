@@ -7,12 +7,14 @@ import { resumeRun, useMaintenance } from './ui/maintenance/maintenanceState'
  * Không dùng thư viện router: app chỉ có vài màn và trạng thái màn nằm sẵn trong store.
  * Cloudflare Pages và `vite preview` đều trả index.html cho đường dẫn không có file, nên mở thẳng /maintain vẫn chạy.
  */
-type Route = 'home' | 'advice' | 'upgrade' | 'model' | 'assemble' | 'maintain' | 'maintainModel'
+type Route = 'home' | 'advice' | 'upgrade' | 'helper' | 'model' | 'assemble' | 'maintain' | 'maintainModel'
 
 const PATH: Record<Route, string> = {
   home: '/',
   advice: '/build',
   upgrade: '/upgrade',
+  // Trang giới thiệu app khay Windows SmartCarePC Helper (nút "Get desktop reminders" trong hộp Reminders)
+  helper: '/helper',
   model: '/3d',
   assemble: '/3d/assemble',
   maintain: '/maintain',
@@ -44,6 +46,7 @@ function open(route: Route) {
     case 'home':
     case 'advice':
     case 'upgrade':
+    case 'helper':
       v.setPage(route)
       return
     case 'model':

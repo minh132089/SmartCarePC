@@ -8,7 +8,9 @@ import { newSubmissionId, useStudy, type Phase } from '../study/study'
 const KEY = 'pcsc-maintenance-v1'
 const QUEUE = 'pcsc-maintenance-queue-v1'
 export interface MaintenancePC { machine: FamilyId | 'gaming'; cooler: Cooler; hasGpu: boolean }
-export type EventType = 'reminder_set' | 'calendar_added' | 'reminder_shown' | 'reminder_snoozed' | 'opened_from_calendar' | 'maintenance_started' | 'step_done' | 'maintenance_completed' | 'maintenance_abandoned' | UsageType
+export type EventType = 'reminder_set' | 'calendar_added' | 'reminder_shown' | 'reminder_snoozed' | 'opened_from_calendar' | 'maintenance_started' | 'step_done' | 'maintenance_completed' | 'maintenance_abandoned' | UsageType | AgentType
+/** Sự kiện do app khay Windows (SmartCarePC Helper) gửi, web không tự ghi. Xem docs/maintenance-agent-spec.md mục 7 */
+export type AgentType = 'agent_linked' | 'agent_reminder_shown' | 'health_alert_shown' | 'agent_notification_clicked' | 'agent_snoozed'
 /** Ghi việc dùng các phần khác của app (task = 'none'), để biết người có điểm tăng đã thực sự dùng hướng dẫn hay chưa */
 export type UsageType = 'advice_asked' | 'upgrade_asked' | 'build_guide_opened' | 'build_step_done' | 'build_guide_completed'
 export interface MaintenanceEvent { eventId: string; eventType: EventType; task: MaintenanceTask | 'none'; participantCode: string; phase: Phase; machine: string; occurredAt: string; data: Record<string, unknown> }
@@ -181,6 +183,37 @@ export function calendarLink(task: MaintenanceTask) {
   const { code, phase } = useStudy.getState()
   if (code) { url.searchParams.set('thunghiem', code); if (phase === 'after') url.searchParams.set('lan', 'sau') }
   return url.toString()
+}
+/** Chỉ hai địa chỉ này app khay chịu mở lại (AllowedOrigins trong desktop-agent/.../PlanLink.cs) */
+export const AGENT_ORIGINS = ['https://smartcarepc.pages.dev', 'http://localhost:5173']
+/** Giới hạn của app khay: JSON quá 2048 byte thì app bỏ cả link */
+const AGENT_MAX_JSON = 2048
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+/**
+ * Link smartcarepc://plan?d=<base64url của JSON> để gửi lịch sang app khay. Chỉ có máy, ngày hẹn, ngày làm xong,
+ * mã thử nghiệm ẩn danh nếu có, và địa chỉ web. Không có email, tên hay thông tin cá nhân nào.
+ * Trả null khi chưa có máy / chưa có ngày hẹn (app bỏ lịch không có ngày) hoặc web đang chạy ở địa chỉ app không nhận.
+ */
+export function agentPlanLink(): string | null {
+  const { pc, dates, completed } = useMaintenance.getState()
+  if (!pc || !AGENT_ORIGINS.includes(location.origin)) return null
+  // Chỉ giữ đúng ba việc và ngày dạng yyyy-mm-dd: app từ chối cả link nếu gặp khoá lạ
+  const days = (src: Partial<Record<MaintenanceTask, string>>) => Object.fromEntries((Object.keys(TASKS) as MaintenanceTask[]).filter(t => DATE.test(src[t] ?? '')).map(t => [t, src[t]]))
+  const plan: Record<string, unknown> = { v: 1, pc: { machine: pc.machine, cooler: pc.cooler, hasGpu: pc.hasGpu }, dates: days(dates), completed: days(completed) }
+  if (!Object.keys(plan.dates as object).length) return null
+  const { code, phase } = useStudy.getState()
+  if (code) plan.study = { code, phase }
+  plan.origin = location.origin
+  const bytes = new TextEncoder().encode(JSON.stringify(plan))
+  if (bytes.length > AGENT_MAX_JSON) return null
+  const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return `smartcarepc://plan?d=${b64}`
+}
+/** Link gửi lịch, cập nhật theo máy, ngày hẹn, mã thử nghiệm (vd ngay sau khi làm xong một việc) */
+export function usePlanLink() {
+  useMaintenance(s => s.pc); useMaintenance(s => s.dates); useMaintenance(s => s.completed)
+  useStudy(s => s.code); useStudy(s => s.phase)
+  return agentPlanLink()
 }
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => void flushMaintenanceQueue())

@@ -13,6 +13,7 @@ import { Inspector } from './ui/Inspector'
 import { Sidebar } from './ui/Sidebar'
 import { StudyDialogs } from './ui/study/StudyBar'
 import { UpgradePage } from './ui/UpgradePage'
+import { HelperPage } from './ui/maintenance/HelperPage'
 import { AccountSlot, AuthOverlay } from './ui/Account'
 import { UpdateBanner } from './ui/UpdateBanner'
 
@@ -34,7 +35,7 @@ export default function App() {
     return (
       <>
         <Fade key={page} className="h-full">
-          {page === 'home' ? <HomePage /> : page === 'upgrade' ? <UpgradePage /> : <AdvicePage />}
+          {page === 'home' ? <HomePage /> : page === 'upgrade' ? <UpgradePage /> : page === 'helper' ? <HelperPage /> : <AdvicePage />}
         </Fade>
         <StudyDialogs />
         <AuthOverlay />

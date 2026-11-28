@@ -26,4 +26,14 @@ class MaintenanceEventControllerTests {
         when(service.exportCsv("secret")).thenReturn("event_id\r\n");
         mvc.perform(get("/api/maintenance/export.csv").header("X-Export-Key", "secret")).andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
     }
+    @Test void nhanLoaiSuKienCuaAppKhay() throws Exception {
+        when(service.save(any())).thenReturn(new MaintenanceEventService.Saved(1));
+        for (var type : new String[] { "agent_linked", "agent_reminder_shown", "health_alert_shown", "agent_notification_clicked", "agent_snoozed" })
+            mvc.perform(post("/api/maintenance/events").contentType(MediaType.APPLICATION_JSON).content("""
+              {"eventId":"test-event-%s","eventType":"%s","task":"none","participantCode":"P07","phase":"before","machine":"standard_tower","occurredAt":"2026-11-28T05:00:00.000Z","data":{"source":"health","rule":"cpu_hot"}}
+              """.formatted(type.replace('_', '-'), type))).andExpect(status().is2xxSuccessful());
+        mvc.perform(post("/api/maintenance/events").contentType(MediaType.APPLICATION_JSON).content("""
+          {"eventId":"test-event-unknown","eventType":"agent_hacked","task":"none","participantCode":"P07","phase":"before","machine":"standard_tower","occurredAt":"2026-11-28T05:00:00.000Z","data":{}}
+          """)).andExpect(status().isBadRequest());
+    }
 }

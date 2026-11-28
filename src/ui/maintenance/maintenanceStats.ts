@@ -36,3 +36,47 @@ export function maintenanceGroups(all: MaintenanceRow[], feedback: FeedbackRow[]
   }
   return [...groups.values()]
 }
+
+/** Một lần bấm Start guide trên thông báo của app khay được tính là dẫn tới bảo dưỡng nếu làm xong trong vòng 7 ngày */
+export const AGENT_COMPLETION_DAYS = 7
+type AgentSource = 'schedule' | 'health'
+/**
+ * Đếm sự kiện của app khay Windows (spec mục 7) để trả lời Q3: nhắc theo triệu chứng có làm người ta bắt tay làm nhiều
+ * hơn nhắc theo lịch không. Đếm trên mọi sự kiện, kể cả task 'none' (vd ổ đầy, RAM đầy không có bài hướng dẫn).
+ * Mỗi lần làm xong (maintenance_completed) chỉ gán cho một lần bấm: lần bấm gần nhất trước đó của cùng người, cùng mốc,
+ * cùng việc, trong vòng 7 ngày. Không gán thì không tính, để không đếm một lần làm cho nhiều lần bấm.
+ */
+export function agentStats(all: MaintenanceRow[]) {
+  const rows = [...all].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id - b.id)
+  const who = (e: MaintenanceRow) => `${e.participantCode}:${e.phase}`
+  const linked = new Map<string, Set<string>>()
+  for (const e of rows) if (e.eventType === 'agent_linked') linked.set(e.phase, (linked.get(e.phase) ?? new Set()).add(e.participantCode))
+  const people = new Set(rows.filter(e => e.eventType === 'agent_linked').map(e => e.participantCode))
+  const blank = () => ({ shown: 0, clicked: 0, snoozed: 0, completed: 0 })
+  const by: Record<AgentSource, ReturnType<typeof blank>> = { schedule: blank(), health: blank() }
+  const rules = new Map<string, number>()
+  const clicks: { e: MaintenanceRow; source: AgentSource; used: boolean }[] = []
+  const src = (e: MaintenanceRow): AgentSource | null => e.data.source === 'schedule' || e.data.source === 'health' ? e.data.source : null
+  for (const e of rows) {
+    if (e.eventType === 'agent_reminder_shown') by.schedule.shown++
+    else if (e.eventType === 'health_alert_shown') {
+      by.health.shown++
+      const rule = typeof e.data.rule === 'string' ? e.data.rule : 'unknown'
+      rules.set(rule, (rules.get(rule) ?? 0) + 1)
+    } else if (e.eventType === 'agent_snoozed') { const s = src(e); if (s) by[s].snoozed++ }
+    else if (e.eventType === 'agent_notification_clicked') {
+      const s = src(e)
+      if (s) { by[s].clicked++; if (e.task !== 'none') clicks.push({ e, source: s, used: false }) }
+    } else if (e.eventType === 'maintenance_completed') {
+      const at = Date.parse(e.occurredAt)
+      const click = clicks.filter(c => !c.used && who(c.e) === who(e) && c.e.task === e.task && Date.parse(c.e.occurredAt) <= at && at - Date.parse(c.e.occurredAt) <= AGENT_COMPLETION_DAYS * 86_400_000).at(-1)
+      if (click) { click.used = true; by[click.source].completed++ }
+    }
+  }
+  return {
+    people: people.size,
+    byPhase: [...linked.entries()].map(([phase, codes]) => ({ phase: PHASE_LABEL[phase as Phase] ?? phase, people: codes.size })),
+    sources: (['schedule', 'health'] as const).map(s => ({ source: s, ...by[s] })),
+    rules: [...rules.entries()].sort((a, b) => b[1] - a[1]),
+  }
+}
